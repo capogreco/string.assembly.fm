@@ -400,6 +400,82 @@
             background: #2196f3;
             color: white;
         }
+        
+        /* Chord and Expression Control Styles */
+        .chord-control {
+            margin-bottom: 20px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+        
+        .expression-display {
+            margin-top: 15px;
+            padding: 15px;
+            background: #f0f0f0;
+            border-radius: 8px;
+            font-size: 0.9em;
+        }
+        
+        .note-expression {
+            display: inline-block;
+            margin: 5px;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 0.9em;
+            font-weight: 500;
+            line-height: 1.4;
+        }
+        
+        .note-expression.vibrato {
+            background: #f8d7da;
+            color: #842029;
+            border: 1px solid #f5c2c7;
+        }
+        
+        .note-expression.tremolo {
+            background: #fff3cd;
+            color: #664d03;
+            border: 1px solid #ffecb5;
+        }
+        
+        .note-expression.trill {
+            background: #cfe2ff;
+            color: #0842a0;
+            border: 1px solid #b6d4fe;
+        }
+        
+        .note-expression.none {
+            background: #e8daef;
+            color: #6c3483;
+            border: 1px solid #d2b4de;
+        }
+        
+        /* Piano keyboard wrapper for interactive expressions */
+        .piano-keyboard {
+            position: relative;
+            display: inline-block;
+        }
+        
+        .piano-keyboard canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            pointer-events: none;
+            z-index: 10;
+        }
+        
+        /* Gesture hint styles */
+        .gesture-hint {
+            position: absolute;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            pointer-events: none;
+            z-index: 100;
+        }
     </style>
 </head>
 <body>
@@ -431,6 +507,12 @@
         </div>
         
         <div class="section">
+            <div class="section-title">Chord & Expression Control</div>
+            
+            <div style="margin-bottom: 15px; padding: 10px; background: #f8f9fa; border-radius: 8px; font-size: 0.9em; color: #666;">
+                Click piano keys to add/remove notes from chord
+            </div>
+            
             <div class="section-title">Piano</div>
             <div id="piano-container" style="margin: 10px 0;">
                 <svg id="piano" width="750" height="80" style="border: 1px solid #ddd; border-radius: 4px; background: #fafafa;" xmlns="http://www.w3.org/2000/svg">
@@ -441,37 +523,30 @@
                 </div>
                 <div id="piano-debug" style="font-size: 0.7em; color: #999; margin-top: 5px;">Debug: Loading...</div>
             </div>
-                
-</div>
+            
+            <div style="margin-top: 10px; padding: 10px; background: #e9ecef; border-radius: 6px; font-size: 0.9em;">
+                <strong>🎵 Gesture Controls:</strong><br>
+                ↑ Drag UP = Vibrato | ↓ Drag DOWN = Tremolo | 
+                → Drag to note = Trill | • Click = Clear
+            </div>
+            
+            <div class="expression-display" id="expression-display">
+                <strong>Current Chord: </strong><span id="chord-display" style="color: #667eea;">None</span>
+                <div style="margin-top: 10px;">
+                    <strong>Expressions:</strong>
+                    <div id="expression-content" style="margin-top: 5px;">
+                        <div style="color: #666; font-style: italic;">No expressions set - use drag gestures on piano keys</div>
+                    </div>
+                </div>
+            </div>
+        </div>
         
     <div class="section">
-        <div class="section-title">Frequency & Expression</div>
+        <div class="section-title">Expression Parameters</div>
         <div class="controls">
-            <div class="control-group">
-                <label for="frequency">Frequency (Hz)</label>
-                <input type="range" id="frequency" value="220" min="50" max="4000" step="1">
-                <span id="frequencyValue" class="value-display">220</span>
-            </div>
-            <div class="control-group">
-                <label>Expression</label>
-                <div style="display: flex; gap: 15px; align-items: center;">
-                    <label style="font-size: 0.9em; margin: 0;">
-                        <input type="radio" name="expression" value="none" checked style="margin-right: 5px;">
-                        None
-                    </label>
-                    <label style="font-size: 0.9em; margin: 0;">
-                        <input type="radio" name="expression" value="vibrato" style="margin-right: 5px;">
-                        Vibrato
-                    </label>
-                    <label style="font-size: 0.9em; margin: 0;">
-                        <input type="radio" name="expression" value="trill" style="margin-right: 5px;">
-                        Trill
-                    </label>
-                    <label style="font-size: 0.9em; margin: 0;">
-                        <input type="radio" name="expression" value="tremolo" style="margin-right: 5px;">
-                        Tremolo
-                    </label>
-                </div>
+            <div style="margin-bottom: 15px; padding: 10px; background: #cfe2ff; border-radius: 6px; font-size: 0.9em; color: #0842a0;">
+                <strong>Note:</strong> Use drag gestures on the piano above to set expressions for each chord note.
+                The parameters below control the behavior when expressions are active.
             </div>
             
             <div class="expression-group vibrato">
@@ -758,7 +833,7 @@
         // Parameter elements
         const param_elements = {}
         const param_ids = [
-            'frequency', 'stringMaterial', 'stringDamping',
+            'stringMaterial', 'stringDamping',
             'bowPosition', 'bowSpeed', 'bowForce', 'brightness',
             'vibratoRate', 'vibratoDepth', 'trillInterval', 'trillSpeed', 'trillArticulation',
             'tremoloSpeed', 'tremoloDepth', 'tremoloArticulation',
@@ -920,9 +995,7 @@
                             // send current program to requesting synth
                             console.log(`Received program request from ${synth_id}`)
                             
-                            // Debug current frequency slider value
-                            const freqSlider = document.getElementById('frequency')
-                            console.log(`Current frequency slider value: ${freqSlider.value}Hz`)
+                            // Note: Frequency is now set per-note via chord distribution
                             
                             console.log('Current program object:', current_program)
                             console.log('Current program has keys:', Object.keys(current_program || {}))
@@ -1056,25 +1129,20 @@
             const program = {}
             
             param_ids.forEach(id => {
+                // Skip frequency since it's now set per-note in chord distribution
+                if (id === 'frequency') return
+                
                 const element = param_elements[id]
                 if (element && element.input) {
                     const value = element.input.type === 'range' ? 
                         parseFloat(element.input.value) : 
                         element.input.value
                     program[id] = value
-                    
-                    // Debug frequency specifically
-                    if (id === 'frequency') {
-                        console.log(`get_current_program: frequency slider value = ${element.input.value}, parsed = ${value}`)
-                    }
                 }
             })
             
-            // Add expression parameters based on active expression
-            const active_expression = document.querySelector('input[name="expression"]:checked').value
-            if (active_expression !== 'none') {
-                program[`${active_expression}_enabled`] = 1
-            }
+            // Note: Expression is now handled per-note via drag gestures
+            // Global expression parameters are still included for each expression type
             
             return program
         }
@@ -1082,7 +1150,6 @@
         // Create example program with stochastic elements
         function create_example_program() {
             return {
-                frequency: 220,
                 stringMaterial: { type: "choice", options: [0, 1, 2, 3] },
                 stringDamping: { type: "uniform", min: 0.3, max: 0.7 },
                 bowPosition: { type: "uniform", min: 0.08, max: 0.25 },
@@ -1156,7 +1223,13 @@
         
         // Update expression group visibility
         function update_expression_groups() {
-            const active_expression = document.querySelector('input[name="expression"]:checked').value
+            const expressionRadio = document.querySelector('input[name="expression"]:checked')
+            if (!expressionRadio) {
+                console.log('Expression radio buttons not found yet')
+                return
+            }
+            
+            const active_expression = expressionRadio.value
             expression_groups.forEach(group => {
                 group.classList.remove('active')
             })
@@ -1366,12 +1439,14 @@
                         rect.style.cursor = 'pointer'
                         rect.addEventListener('click', () => select_frequency(freq))
                         rect.addEventListener('mouseenter', () => {
-                            if (rect.getAttribute('fill') !== '#007bff') {
+                            // Don't change hover color if it's managed by SVG expression system
+                            if (!rect.hasAttribute('data-original-fill')) {
                                 rect.setAttribute('fill', '#e6f3ff')
                             }
                         })
                         rect.addEventListener('mouseleave', () => {
-                            if (rect.getAttribute('fill') !== '#007bff') {
+                            // Don't change hover color if it's managed by SVG expression system
+                            if (!rect.hasAttribute('data-original-fill')) {
                                 rect.setAttribute('fill', 'white')
                             }
                         })
@@ -1417,12 +1492,14 @@
                             rect.style.cursor = 'pointer'
                             rect.addEventListener('click', () => select_frequency(freq))
                             rect.addEventListener('mouseenter', () => {
-                                if (rect.getAttribute('fill') !== '#007bff') {
+                                // Don't change hover color if it's managed by SVG expression system
+                                if (!rect.hasAttribute('data-original-fill')) {
                                     rect.setAttribute('fill', '#555')
                                 }
                             })
                             rect.addEventListener('mouseleave', () => {
-                                if (rect.getAttribute('fill') !== '#007bff') {
+                                // Don't change hover color if it's managed by SVG expression system
+                                if (!rect.hasAttribute('data-original-fill')) {
                                     rect.setAttribute('fill', '#333')
                                 }
                             })
@@ -1441,6 +1518,11 @@
             
             // Highlight current frequency
             setTimeout(() => highlight_current_frequency(), 100)
+            
+            // Try to initialize SVG expression now that piano is ready
+            if (typeof initializeSVGExpression === 'function') {
+                initializeSVGExpression();
+            }
         }
 
         function update_piano_range_display(bodyType) {
@@ -1454,50 +1536,79 @@
         }
 
         function select_frequency(freq) {
-            const freqSlider = document.getElementById('frequency')
-            freqSlider.value = Math.round(freq)
-            update_display_value('frequency', Math.round(freq))
-            highlight_current_frequency()
+            // Find the note name from frequency
+            const noteData = frequency_to_note(freq);
+            const noteName = `${noteData.note}${noteData.octave}`;
             
-            // Trigger change tracking for piano clicks
-            mark_parameter_changed('frequency')
-            check_overall_status()
+            console.log('Piano key clicked:', noteName, freq);
+            
+            // Let the expression system handle chord membership
+            // It will trigger handleExpressionChange which will sync the chord
+            console.log('Piano key clicked, letting expression system handle:', noteName);
+            
+            console.log('Current chord:', currentChord);
+            
+            // Update chord display with trill targets in brackets
+            const chordDisplay = document.getElementById('chord-display');
+            if (chordDisplay && svgExpression) {
+                if (currentChord.length > 0) {
+                    const expressions = svgExpression.getAllExpressions();
+                    const processedNotes = new Set();
+                    const chordParts = [];
+                    
+                    currentChord.forEach(note => {
+                        if (processedNotes.has(note)) return;
+                        
+                        const expr = expressions[note];
+                        if (expr && expr.type === 'trill' && expr.targetNote) {
+                            // Show trill with target in brackets
+                            chordParts.push(`${note} (→${expr.targetNote})`);
+                            processedNotes.add(note);
+                            processedNotes.add(expr.targetNote);
+                        } else {
+                            // Check if this is a trill target
+                            let isTrillTarget = false;
+                            for (const [otherNote, otherExpr] of Object.entries(expressions)) {
+                                if (otherExpr && otherExpr.type === 'trill' && otherExpr.targetNote === note) {
+                                    isTrillTarget = true;
+                                    break;
+                                }
+                            }
+                            if (!isTrillTarget) {
+                                chordParts.push(note);
+                                processedNotes.add(note);
+                            }
+                        }
+                    });
+                    
+                    chordDisplay.textContent = chordParts.join(' ');
+                } else {
+                    chordDisplay.textContent = 'None';
+                }
+            }
+            
+            // Update SVG expression system
+            if (svgExpression) {
+                console.log('Updating SVG expression system with chord notes');
+                svgExpression.setChordNotes(currentChord);
+                
+                // Force a re-render
+                setTimeout(() => {
+                    svgExpression.render();
+                }, 10);
+            } else {
+                console.log('Warning: svgExpression not initialized yet - will update when ready');
+                // Store chord for when expression system is ready
+                window.pendingChordUpdate = currentChord;
+            }
+            updateExpressionDisplay();
         }
 
         function highlight_current_frequency() {
-            const current_freq = parseFloat(document.getElementById('frequency').value)
-            const piano = document.getElementById('piano')
-        
-            // Remove previous highlights
-            piano.querySelectorAll('rect').forEach(rect => {
-                if (rect.getAttribute('fill') === '#007bff') {
-                    const note = rect.getAttribute('data-note')
-                    const bodyType = parseInt(document.getElementById('bodyType').value)
-                    const range = instrument_ranges[bodyType]
-                    const freq = parseFloat(rect.getAttribute('data-freq'))
-                    const in_range = freq >= range.low && freq <= range.high
-                    
-                    if (note && note.includes('#')) {
-                        rect.setAttributeNS(null, 'fill', in_range ? '#333' : '#ccc')
-                    } else {
-                        rect.setAttributeNS(null, 'fill', in_range ? 'white' : '#f0f0f0')
-                    }
-                }
-            })
-        
-            // Highlight current frequency
-            piano.querySelectorAll('rect').forEach(rect => {
-                const rect_freq = parseFloat(rect.getAttribute('data-freq'))
-                // Use percentage-based tolerance for better matching across frequency ranges
-                const tolerance = Math.max(5, rect_freq * 0.02) // 2% tolerance or 5Hz minimum
-                if (Math.abs(rect_freq - current_freq) < tolerance) {
-                    rect.setAttributeNS(null, 'fill', '#007bff')
-                }
-            })
+            // Note: This function is no longer used since frequency is set per-note
+            // Kept for compatibility but does nothing
+            return;
         }
-
-        // Update piano highlight when frequency slider changes
-        document.getElementById('frequency').addEventListener('input', highlight_current_frequency)
 
         // Start the application
         async function start_controller() {
@@ -1608,6 +1719,180 @@
 
         // Start when page loads
         start_controller()
+    </script>
+    
+    <!-- Include interactive expression and stochastic chord modules -->
+    <script src="svg_interactive_expression.js"></script>
+    <script src="stochastic_chords.js"></script>
+    <script src="standard_parameters.js"></script>
+    
+    <script>
+        // Initialize chord and expression system
+        let svgExpression = null;
+        let chordDistributor = new StochasticChordDistributor();
+        let currentChord = [];
+        
+        // Initialize SVG interactive expression when piano is ready
+        function initializeSVGExpression() {
+            const piano = document.getElementById('piano');
+            if (piano && piano.querySelectorAll('rect').length > 0) {
+                svgExpression = new SVGInteractiveExpression(piano);
+                svgExpression.onExpressionChange = handleExpressionChange;
+                console.log('SVG Interactive expression system initialized');
+                
+                // If chord already exists, update the expression system
+                if (currentChord.length > 0) {
+                    svgExpression.setChordNotes(currentChord);
+                }
+                
+                // Check for pending chord update
+                if (window.pendingChordUpdate) {
+                    svgExpression.setChordNotes(window.pendingChordUpdate);
+                    delete window.pendingChordUpdate;
+                }
+                return true;
+            }
+            return false;
+        }
+        
+        // Try to initialize immediately, then retry if needed
+        if (!initializeSVGExpression()) {
+            const initInterval = setInterval(() => {
+                if (initializeSVGExpression()) {
+                    clearInterval(initInterval);
+                }
+            }, 100);
+        }
+        
+        function handleExpressionChange(note, expression) {
+            console.log('Expression change:', note, expression);
+            
+            // Sync chord array with expression system
+            if (svgExpression) {
+                const chordNotes = svgExpression.getChordNotes();
+                currentChord = chordNotes.sort((a, b) => {
+                    const freqA = note_to_frequency(a.slice(0, -1), parseInt(a.slice(-1)));
+                    const freqB = note_to_frequency(b.slice(0, -1), parseInt(b.slice(-1)));
+                    return freqA - freqB;
+                });
+                console.log('Updated chord from expression system:', currentChord);
+            }
+            
+            updateExpressionDisplay();
+        }
+        
+        function updateExpressionDisplay() {
+            const content = document.getElementById('expression-content');
+            const chordDisplay = document.getElementById('chord-display');
+            if (!content) return;
+            
+            // Update chord display with trill targets in brackets
+            if (chordDisplay) {
+                if (currentChord.length > 0) {
+                    const expressions = svgExpression ? svgExpression.getAllExpressions() : {};
+                    const processedNotes = new Set();
+                    const chordParts = [];
+                    
+                    currentChord.forEach(note => {
+                        if (processedNotes.has(note)) return;
+                        
+                        const expr = expressions[note];
+                        if (expr && expr.type === 'trill' && expr.targetNote) {
+                            // Show trill with target in brackets
+                            chordParts.push(`${note} (→${expr.targetNote})`);
+                            processedNotes.add(note);
+                            processedNotes.add(expr.targetNote);
+                        } else {
+                            // Check if this is a trill target
+                            let isTrillTarget = false;
+                            for (const [otherNote, otherExpr] of Object.entries(expressions)) {
+                                if (otherExpr && otherExpr.type === 'trill' && otherExpr.targetNote === note) {
+                                    isTrillTarget = true;
+                                    break;
+                                }
+                            }
+                            if (!isTrillTarget) {
+                                chordParts.push(note);
+                                processedNotes.add(note);
+                            }
+                        }
+                    });
+                    
+                    chordDisplay.textContent = chordParts.join(' ');
+                } else {
+                    chordDisplay.textContent = 'None';
+                }
+            }
+            
+            if (!svgExpression) {
+                content.innerHTML = '<div style="color: #666; font-style: italic;">Loading expression system...</div>';
+                return;
+            }
+            
+            const expressions = svgExpression.getAllExpressions();
+            const activeExpressions = Object.entries(expressions);
+            
+            if (activeExpressions.length === 0) {
+                content.innerHTML = '<div style="color: #666; font-style: italic;">Click piano keys to add notes to chord</div>';
+                return;
+            }
+            
+            // Group notes by trill relationships
+            const processedNotes = new Set();
+            const displayItems = [];
+            
+            activeExpressions.forEach(([note, expression]) => {
+                if (processedNotes.has(note)) return;
+                
+                let exprText = '';
+                let className = 'note-expression';
+                
+                switch (expression.type) {
+                    case 'vibrato':
+                        exprText = `${note}: Vibrato (depth: ${(expression.depth * 100).toFixed(0)}%)`;
+                        className += ' vibrato';
+                        break;
+                    case 'tremolo':
+                        exprText = `${note}: Tremolo (depth: ${(expression.depth * 100).toFixed(0)}%)`;
+                        className += ' tremolo';
+                        break;
+                    case 'trill':
+                        exprText = `${note}: Trill`;
+                        className += ' trill';
+                        // Add trill target in brackets with styled arrow
+                        if (expression.targetNote) {
+                            exprText += ` <span style="opacity: 0.7; font-size: 0.9em;">(→ ${expression.targetNote})</span>`;
+                            processedNotes.add(expression.targetNote);
+                        }
+                        break;
+                    default:
+                        // Check if this note is a trill target for another note
+                        let isTrillTarget = false;
+                        for (const [otherNote, otherExpr] of activeExpressions) {
+                            if (otherExpr.type === 'trill' && otherExpr.targetNote === note) {
+                                isTrillTarget = true;
+                                break;
+                            }
+                        }
+                        if (!isTrillTarget) {
+                            exprText = `${note}`;
+                            className += ' none';
+                        }
+                        break;
+                }
+                
+                if (exprText) {
+                    displayItems.push(`<div class="${className}">${exprText}</div>`);
+                }
+                processedNotes.add(note);
+            });
+            
+            content.innerHTML = displayItems.join('');
+        }
+        
+
+        
+
     </script>
 </body>
 </html>
