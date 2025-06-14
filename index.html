@@ -108,7 +108,11 @@
         let ws = null
         let audio_context = null
         let pink_noise = null
-        let gain_node = null
+        let calibration_gain = null
+        let synthesis_gain = null
+        let bowed_string_node = null
+        let reverb_node = null
+        let mixer_gain = null
         let analyser = null
         let wake_lock = null
         const controllers = new Map ()
@@ -116,6 +120,8 @@
         let is_powered_on = true  // track power state
         let in_calibration_mode = false  // prevent controller interference during calibration
         let fadeOut = null  // cosine ramp for volume control
+        let current_program = null  // currently active program with stochasticity
+        const program_banks = new Map ()  // saved resolved parameter banks
         
         // webrtc configuration
         let rtc_config = {
@@ -278,6 +284,8 @@
                         console.error ("error adding ice candidate:", error)
                     }
                 }
+            
+
             }
         }
         
@@ -327,12 +335,13 @@
                 param_channel.send (JSON.stringify ({
                     type: "pong",
                     timestamp: Date.now (),
-                    state: {
-                        audio_enabled: !!audio_context,
-                        volume: stored_volume,
-                        powered_on: is_powered_on
-                    }
+                    state: get_synth_state()
                 }))
+                
+                // request current program now that controller is connected and audio graph is ready
+                if (audio_context && bowed_string_node) {
+                    request_current_program()
+                }
             })
             
             param_channel.addEventListener ("message", (event) => {
@@ -376,7 +385,7 @@
         }
 
         
-        // initialize calibration phase
+        // initialize persistent audio graph
         async function init_calibration () {
             audio_context = new (window.AudioContext || window.webkitAudioContext) ()
             
@@ -386,31 +395,50 @@
             await audio_context.audioWorklet.addModule ("white_noise.js")
             await audio_context.audioWorklet.addModule ("lfo_worklet.js")
             await audio_context.audioWorklet.addModule ("exp_converter.js")
+            await audio_context.audioWorklet.addModule ("bowed_string_worklet.js")
+            await audio_context.audioWorklet.addModule ("reverb_worklet.js")
             
-            // create calibration audio graph
+            // create persistent audio graph with both branches
+            
+            // calibration branch
             pink_noise = new AudioWorkletNode (audio_context, "ridge-rat-type2-pink-noise-generator")
-            gain_node = audio_context.createGain ()
-            analyser = audio_context.createAnalyser ()
+            calibration_gain = audio_context.createGain ()
+            calibration_gain.gain.value = stored_volume
             
-            // connect audio graph: pink_noise → analyser → destination
-            pink_noise.connect (analyser)
+            // synthesis branch
+            bowed_string_node = new AudioWorkletNode(audio_context, "continuous-excitation-processor")
+            reverb_node = new AudioWorkletNode(audio_context, "fdn-reverb-processor")
+            synthesis_gain = audio_context.createGain ()
+            synthesis_gain.gain.value = 0  // initially muted
+            
+            // shared analyser
+            analyser = audio_context.createAnalyser ()
+            analyser.fftSize = 2048
+            analyser.smoothingTimeConstant = 0
+            
+            // connect calibration branch: pink_noise → calibration_gain → analyser → destination
+            pink_noise.connect (calibration_gain)
+            calibration_gain.connect (analyser)
+            
+            // connect synthesis branch: bowed_string → reverb → synthesis_gain → analyser
+            bowed_string_node.connect(reverb_node)
+            reverb_node.connect(synthesis_gain)
+            synthesis_gain.connect(analyser)
+            
+            // analyser to destination
             analyser.connect (audio_context.destination)
             
-            // create paused cosine ramp for volume control
-            fadeOut = new AudioWorkletNode(audio_context, "cosine-ramp", {
-                processorOptions: {
-                    startValue: 0.2,
-                    endValue: 0.0,
-                    duration: 2.0,
-                    trigger: false  // start paused at startValue
-                }
-            })
+            // set initial synthesis parameters
+            set_initial_string_parameters()
             
-            // set pink noise base amplitude to 0, let ramp control it
-            pink_noise.parameters.get ("amplitude").value = 0
+
             
-            // connect ramp to control amplitude (will output constant 0.2 until triggered)
-            fadeOut.connect(pink_noise.parameters.get("amplitude"))
+
+            
+            // DEBUG: Send test message to worklet to verify it's alive
+
+            
+            // Don't start bowing yet - wait for program to set correct frequency
             
             in_calibration_mode = true
             
@@ -425,102 +453,45 @@
             draw_visualizer ()
         }
         
-        // join the instrument proper
+        // request current program from controller
+        function request_current_program() {
+            for (const [ctrl_id, ctrl] of controllers) {
+                if (ctrl.channel && ctrl.channel.readyState === "open") {
+                    ctrl.channel.send(JSON.stringify({
+                        type: "request_program"
+                    }))
+                    return
+                }
+            }
+        }
+        
+        // activate synthesis and mute calibration
         async function join_instrument () {
-            // fade out calibration pink noise over 2s
-            fadeOut.port.postMessage({
-                type: 'trigger',
-                data: {
-                    startValue: 0.2,
-                    endValue: 0.0,
-                    duration: 2.0
-                }
-            })
+            // request current program if we haven't already (timing fallback)
+            if (!current_program || Object.keys(current_program).length === 0) {
+                request_current_program()
+            }
             
-            // build white noise synthesis chain
-            const white_noise = new AudioWorkletNode(audio_context, "white-noise-generator")
-            const lpf = audio_context.createBiquadFilter()
-            const instrument_gain = audio_context.createGain()
-            const mute_node = audio_context.createGain()
+            // fade out calibration gain
+            calibration_gain.gain.exponentialRampToValueAtTime(0.001, audio_context.currentTime + 1.0)
             
-            // create LFOs
-            const sinusoidal_lfo = new AudioWorkletNode(audio_context, "generic-lfo", {
-                processorOptions: {
-                    mode: "sinusoidal",
-                    period: 2.0,
-                    width: 1.0,     // 0-1 range for exponential converter
-                    offset: 0.0,    // 0-1 range for exponential converter
-                    paused: false   // explicitly ensure LFO is running
-                }
-            })
+            // fade in synthesis gain
+            synthesis_gain.gain.exponentialRampToValueAtTime(stored_volume, audio_context.currentTime + 1.0)
             
-            // create exponential converter for musical filter sweeps
-            const filter_exp_converter = new AudioWorkletNode(audio_context, "exponential-converter", {
-                processorOptions: {
-                    minValue: 23.4,   // 23.4Hz minimum (matches FFT bin 1)
-                    maxValue: 9600,   // 9.6kHz maximum (matches visible FFT range)
-                    inputMin: 0.0,    // expect 0-1 from LFO
-                    inputMax: 1.0
-                }
-            })
-            
-            // create exponential converter for natural amplitude curves
-            const amp_exp_converter = new AudioWorkletNode(audio_context, "exponential-converter", {
-                processorOptions: {
-                    minValue: 0.001,  // effectively silent
-                    maxValue: 1.0,    // full amplitude
-                    inputMin: 0.0,    // expect 0-1 from LFO
-                    inputMax: 1.0
-                }
-            })
-            
-
-            
-
-            
-            const ramp_lfo = new AudioWorkletNode(audio_context, "generic-lfo", {
-                processorOptions: {
-                    mode: "ramp", 
-                    period: 2.0,
-                    width: 1.0,     // full gain range
-                    offset: 0.0     // start from zero
-                }
-            })
-            
-            // configure filter
-            lpf.type = "lowpass"
-            lpf.frequency.value = 0  // set to 0 so LFO controls full value (not additive)
-            lpf.Q.value = 8.0  // high resonance to make filter sweep more audible
-            
-            // configure gains
-            instrument_gain.gain.value = 0.0  // set to 0 so ramp LFO controls full value (not additive)
-            mute_node.gain.value = 0.0  // start muted
-            
-            // connect LFO through exponential converter to filter frequency
-            sinusoidal_lfo.connect(filter_exp_converter)
-            filter_exp_converter.connect(lpf.frequency)
-            
-            // connect ramp LFO through exponential converter to amplitude
-            ramp_lfo.connect(amp_exp_converter)
-            amp_exp_converter.connect(instrument_gain.gain)
-            
-            // connect synthesis chain: white noise → LPF → gain → mute → analyser → destination
-            white_noise.connect(lpf)
-            lpf.connect(instrument_gain)
-            instrument_gain.connect(mute_node)
-            mute_node.connect(analyser)
-            
-            // unmute instrument after pink noise fade completes
+            // exit calibration mode after fade completes
             setTimeout(() => { 
-                mute_node.gain.value = 1.0
                 in_calibration_mode = false 
-            }, 2000)
+                
+                // Start synthesis if program has been received
+                if (bowed_string_node && current_program) {
+                    bowed_string_node.port.postMessage({ type: 'setBowing', value: true })
+                }
+            }, 1000)
             
             // update UI
             join_phase.style.display = "none"
-            document.getElementById ("params").classList.remove ("dimmed")
             
-            console.log ("joined instrument - white noise synthesis chain with LFOs active")
+            console.log (`joined instrument - synthesis gain: ${stored_volume}`)
             
             // request wake lock to prevent device sleep
             request_wake_lock ()
@@ -560,9 +531,24 @@
                 console.log (`param ${data.name} = ${data.value}`)
                 if (data.name === "volume") {
                     stored_volume = data.value
-                    if (gain_node && is_powered_on && !in_calibration_mode) {
-                        gain_node.gain.value = data.value
+                    if (is_powered_on) {
+                        if (in_calibration_mode && calibration_gain) {
+                            calibration_gain.gain.value = data.value
+                            console.log(`Set calibration volume: ${data.value}`)
+                        } else if (!in_calibration_mode && synthesis_gain) {
+                            synthesis_gain.gain.value = data.value
+                            console.log(`Set synthesis volume: ${data.value}`)
+                        }
                     }
+
+                }
+            } else if (data.type === "program") {
+                current_program = data.program
+                apply_program (current_program)
+                
+                // Now start synthesis with correct frequency
+                if (bowed_string_node && !in_calibration_mode) {
+                    bowed_string_node.port.postMessage({ type: 'setBowing', value: true })
                 }
             } else if (data.type === "ping") {
                 // find the controller that sent this ping
@@ -571,16 +557,26 @@
                         ctrl.channel.send (JSON.stringify ({
                             type: "pong",
                             timestamp: data.timestamp,
-                            state: {
-                                audio_enabled: !!audio_context,
-                                volume: stored_volume,
-                                powered_on: is_powered_on
-                            }
+                            latency: Date.now() - data.timestamp,
+                            state: get_synth_state()
                         }))
                         break
                     }
                 }
             }
+            
+
+        }
+        
+        // get essential synth state information
+        function get_synth_state() {
+            const state = {
+                audio_enabled: !!audio_context && audio_context.state === 'running',
+                joined: !in_calibration_mode && !!(bowed_string_node && synthesis_gain)
+            }
+            
+
+            return state
         }
         
         // handle command updates
@@ -588,14 +584,196 @@
             console.log (`command ${command.name} = ${command.value}`)
             if (command.name === "power") {
                 is_powered_on = command.value
-                if (gain_node) {
-                    if (command.value) {
-                        // power on - restore stored volume
-                        gain_node.gain.value = stored_volume
-                    } else {
-                        // power off - mute
-                        gain_node.gain.value = 0
+                const target_volume = command.value ? stored_volume : 0
+                if (in_calibration_mode && calibration_gain) {
+                    calibration_gain.gain.value = target_volume
+
+                } else if (!in_calibration_mode && synthesis_gain) {
+                    synthesis_gain.gain.value = target_volume
+
+                }
+
+            } else if (command.name === "save") {
+                const bank_id = command.value
+                if (current_program) {
+                    // save currently resolved parameters to bank
+                    program_banks.set(bank_id, resolve_program(current_program))
+                    console.log(`saved current program to bank ${bank_id}`)
+                }
+            } else if (command.name === "load") {
+                const bank_id = command.bank
+                const fallback_program = command.program
+                
+                if (program_banks.has(bank_id)) {
+                    // load from saved bank
+                    const saved_params = program_banks.get(bank_id)
+                    apply_resolved_parameters(saved_params)
+                    console.log(`loaded parameters from bank ${bank_id}`)
+                } else {
+                    // resolve from fallback program
+                    current_program = fallback_program
+                    apply_program(fallback_program)
+                    console.log(`bank ${bank_id} not found, resolved from fallback program`)
+                }
+            }
+        }
+        
+        // resolve stochastic elements in a program to deterministic values
+        function resolve_program (program) {
+            const resolved = {}
+            
+            for (const [param_name, param_value] of Object.entries(program)) {
+                if (typeof param_value === 'object' && param_value.type) {
+                    // stochastic parameter - resolve it
+                    resolved[param_name] = resolve_stochastic_parameter(param_value)
+                } else {
+                    // deterministic parameter - use as-is
+                    resolved[param_name] = param_value
+                }
+            }
+            
+            return resolved
+        }
+        
+        // resolve a single stochastic parameter definition
+        function resolve_stochastic_parameter (param_def) {
+            switch (param_def.type) {
+                case 'uniform':
+                    return param_def.min + Math.random() * (param_def.max - param_def.min)
+                    
+                case 'normal':
+                    // Box-Muller transform for normal distribution
+                    const u1 = Math.random()
+                    const u2 = Math.random()
+                    const z0 = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2)
+                    return param_def.mean + z0 * param_def.std
+                    
+                case 'choice':
+                    return param_def.options[Math.floor(Math.random() * param_def.options.length)]
+                    
+                default:
+                    console.warn(`unknown stochastic type: ${param_def.type}`)
+                    return 0
+            }
+        }
+        
+        // apply a program by resolving stochasticity and setting parameters
+        function apply_program (program) {
+            const resolved = resolve_program(program)
+            apply_resolved_parameters(resolved)
+        }
+        
+        // apply resolved parameters to the synthesis engine
+        // apply resolved parameter values to the synthesis system
+        function apply_resolved_parameters (params) {
+            // apply each parameter to the appropriate synthesis components
+            for (const [param_name, param_value] of Object.entries(params)) {
+                if (param_name === "volume") {
+                    stored_volume = param_value
+                    if (is_powered_on) {
+                        if (in_calibration_mode && calibration_gain) {
+                            calibration_gain.gain.value = param_value
+                        } else if (!in_calibration_mode && synthesis_gain) {
+                            synthesis_gain.gain.value = param_value
+                        }
                     }
+                } else if (bowed_string_node) {
+                    // map program parameters to worklet parameters
+                    const worklet_param = map_program_param_to_worklet(param_name)
+                    
+                    if (worklet_param && bowed_string_node.parameters.has(worklet_param)) {
+                        const audio_param = bowed_string_node.parameters.get(worklet_param)
+                        audio_param.setValueAtTime(param_value, audio_context.currentTime)
+                    }
+                }
+            }
+        }
+        
+        // map program parameter names to worklet parameter names
+        function map_program_param_to_worklet(program_param) {
+            const param_map = {
+                // Direct camelCase matches (program sends camelCase, worklet expects camelCase)
+                'bowForce': 'bowForce',
+                'bowPosition': 'bowPosition',
+                'bowSpeed': 'bowSpeed',
+                'stringDamping': 'stringDamping',
+                'stringMaterial': 'stringMaterial',
+                'fundamentalFrequency': 'fundamentalFrequency',
+                'vibratoRate': 'vibratoRate',
+                'vibratoDepth': 'vibratoDepth',
+                'vibratoEnabled': 'vibratoEnabled',
+                'trillInterval': 'trillInterval',
+                'trillSpeed': 'trillSpeed',
+                'trillArticulation': 'trillArticulation',
+                'trillEnabled': 'trillEnabled',
+                'tremoloSpeed': 'tremoloSpeed',
+                'tremoloDepth': 'tremoloDepth',
+                'tremoloArticulation': 'tremoloArticulation',
+                'tremoloEnabled': 'tremoloEnabled',
+                'brightness': 'brightness',
+                'bodyType': 'bodyType',
+                'bodyResonance': 'bodyResonance',
+                'masterGain': 'masterGain',
+                
+                // Aliases and alternative names
+                'frequency': 'fundamentalFrequency',
+                'string_position': 'bowPosition',
+                'bow_force': 'bowForce',
+                'bow_position': 'bowPosition',
+                'bow_speed': 'bowSpeed',
+                'string_damping': 'stringDamping',
+                'string_material': 'stringMaterial',
+                'fundamental_frequency': 'fundamentalFrequency',
+                'vibrato_rate': 'vibratoRate',
+                'vibrato_depth': 'vibratoDepth',
+                'vibrato_enabled': 'vibratoEnabled',
+                'trill_interval': 'trillInterval',
+                'trill_speed': 'trillSpeed',
+                'trill_articulation': 'trillArticulation',
+                'trill_enabled': 'trillEnabled',
+                'tremolo_speed': 'tremoloSpeed',
+                'tremolo_depth': 'tremoloDepth',
+                'tremolo_articulation': 'tremoloArticulation',
+                'tremolo_enabled': 'tremoloEnabled',
+                'body_type': 'bodyType',
+                'body_resonance': 'bodyResonance',
+                'master_gain': 'masterGain'
+            }
+            return param_map[program_param] || null
+        }
+        
+        // set initial parameter values for bowed string synthesis
+        function set_initial_string_parameters() {
+            if (!bowed_string_node) return
+            
+            // set reasonable defaults for bowed string synthesis (frequency will come from program)
+            const initial_params = {
+                'stringDamping': 0.5,
+                'bowForce': 0.5,
+                'bowPosition': 0.12,
+                'bowSpeed': 0.5,
+                'brightness': 0.5,
+                'stringMaterial': 0,  // steel
+                'vibratoEnabled': 0,
+                'vibratoRate': 5.0,
+                'vibratoDepth': 0.0,
+                'trillEnabled': 0,
+                'trillInterval': 1,
+                'trillSpeed': 5.0,
+                'trillArticulation': 0.7,
+                'tremoloEnabled': 0,
+                'tremoloSpeed': 4.0,
+                'tremoloDepth': 0.7,
+                'tremoloArticulation': 0.5,
+                'bodyType': 0,  // violin
+                'bodyResonance': 0.3,
+                'masterGain': 0.5
+            }
+            
+            for (const [param_name, param_value] of Object.entries(initial_params)) {
+                if (bowed_string_node.parameters.has(param_name)) {
+                    const audio_param = bowed_string_node.parameters.get(param_name)
+                    audio_param.setValueAtTime(param_value, audio_context.currentTime)
                 }
             }
         }

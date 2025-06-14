@@ -1,730 +1,1613 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Controller - Minimal Distributed Synth</title>
-    <meta charset="utf-8">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>String Assembly FM - Controller</title>
     <style>
         body {
-            font-family: monospace;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            margin: 0;
             padding: 20px;
-            max-width: 600px;
+            min-height: 100vh;
+            color: #333;
+        }
+
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+            margin-bottom: 30px;
+            text-shadow: none;
+        }
+        
+        .container {
+            max-width: 800px;
             margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
         }
-        .control {
-            margin: 20px 0;
+        
+        .section {
+            margin-bottom: 25px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
         }
+        
+        .section-title {
+            font-size: 1.2em;
+            font-weight: bold;
+            margin-bottom: 15px;
+            color: #2c3e50;
+            border-bottom: 2px solid #ecf0f1;
+            padding-bottom: 8px;
+        }
+        
+        .controls {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        
+        .control-group {
+            display: grid;
+            grid-template-columns: 1fr 2fr 80px;
+            gap: 15px;
+            align-items: center;
+        }
+        
         label {
-            display: block;
-            margin-bottom: 5px;
+            font-weight: 500;
+            color: #34495e;
         }
+        
         input[type="range"] {
             width: 100%;
+            height: 6px;
+            border-radius: 3px;
+            background: #ddd;
+            outline: none;
+            transition: background 0.3s;
         }
-        #status {
-            padding: 10px;
-            background: #f0f0f0;
+        
+        input[type="range"]::-webkit-slider-thumb {
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: #667eea;
+            cursor: pointer;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+        }
+        
+        select {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid #ddd;
             border-radius: 4px;
+            font-size: 0.9em;
+            background: white;
+        }
+        
+        .value-display {
+            font-family: monospace;
+            font-size: 0.9em;
+            color: #666;
+            text-align: right;
+            min-width: 60px;
+        }
+        
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            font-size: 1em;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+        }
+        
+        button:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(102, 126, 234, 0.4);
+        }
+        
+        button:active:not(:disabled) {
+            transform: translateY(0);
+        }
+        
+        button:disabled {
+            background: #bdc3c7;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        
+        #status {
+            text-align: center;
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            font-weight: 500;
+            background: #e74c3c;
+            color: white;
+        }
+        
+        #status.connected {
+            background: #27ae60;
+        }
+        
+        #stats {
+            display: flex;
+            justify-content: space-around;
+            margin-bottom: 20px;
+            padding: 15px;
+            background: #ecf0f1;
+            border-radius: 6px;
+        }
+        
+        .stat {
+            text-align: center;
+        }
+        
+        .stat strong {
+            display: block;
+            font-size: 1.2em;
+            color: #2c3e50;
+        }
+        
+        hr.separator {
+            border: none;
+            height: 2px;
+            background: linear-gradient(to right, transparent, #667eea, transparent);
+            margin: 25px 0;
+        }
+        
+        .expression-group {
+            margin-top: 15px;
+            padding: 15px;
+            background: #fff;
+            border-radius: 6px;
+            border: 1px solid #e0e0e0;
+            display: none;
+        }
+        
+        .expression-group.active {
+            display: block;
+        }
+        
+        .expression-group.vibrato {
+            border-left: 4px solid #3498db;
+        }
+        
+        .expression-group.trill {
+            border-left: 4px solid #e67e22;
+        }
+        
+        .expression-group.tremolo {
+            border-left: 4px solid #d35400;
+        }
+        
+        .expression-group-title {
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #2c3e50;
+        }
+        
+        .expression-group.vibrato .expression-group-title {
+            color: #3498db;
+        }
+        
+        .expression-group.trill .expression-group-title {
+            color: #e67e22;
+        }
+        
+        .expression-group.tremolo .expression-group-title {
+            color: #d35400;
+        }
+        
+        .program-controls {
+            display: flex;
+            gap: 10px;
             margin-bottom: 20px;
         }
+        
+        .program-controls button {
+            flex: 1;
+            padding: 10px 16px;
+            font-size: 0.9em;
+        }
+        
+        .banking-controls {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            margin-top: 15px;
+        }
+        
+        .banking-controls select {
+            flex: 1;
+        }
+        
+        .banking-controls button {
+            padding: 8px 16px;
+            font-size: 0.9em;
+        }
+        
         #synths {
+            background: #f8f9fa;
+            border-radius: 6px;
+            padding: 15px;
             margin-top: 20px;
         }
-        .synth {
-            padding: 10px;
-            margin: 5px 0;
-            background: #e0e0e0;
-            border-radius: 4px;
+        
+        #synths h3 {
+            margin-top: 0;
+            color: #2c3e50;
         }
+        
+        .synth {
+            padding: 8px 12px;
+            margin: 5px 0;
+            background: white;
+            border-radius: 4px;
+            border-left: 4px solid #27ae60;
+        }
+        
+        .synth.connecting {
+            border-left-color: #f39c12;
+        }
+        
+        .synth.disconnected {
+            border-left-color: #e74c3c;
+        }
+        
         .latency {
             float: right;
             font-size: 0.8em;
             color: #666;
         }
-        #stats {
-            padding: 10px;
-            background: #f5f5f5;
-            border-radius: 4px;
-            margin-bottom: 20px;
-            font-size: 0.9em;
-        }
-        .stat {
-            display: inline-block;
-            margin-right: 20px;
-        }
-        .audio-off {
-            color: #f66;
+        
+        .synth-header {
             font-weight: bold;
+            margin-bottom: 4px;
+        }
+        
+        .synth-details {
+            font-size: 0.85em;
+            color: #555;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 4px;
+        }
+        
+        .synth-details span {
+            padding: 2px 6px;
+            border-radius: 3px;
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+        }
+        
+        .audio-state {
+            border-color: #28a745 !important;
+            background: #d4edda !important;
+        }
+        
+
+        
+        .synthesis-state {
+            border-color: #17a2b8 !important;
+            background: #d1ecf1 !important;
+        }
+        
+
+        
+
+        
+        .audio-off {
+            color: #e74c3c;
+            font-size: 0.8em;
+        }
+        
+        .warning {
+            background: #ff9800;
+            color: white;
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 15px;
+            display: none;
+        }
+        
+        .warning.show {
+            display: block;
+        }
+        
+        /* Parameter change indicators */
+        .control-group.changed {
+            position: relative;
+        }
+        
+        .control-group.changed::before {
+            content: '';
+            position: absolute;
+            top: -2px;
+            left: -2px;
+            right: -2px;
+            bottom: -2px;
+            border: 2px solid #ff9800;
+            border-radius: 6px;
+            pointer-events: none;
+            animation: pulse-orange 2s infinite;
+        }
+        
+        .control-group.sent {
+            position: relative;
+        }
+        
+        .control-group.sent::before {
+            content: '';
+            position: absolute;
+            top: -2px;
+            left: -2px;
+            right: -2px;
+            bottom: -2px;
+            border: 2px solid #4caf50;
+            border-radius: 6px;
+            pointer-events: none;
+            animation: fade-green 1s ease-out forwards;
+        }
+        
+        @keyframes pulse-orange {
+            0%, 100% { opacity: 0.6; }
+            50% { opacity: 1; }
+        }
+        
+        @keyframes fade-green {
+            0% { opacity: 1; }
+            100% { opacity: 0; }
+        }
+        
+        /* Status indicator */
+        .status-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 0.8em;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+        
+        .status-badge.synced {
+            background: #4caf50;
+            color: white;
+        }
+        
+        .status-badge.pending {
+            background: #ff9800;
+            color: white;
+            animation: pulse-orange 2s infinite;
+        }
+        
+        .status-badge.sending {
+            background: #2196f3;
+            color: white;
         }
     </style>
 </head>
 <body>
-    <h1>Controller</h1>
-    
-    <div id="status">Disconnected</div>
-    
-    <div id="stats">
-        <span class="stat">Connected: <strong id="connected_count">0</strong></span>
-        <span class="stat">Avg Latency: <strong id="avg_latency">-</strong></span>
+    <div class="container">
+        <h1>String Assembly FM - Controller</h1>
+        
+        <div id="status">Disconnected</div>
+        
+        <div id="stats">
+            <div class="stat">
+                <strong id="connected_count">0</strong>
+                <span>Connected</span>
+            </div>
+            <div class="stat">
+                <strong id="avg_latency">-</strong>
+                <span>Avg Latency</span>
+            </div>
+        </div>
+        
+        <div id="controller_warning" class="warning">
+            ⚠️ Controller conflict detected - multiple controllers detected!
+            <div id="other_controllers" style="font-size: 0.9em; margin-top: 5px;"></div>
+            <button id="kick_others" style="margin-top: 10px; padding: 5px 15px; background: #d32f2f; color: white; border: none; border-radius: 3px; cursor: pointer;">Kick Other Controllers</button>
+        </div>
+        
+        <div class="program-controls">
+            <button id="send_current_program">Send Current Program</button>
+            <span id="status_badge" class="status-badge synced">✓ Synced</span>
+        </div>
+        
+        <div class="section">
+            <div class="section-title">Piano</div>
+            <div id="piano-container" style="margin: 10px 0;">
+                <svg id="piano" width="750" height="80" style="border: 1px solid #ddd; border-radius: 4px; background: #fafafa;" xmlns="http://www.w3.org/2000/svg">
+                    <!-- Piano keys will be generated by JavaScript -->
+                </svg>
+                <div style="font-size: 0.8em; color: #666; margin-top: 5px; text-align: center;">
+                    <span id="piano-range-display">Range: C4-C6 (Violin)</span>
+                </div>
+                <div id="piano-debug" style="font-size: 0.7em; color: #999; margin-top: 5px;">Debug: Loading...</div>
+            </div>
+                
+</div>
+        
+    <div class="section">
+        <div class="section-title">Frequency & Expression</div>
+        <div class="controls">
+            <div class="control-group">
+                <label for="frequency">Frequency (Hz)</label>
+                <input type="range" id="frequency" value="220" min="50" max="4000" step="1">
+                <span id="frequencyValue" class="value-display">220</span>
+            </div>
+            <div class="control-group">
+                <label>Expression</label>
+                <div style="display: flex; gap: 15px; align-items: center;">
+                    <label style="font-size: 0.9em; margin: 0;">
+                        <input type="radio" name="expression" value="none" checked style="margin-right: 5px;">
+                        None
+                    </label>
+                    <label style="font-size: 0.9em; margin: 0;">
+                        <input type="radio" name="expression" value="vibrato" style="margin-right: 5px;">
+                        Vibrato
+                    </label>
+                    <label style="font-size: 0.9em; margin: 0;">
+                        <input type="radio" name="expression" value="trill" style="margin-right: 5px;">
+                        Trill
+                    </label>
+                    <label style="font-size: 0.9em; margin: 0;">
+                        <input type="radio" name="expression" value="tremolo" style="margin-right: 5px;">
+                        Tremolo
+                    </label>
+                </div>
+            </div>
+            
+            <div class="expression-group vibrato">
+                <div class="expression-group-title">Vibrato Parameters</div>
+                <div class="control-group">
+                    <label for="vibratoRate">Rate</label>
+                    <input type="range" id="vibratoRate" value="5.0" min="0.0" max="10.0" step="0.1">
+                    <span id="vibratoRateValue" class="value-display">5.0</span>
+                </div>
+                <div class="control-group">
+                    <label for="vibratoDepth">Depth</label>
+                    <input type="range" id="vibratoDepth" value="0.0" min="0.0" max="1.0" step="0.01">
+                    <span id="vibratoDepthValue" class="value-display">0.00</span>
+                </div>
+            </div>
+            
+            <div class="expression-group trill">
+                <div class="expression-group-title">Trill Parameters</div>
+                <div class="control-group">
+                    <label for="trillInterval">Interval</label>
+                    <select id="trillInterval">
+                        <option value="1">Minor 2nd</option>
+                        <option value="2">Major 2nd</option>
+                        <option value="3">Minor 3rd</option>
+                        <option value="4">Major 3rd</option>
+                        <option value="5">Perfect 4th</option>
+                        <option value="6">Tritone</option>
+                        <option value="7">Perfect 5th</option>
+                        <option value="8">Minor 6th</option>
+                        <option value="9">Major 6th</option>
+                        <option value="10">Minor 7th</option>
+                        <option value="11">Major 7th</option>
+                        <option value="12">Octave</option>
+                    </select>
+                    <span id="trillIntervalValue" class="value-display">m2</span>
+                </div>
+                <div class="control-group">
+                    <label for="trillSpeed">Speed</label>
+                    <input type="range" id="trillSpeed" value="5.0" min="3.0" max="12.0" step="0.1">
+                    <span id="trillSpeedValue" class="value-display">5.0</span>
+                </div>
+                <div class="control-group">
+                    <label for="trillArticulation">Articulation</label>
+                    <input type="range" id="trillArticulation" value="0.7" min="0.1" max="0.95" step="0.01">
+                    <span id="trillArticulationValue" class="value-display">0.70</span>
+                </div>
+            </div>
+            
+            <div class="expression-group tremolo">
+                <div class="expression-group-title">Tremolo Parameters</div>
+                <div class="control-group">
+                    <label for="tremoloSpeed">Speed</label>
+                    <input type="range" id="tremoloSpeed" value="4.0" min="1.0" max="12.0" step="0.1">
+                    <span id="tremoloSpeedValue" class="value-display">4.0</span>
+                </div>
+                <div class="control-group">
+                    <label for="tremoloDepth">Depth</label>
+                    <input type="range" id="tremoloDepth" value="0.7" min="0.0" max="1.0" step="0.01">
+                    <span id="tremoloDepthValue" class="value-display">0.70</span>
+                </div>
+                <div class="control-group">
+                    <label for="tremoloArticulation">Articulation</label>
+                    <input type="range" id="tremoloArticulation" value="0.5" min="0.01" max="0.99" step="0.01">
+                    <span id="tremoloArticulationValue" class="value-display">0.50</span>
+                </div>
+            </div>
+        </div>
     </div>
-    
-    <div id="controller_warning" style="display: none; padding: 10px; background: #ff9800; color: white; border-radius: 4px; margin-bottom: 10px;">
-        ⚠️ Controller conflict detected - you have multiple controller windows open!
-        <div id="other_controllers" style="font-size: 0.9em; margin-top: 5px;"></div>
-        <button id="kick_others" style="margin-top: 10px; padding: 5px 15px; background: #d32f2f; color: white; border: none; border-radius: 3px; cursor: pointer; font-family: monospace;">Kick Other Controllers</button>
-    </div>
-    
-    <div class="control">
-        <label for="volume">Volume: <span id="volume_value">0.2</span></label>
-        <input type="range" id="volume" min="0" max="1" step="0.01" value="0.2">
-    </div>
-    
-    <div class="control">
-        <label>
-            <input type="checkbox" id="power" checked> Power On/Off
-        </label>
-    </div>
-    
-    <div id="synths">
-        <h3>Available Synths</h3>
-        <div id="synth_list">None connected</div>
+
+    <div class="section">
+            <div class="section-title">Instrument</div>
+            <div class="controls">
+                <div class="control-group">
+                    <label for="bodyType">Body Type</label>
+                    <select id="bodyType">
+                        <option value="0">Violin</option>
+                        <option value="1">Viola</option>
+                        <option value="2">Cello</option>
+                        <option value="3">Guitar</option>
+                        <option value="4">None</option>
+                    </select>
+                </div>
+                <div class="control-group">
+                    <label for="stringMaterial">Material</label>
+                    <select id="stringMaterial">
+                        <option value="0">Steel</option>
+                        <option value="1">Gut</option>
+                        <option value="2">Nylon</option>
+                        <option value="3">Wound</option>
+                    </select>
+                </div>
+                <div class="control-group">
+                    <label for="stringDamping">Damping</label>
+                    <input type="range" id="stringDamping" value="0.5" min="0.01" max="0.99" step="0.01">
+                    <span id="stringDampingValue" class="value-display">0.50</span>
+                </div>
+                <div class="control-group">
+                    <label for="brightness">Brightness</label>
+                    <input type="range" id="brightness" value="0.5" min="0.0" max="1.0" step="0.01">
+                    <span id="brightnessValue" class="value-display">0.50</span>
+                </div>
+                <div class="control-group">
+                    <label for="bodyResonance">Body Resonance</label>
+                    <input type="range" id="bodyResonance" value="0.3" min="0.0" max="1.0" step="0.01">
+                    <span id="bodyResonanceValue" class="value-display">0.30</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="section">
+            <div class="section-title">Bow Control</div>
+            <div class="controls">
+                <div class="control-group">
+                    <label for="bowForce">Force</label>
+                    <input type="range" id="bowForce" value="0.5" min="0.0" max="1.0" step="0.01">
+                    <span id="bowForceValue" class="value-display">0.50</span>
+                </div>
+                <div class="control-group">
+                    <label for="bowPosition">Position</label>
+                    <input type="range" id="bowPosition" value="0.12" min="0.02" max="0.5" step="0.01">
+                    <span id="bowPositionValue" class="value-display">0.12</span>
+                </div>
+                <div class="control-group">
+                    <label for="bowSpeed">Speed</label>
+                    <input type="range" id="bowSpeed" value="0.5" min="0.0" max="1.0" step="0.01">
+                    <span id="bowSpeedValue" class="value-display">0.50</span>
+                </div>
+            </div>
+        </div>
+                
+                <div class="expression-group vibrato">
+                    <div class="expression-group-title">Vibrato Parameters</div>
+                    <div class="control-group">
+                        <label for="vibratoRate">Rate</label>
+                        <input type="range" id="vibratoRate" value="5.0" min="0.0" max="10.0" step="0.1">
+                        <span id="vibratoRateValue" class="value-display">5.0</span>
+                    </div>
+                    <div class="control-group">
+                        <label for="vibratoDepth">Depth</label>
+                        <input type="range" id="vibratoDepth" value="0.0" min="0.0" max="1.0" step="0.01">
+                        <span id="vibratoDepthValue" class="value-display">0.00</span>
+                    </div>
+                </div>
+                
+                <div class="expression-group trill">
+                    <div class="expression-group-title">Trill Parameters</div>
+                    <div class="control-group">
+                        <label for="trillInterval">Interval</label>
+                        <select id="trillInterval">
+                            <option value="1">Minor 2nd</option>
+                            <option value="2">Major 2nd</option>
+                            <option value="3">Minor 3rd</option>
+                            <option value="4">Major 3rd</option>
+                            <option value="5">Perfect 4th</option>
+                            <option value="6">Tritone</option>
+                            <option value="7">Perfect 5th</option>
+                            <option value="8">Minor 6th</option>
+                            <option value="9">Major 6th</option>
+                            <option value="10">Minor 7th</option>
+                            <option value="11">Major 7th</option>
+                            <option value="12">Octave</option>
+                        </select>
+                        <span id="trillIntervalValue" class="value-display">m2</span>
+                    </div>
+                    <div class="control-group">
+                        <label for="trillSpeed">Speed</label>
+                        <input type="range" id="trillSpeed" value="5.0" min="3.0" max="12.0" step="0.1">
+                        <span id="trillSpeedValue" class="value-display">5.0</span>
+                    </div>
+                    <div class="control-group">
+                        <label for="trillArticulation">Articulation</label>
+                        <input type="range" id="trillArticulation" value="0.7" min="0.1" max="0.95" step="0.01">
+                        <span id="trillArticulationValue" class="value-display">0.70</span>
+                    </div>
+                </div>
+                
+                <div class="expression-group tremolo">
+                    <div class="expression-group-title">Tremolo Parameters</div>
+                    <div class="control-group">
+                        <label for="tremoloSpeed">Speed</label>
+                        <input type="range" id="tremoloSpeed" value="4.0" min="1.0" max="12.0" step="0.1">
+                        <span id="tremoloSpeedValue" class="value-display">4.0</span>
+                    </div>
+                    <div class="control-group">
+                        <label for="tremoloDepth">Depth</label>
+                        <input type="range" id="tremoloDepth" value="0.7" min="0.0" max="1.0" step="0.01">
+                        <span id="tremoloDepthValue" class="value-display">0.70</span>
+                    </div>
+                    <div class="control-group">
+                        <label for="tremoloArticulation">Articulation</label>
+                        <input type="range" id="tremoloArticulation" value="0.5" min="0.01" max="0.99" step="0.01">
+                        <span id="tremoloArticulationValue" class="value-display">0.50</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+
+
+        <hr class="separator">
+        
+        <div class="section">
+            <div class="section-title">Master Output</div>
+            <div class="controls">
+                <div class="control-group">
+                    <label for="masterGain">Volume</label>
+                    <input type="range" id="masterGain" value="0.5" min="0.0" max="1.0" step="0.01">
+                    <span id="masterGainValue" class="value-display">0.50</span>
+                </div>
+                <div class="control-group">
+                    <label>
+                        <input type="checkbox" id="power" checked> Power On/Off
+                    </label>
+                    <span></span>
+                    <span></span>
+                </div>
+            </div>
+        </div>
+        
+        <hr class="separator">
+        
+        <div class="section">
+            <div class="section-title">Program Banking</div>
+            <div class="banking-controls">
+                <label for="bank_selector">Bank:</label>
+                <select id="bank_selector">
+                    <option value="1">Bank 1</option>
+                    <option value="2">Bank 2</option>
+                    <option value="3">Bank 3</option>
+                    <option value="4">Bank 4</option>
+                    <option value="5">Bank 5</option>
+                </select>
+                <button id="save_bank">Save</button>
+                <button id="load_bank">Load</button>
+            </div>
+        </div>
+        
+        <div id="synths">
+            <h3>Connected Synths</h3>
+            <div id="synth_list">None connected</div>
+        </div>
     </div>
 
     <script>
-        const controller_id = `ctrl-${Math.random ().toString (36).substr (2, 9)}`
-        const peers = new Map ()
-        const other_controllers = new Set ()
+        const controller_id = `ctrl-${Math.random().toString(36).substr(2, 9)}`
+        const peers = new Map()
+        const other_controllers = new Set()
         let ws = null
         let heartbeat_interval = null
         let wake_lock = null
         let kicked = false
+        let current_program = create_example_program()
+        const program_banks = new Map()
         
-        // webrtc configuration
+        // WebRTC configuration
         let rtc_config = {
             iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
         }
         
-        // fetch ice servers from server
-        async function fetch_ice_servers () {
+        // Fetch ICE servers from server
+        async function fetch_ice_servers() {
             try {
-                const response = await fetch ("/ice-servers")
-                const data = await response.json ()
+                const response = await fetch('/ice-servers')
+                const data = await response.json()
                 rtc_config.iceServers = data.ice_servers
-                console.log ("ICE servers loaded:", rtc_config.iceServers)
+                console.log('ICE servers loaded:', rtc_config.iceServers)
             } catch (error) {
-                console.error ("Failed to fetch ICE servers, using defaults:", error)
+                console.error('Failed to fetch ICE servers, using defaults:', error)
+                // Fall back to default STUN servers
+                rtc_config.iceServers = [
+                    { urls: "stun:stun.l.google.com:19302" },
+                    { urls: "stun:stun1.l.google.com:19302" }
+                ]
+                console.log('Using default ICE servers:', rtc_config.iceServers)
             }
         }
         
-        // ui elements
-        const status_el = document.getElementById ("status")
-        const volume_el = document.getElementById ("volume")
-        const volume_value_el = document.getElementById ("volume_value")
-        const synth_list_el = document.getElementById ("synth_list")
+        // UI elements
+        const status_el = document.getElementById('status')
+        const synth_list_el = document.getElementById('synth_list')
+        const connected_count_el = document.getElementById('connected_count')
+        const avg_latency_el = document.getElementById('avg_latency')
         
-        // connect to websocket
-        function connect_websocket () {
-            const protocol = window.location.protocol === "https:" ? "wss:" : "ws:"
-            ws = new WebSocket (`${protocol}//${window.location.host}/ws`)
+        // Parameter elements
+        const param_elements = {}
+        const param_ids = [
+            'frequency', 'stringMaterial', 'stringDamping',
+            'bowPosition', 'bowSpeed', 'bowForce', 'brightness',
+            'vibratoRate', 'vibratoDepth', 'trillInterval', 'trillSpeed', 'trillArticulation',
+            'tremoloSpeed', 'tremoloDepth', 'tremoloArticulation',
+            'bodyType', 'bodyResonance', 'masterGain'
+        ]
+        
+        // Initialize parameter elements
+        param_ids.forEach(id => {
+            const input = document.getElementById(id)
+            const value_display = document.getElementById(id + 'Value')
+            if (input && value_display) {
+                param_elements[id] = { input, value_display }
+            }
+        })
+        
+        // Expression controls
+        const expression_radios = document.querySelectorAll('input[name="expression"]')
+        const expression_groups = document.querySelectorAll('.expression-group')
+        
+        // Initialize WebSocket connection
+        function connect_websocket() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+            const ws_url = `${protocol}//${window.location.host}/`
             
-            ws.addEventListener ("open", () => {
-                console.log ("connected to server")
-                status_el.textContent = `Connected as ${controller_id}`
+            ws = new WebSocket(ws_url)
+            
+            ws.addEventListener('open', () => {
+                console.log('WebSocket connected')
+                status_el.textContent = 'Connected'
+                status_el.classList.add('connected')
                 
-                // register with server
-                send_message ({
-                    type: "register",
+                // Register as controller
+                send_message({
+                    type: 'register',
                     client_id: controller_id
                 })
                 
-                // announce presence to other controllers (for warning system)
-                send_message ({
-                    type: "announce", 
-                    source: controller_id,
-                    target: "ctrl-*"
-                })
-                
-                // start heartbeat interval
-                heartbeat_interval = setInterval (() => {
-                    send_message ({
-                        type: "heartbeat",
-                        source: controller_id
-                    })
-                    console.log ("sent heartbeat")
-                }, 20000) // every 20 seconds
+                // Start heartbeat
+                heartbeat_interval = setInterval(() => {
+                    send_message({ type: 'heartbeat' })
+                }, 20000)
             })
             
-            ws.addEventListener ("message", async (event) => {
-                const message = JSON.parse (event.data)
-                await handle_message (message)
+            ws.addEventListener('message', async (event) => {
+                await handle_message(JSON.parse(event.data))
             })
             
-            ws.addEventListener ("close", () => {
-                console.log ("disconnected from server")
+            ws.addEventListener('close', () => {
+                console.log('WebSocket disconnected')
+                status_el.textContent = 'Disconnected'
+                status_el.classList.remove('connected')
                 
-                // don't reconnect if we were kicked
-                if (kicked) {
-                    console.log ("not reconnecting - we were kicked")
-                    return
-                }
-                
-                status_el.textContent = "Disconnected - Reconnecting..."
-                
-                // clear heartbeat interval
                 if (heartbeat_interval) {
-                    clearInterval (heartbeat_interval)
+                    clearInterval(heartbeat_interval)
                     heartbeat_interval = null
                 }
                 
-                setTimeout (connect_websocket, 2000)
+                // Reconnect after delay
+                setTimeout(connect_websocket, 2000)
+            })
+            
+            ws.addEventListener('error', (error) => {
+                console.error('WebSocket error:', error)
             })
         }
         
-        // send message via websocket
-        function send_message (message) {
+        function send_message(message) {
             if (ws && ws.readyState === WebSocket.OPEN) {
-                ws.send (JSON.stringify (message))
+                ws.send(JSON.stringify(message))
             }
         }
         
-        // handle incoming messages
-        async function handle_message (message) {
-            console.log ("received:", message)
-            
-            if (message.type === "announce" && message.source.startsWith ("ctrl-") && message.source !== controller_id) {
-                // another controller announced itself
-                const is_new = !other_controllers.has (message.source)
-                other_controllers.add (message.source)
-                update_controller_warning ()
-                // announce back only if this is a new controller
-                if (is_new) {
-                    send_message ({
-                        type: "announce",
-                        source: controller_id,
-                        target: message.source
-                    })
-                }
-                
-            } else if (message.type === "kicked") {
-                // handle being kicked by another controller
-                console.log (`kicked by ${message.kicked_by}`)
+        async function handle_message(message) {
+            if (message.type === 'controllers-list') {
+                // Handle controller list (not needed for this client)
+            } else if (message.type === 'controller-joined') {
+                other_controllers.add(message.controller_id)
+                update_controller_warning()
+            } else if (message.type === 'controller-left') {
+                other_controllers.delete(message.controller_id)
+                update_controller_warning()
+            } else if (message.type === 'announce') {
+                other_controllers.add(message.sender_id)
+                update_controller_warning()
+            } else if (message.type === 'kicked') {
                 kicked = true
-                status_el.textContent = `Session taken over by ${message.kicked_by}`
-                status_el.style.background = "#d32f2f"
-                status_el.style.color = "white"
-                
-                // disable all controls
-                document.getElementById ("volume").disabled = true
-                document.getElementById ("power").disabled = true
-                document.getElementById ("kick_others").disabled = true
-                
-                // show message to user
-                const warning_el = document.getElementById ("controller_warning")
-                warning_el.style.display = "block"
-                warning_el.style.background = "#d32f2f"
-                warning_el.innerHTML = `
-                    <strong>⚠️ Session Taken Over!</strong><br>
-                    Another controller (${message.kicked_by}) has claimed this session.<br>
-                    <small>Refresh the page to start a new session.</small>
-                `
-                
-            } else if (message.type === "offer") {
-                // handle webrtc offer from synth
-                await handle_offer (message)
-                
-            } else if (message.type === "answer") {
-                // handle webrtc answer from synth
-                const peer = peers.get (message.source)
-                if (peer && peer.connection) {
-                    await peer.connection.setRemoteDescription (message.data)
-                    
-                    // process any queued ice candidates
-                    if (peer.ice_queue.length > 0) {
-                        console.log (`processing ${peer.ice_queue.length} queued ice candidates`)
-                        for (const candidate of peer.ice_queue) {
-                            await peer.connection.addIceCandidate (candidate)
-                        }
-                        peer.ice_queue = []
-                    }
-                }
-                
-            } else if (message.type === "ice") {
-                // handle ice candidate
-                const peer = peers.get (message.source)
-                if (peer && peer.connection) {
-                    try {
-                        if (peer.connection.remoteDescription) {
-                            console.log (`adding ice candidate: ${message.data.candidate}`)
-                            await peer.connection.addIceCandidate (message.data)
-                        } else {
-                            // queue ice candidate until remote description is set
-                            console.log ("queueing ice candidate")
-                            peer.ice_queue.push (message.data)
-                        }
-                    } catch (error) {
-                        console.error ("error adding ice candidate:", error)
-                    }
-                }
+                status_el.textContent = `Kicked by ${message.kicked_by}`
+                status_el.classList.remove('connected')
+            } else if (message.type === 'offer') {
+                await handle_offer(message)
+            } else if (message.type === 'answer') {
+                await handle_answer(message)
+            } else if (message.type === 'ice') {
+                await handle_ice_candidate(message)
             }
         }
         
-        // send current volume to all connected synths
-        function send_volume () {
-            const value = parseFloat (volume_el.value)
-            peers.forEach ((peer, id) => {
-                if (peer.param_channel && peer.param_channel.readyState === "open") {
-                    peer.param_channel.send (JSON.stringify ({
-                        type: "param",
-                        name: "volume",
-                        value: value
-                    }))
-                }
-            })
-        }
-        
-        // send touch data (placeholder for now - no touch handling implemented yet)
-        function send_touch_data () {
-            // TODO: implement touch/mouse position tracking and sending
-            console.log ("send_touch_data called - not implemented yet")
-        }
-        
-        // handle incoming offer from synth
-        async function handle_offer (message) {
-            console.log (`handling offer from ${message.source}`)
+        async function handle_offer(message) {
+            const synth_id = message.source
+            console.log(`Received offer from ${synth_id}`)
             
-            const pc = new RTCPeerConnection (rtc_config)
-            
-            // store peer info
+            const pc = new RTCPeerConnection(rtc_config)
             const peer = {
                 connection: pc,
                 param_channel: null,
                 command_channel: null,
-                ice_queue: [],
                 latency: null,
-                ping_interval: null,
-                state: {
-                    audio_enabled: false,
-                    volume: 0.2,
-                    powered_on: true
-                }
+                last_ping: null,
+                state: null
             }
-            peers.set (message.source, peer)
+            peers.set(synth_id, peer)
             
-            // handle ice candidates
-            pc.addEventListener ("icecandidate", (event) => {
+            // Handle ICE candidates
+            pc.addEventListener('icecandidate', (event) => {
                 if (event.candidate) {
-                    console.log (`sending ice candidate: ${event.candidate.candidate}`)
-                    send_message ({
-                        type: "ice",
-                        source: controller_id,
-                        target: message.source,
-                        data: event.candidate
-                    })
-                } else {
-                    console.log ("ice gathering complete")
-                }
-            })
-            
-            // handle data channels from synth
-            pc.addEventListener ("datachannel", (event) => {
-                const channel = event.channel
-                console.log (`received data channel: ${channel.label}`)
-                
-                if (channel.label === "params") {
-                    peer.param_channel = channel
-                    
-                    channel.addEventListener ("open", () => {
-                        console.log (`param channel open to ${message.source}`)
-                        update_synth_list (message.source, "connected")
-                        
-                        // start ping interval
-                        peer.ping_interval = setInterval (() => {
-                            if (channel.readyState === "open") {
-                                channel.send (JSON.stringify ({
-                                    type: "ping",
-                                    timestamp: Date.now ()
-                                }))
-                            }
-                        }, 1000)
-                        
-                        // send initial parameters
-                        send_touch_data ()
-                        send_volume ()
-                        
-                        // send power state via command channel when it opens
-                    })
-                    
-                    channel.addEventListener ("message", (event) => {
-                        const data = JSON.parse (event.data)
-                        if (data.type === "pong") {
-                            const rtt = Date.now () - data.timestamp
-                            peer.latency = rtt
-                            // update state if provided
-                            if (data.state) {
-                                peer.state = data.state
-                            }
-                            update_synth_list (message.source, pc.connectionState)
-                        }
-                    })
-                    
-                    channel.addEventListener ("close", () => {
-                        if (peer.ping_interval) {
-                            clearInterval (peer.ping_interval)
-                            peer.ping_interval = null
-                        }
-                    })
-                    
-                } else if (channel.label === "commands") {
-                    peer.command_channel = channel
-                    
-                    channel.addEventListener ("open", () => {
-                        console.log (`command channel open to ${message.source}`)
-                        // send current power state
-                        const is_on = power_el.checked
-                        channel.send (JSON.stringify ({
-                            type: "command",
-                            name: "power",
-                            value: is_on
-                        }))
-                    })
-                }
-            })
-            
-            // handle connection state
-            pc.addEventListener ("connectionstatechange", () => {
-                console.log (`connection state: ${pc.connectionState}`)
-                update_synth_list (message.source, pc.connectionState)
-                
-                if (pc.connectionState === "failed" || pc.connectionState === "closed") {
-                    // clean up disconnected peer
-                    if (peer.ping_interval) {
-                        clearInterval (peer.ping_interval)
-                    }
-                    peers.delete (message.source)
-                    update_synth_list (message.source, "disconnected")
-                }
-            })
-            
-            // set remote description and create answer
-            await pc.setRemoteDescription (message.data)
-            const answer = await pc.createAnswer ()
-            await pc.setLocalDescription (answer)
-            
-            // process any queued ice candidates
-            if (peer.ice_queue.length > 0) {
-                console.log (`processing ${peer.ice_queue.length} queued ice candidates`)
-                for (const candidate of peer.ice_queue) {
-                    await pc.addIceCandidate (candidate)
-                }
-                peer.ice_queue = []
-            }
-            
-            // send answer back
-            send_message ({
-                type: "answer",
-                source: controller_id,
-                target: message.source,
-                data: answer
-            })
-        }
-        
-        // COMMENTED OUT: Controllers now accept connections instead of initiating them
-        /*
-        // create webrtc connection to synth
-        window.connect_to_synth = async function (synth_id) {
-            console.log (`connecting to ${synth_id}`)
-            
-            const pc = new RTCPeerConnection (rtc_config)
-            // create two channels - UDP-like for params, TCP-like for commands
-            const param_channel = pc.createDataChannel ("params", { 
-                ordered: false,
-                maxRetransmits: 0 
-            })
-            const command_channel = pc.createDataChannel ("commands", { 
-                ordered: true 
-            })
-            
-            // store peer info
-            peers.set (synth_id, {
-                connection: pc,
-                param_channel: param_channel,
-                command_channel: command_channel,
-                ice_queue: [],
-                latency: null,
-                ping_interval: null
-            })
-            
-            // handle ice candidates
-            pc.addEventListener ("icecandidate", (event) => {
-                if (event.candidate) {
-                    console.log (`sending ice candidate: ${event.candidate.candidate}`)
-                    send_message ({
-                        type: "ice",
+                    send_message({
+                        type: 'ice',
                         source: controller_id,
                         target: synth_id,
                         data: event.candidate
                     })
-                } else {
-                    console.log ("ice gathering complete")
                 }
             })
             
-            // handle connection state
-            pc.addEventListener ("connectionstatechange", () => {
-                console.log (`connection state: ${pc.connectionState}`)
+            // Handle data channels
+            pc.addEventListener('datachannel', (event) => {
+                const channel = event.channel
                 
-                if (pc.connectionState === "failed" || pc.connectionState === "closed") {
-                    // clean up disconnected peer
-                    const peer = peers.get (synth_id)
-                    if (peer && peer.ping_interval) {
-                        clearInterval (peer.ping_interval)
-                    }
-                    peers.delete (synth_id)
+                if (channel.label === 'params') {
+                    peer.param_channel = channel
                     
-                    // retry connection after a delay
-                    if (pc.connectionState === "failed") {
-                        console.log (`retrying connection to ${synth_id} in 3 seconds...`)
-                        setTimeout (() => {
-                            // check if synth is still announcing
-                            send_message ({
-                                type: "announce",
-                                source: controller_id,
-                                target: synth_id
-                            })
-                        }, 3000)
-                    }
+                    channel.addEventListener('open', () => {
+                        console.log(`Param channel open to ${synth_id}`)
+                        update_synth_list()
+                        
+                        // Start ping interval
+                        const ping_interval = setInterval(() => {
+                            if (channel.readyState === 'open') {
+                                const timestamp = Date.now()
+                                peer.last_ping = timestamp
+                                channel.send(JSON.stringify({
+                                    type: 'ping',
+                                    timestamp: timestamp
+                                }))
+                            } else {
+                                clearInterval(ping_interval)
+                            }
+                        }, 1000)
+                    })
+                    
+                    channel.addEventListener('message', (event) => {
+                        const data = JSON.parse(event.data)
+                        if (data.type === 'pong') {
+                            peer.latency = Date.now() - data.timestamp
+                            peer.state = data.state || null
+                            console.log(`Received pong from ${synth_id} with state:`, data.state)
+                            update_synth_list()
+                        } else if (data.type === 'request_program') {
+                            // send current program to requesting synth
+                            console.log(`Received program request from ${synth_id}`)
+                            
+                            // Debug current frequency slider value
+                            const freqSlider = document.getElementById('frequency')
+                            console.log(`Current frequency slider value: ${freqSlider.value}Hz`)
+                            
+                            console.log('Current program object:', current_program)
+                            console.log('Current program has keys:', Object.keys(current_program || {}))
+                            if (current_program && Object.keys(current_program).length > 0) {
+                                channel.send(JSON.stringify({
+                                    type: 'program',
+                                    program: current_program
+                                }))
+                                console.log(`Sent current program to ${synth_id}:`, current_program)
+                            } else {
+                                console.log(`No program to send to ${synth_id} - creating default program`)
+                                const default_program = get_current_program()
+                                channel.send(JSON.stringify({
+                                    type: 'program',
+                                    program: default_program
+                                }))
+                                console.log(`Sent default program to ${synth_id}:`, default_program)
+                            }
+                        }
+                    })
+                    
+                    channel.addEventListener('close', () => {
+                        console.log(`Param channel closed to ${synth_id}`)
+                        update_synth_list()
+                    })
+                } else if (channel.label === 'commands') {
+                    peer.command_channel = channel
+                    
+                    channel.addEventListener('open', () => {
+                        console.log(`Command channel open to ${synth_id}`)
+                        update_synth_list()
+                    })
+                    
+                    channel.addEventListener('close', () => {
+                        console.log(`Command channel closed to ${synth_id}`)
+                        update_synth_list()
+                    })
                 }
-                
-                update_synth_list (synth_id, pc.connectionState)
             })
             
-            // monitor ice connection state
-            pc.addEventListener ("iceconnectionstatechange", () => {
-                console.log (`ice connection state: ${pc.iceConnectionState}`)
-            })
+            // Set remote description and create answer
+            await pc.setRemoteDescription(message.data)
+            const answer = await pc.createAnswer()
+            await pc.setLocalDescription(answer)
             
-            // monitor ice gathering state
-            pc.addEventListener ("icegatheringstatechange", () => {
-                console.log (`ice gathering state: ${pc.iceGatheringState}`)
-            })
-            
-            // handle param channel (UDP-like)
-            param_channel.addEventListener ("open", () => {
-                console.log (`param channel open to ${synth_id}`)
-                // send current volume
-                const value = parseFloat (volume_el.value)
-                param_channel.send (JSON.stringify ({
-                    type: "param",
-                    name: "volume",
-                    value: value
-                }))
-                
-                // start latency monitoring
-                const peer = peers.get (synth_id)
-                peer.ping_interval = setInterval (() => {
-                    if (param_channel.readyState === "open") {
-                        param_channel.send (JSON.stringify ({
-                            type: "ping",
-                            timestamp: Date.now ()
-                        }))
-                    }
-                }, 1000)
-            })
-            
-            // handle param channel messages
-            param_channel.addEventListener ("message", (event) => {
-                const data = JSON.parse (event.data)
-                if (data.type === "pong") {
-                    const rtt = Date.now () - data.timestamp
-                    const peer = peers.get (synth_id)
-                    peer.latency = rtt
-                    update_synth_list (synth_id, pc.connectionState)
-                }
-            })
-            
-            // handle param channel close
-            param_channel.addEventListener ("close", () => {
-                const peer = peers.get (synth_id)
-                if (peer.ping_interval) {
-                    clearInterval (peer.ping_interval)
-                }
-            })
-            
-            // handle command channel (TCP-like)
-            command_channel.addEventListener ("open", () => {
-                console.log (`command channel open to ${synth_id}`)
-                // send current power state
-                const is_on = power_el.checked
-                command_channel.send (JSON.stringify ({
-                    type: "command",
-                    name: "power",
-                    value: is_on
-                }))
-            })
-            
-            // create and send offer
-            const offer = await pc.createOffer ()
-            await pc.setLocalDescription (offer)
-            
-            send_message ({
-                type: "offer",
+            send_message({
+                type: 'answer',
                 source: controller_id,
                 target: synth_id,
-                data: offer
+                data: answer
             })
         }
-        */
         
-        // update synth list ui
-        function update_synth_list (synth_id, status) {
-            if (status === "discovered" && !peers.has (synth_id)) {
-                peers.set (synth_id, { 
-                    connection: null, 
-                    channel: null,
-                    state: {
-                        audio_enabled: false,
-                        volume: 0.2,
-                        powered_on: true
-                    }
-                })
-            }
+        async function handle_answer(message) {
+            // Controllers don't initiate connections, so this shouldn't happen
+            console.warn('Received unexpected answer message')
+        }
+        
+        async function handle_ice_candidate(message) {
+            const synth_id = message.source
+            const peer = peers.get(synth_id)
             
-            const synth_entries = Array.from (peers.entries ())
+            if (peer && peer.connection) {
+                await peer.connection.addIceCandidate(message.data)
+            }
+        }
+        
+        function update_synth_list() {
+            const synth_entries = Array.from(peers.entries())
+            connected_count_el.textContent = synth_entries.filter(([id, peer]) => 
+                peer.param_channel && peer.param_channel.readyState === 'open'
+            ).length.toString()
             
             if (synth_entries.length === 0) {
                 synth_list_el.innerHTML = "None connected"
             } else {
-                synth_list_el.innerHTML = synth_entries.map (([id, peer]) => {
-                    const state = peer.connection ? peer.connection.connectionState : "discovered"
-                    const color = state === "connected" ? "#4a4" : 
-                                 state === "connecting" ? "#aa4" : "#888"
+                synth_list_el.innerHTML = synth_entries.map(([id, peer]) => {
+                    const param_state = peer.param_channel ? peer.param_channel.readyState : 'closed'
+                    const command_state = peer.command_channel ? peer.command_channel.readyState : 'closed'
+                    const connection_state = (param_state === 'open' && command_state === 'open') ? 'connected' : 
+                                 (param_state === 'connecting' || command_state === 'connecting') ? 'connecting' : 'disconnected'
+                    
                     const latency_text = peer.latency !== null ? `<span class="latency">${peer.latency}ms</span>` : ""
-                    const audio_indicator = (peer.state && peer.state.audio_enabled) ? "" : " <span class='audio-off'>[audio off]</span>"
-                    return `<div class="synth" style="color: ${color};">${id} [${state}]${audio_indicator} ${latency_text}</div>`
-                }).join ("")
+                    
+                    // Build detailed state information
+                    let state_details = ""
+                    if (peer.state) {
+                        const audio_status = peer.state.audio_enabled ? 'running' : 'disabled'
+                        const synthesis_status = peer.state.joined ? 'joined' : 'calibrating'
+                        
+                        state_details = `
+                            <div class="synth-details">
+                                <span class="audio-state">Audio: ${audio_status}</span>
+                                <span class="synthesis-state">Synth: ${synthesis_status}</span>
+                            </div>`
+                    }
+                    
+                    return `<div class="synth ${connection_state}">
+                        <div class="synth-header">${id} [${connection_state}] ${latency_text}</div>
+                        ${state_details}
+                    </div>`
+                }).join("")
             }
             
-            // update stats
-            update_stats ()
-        }
-        
-        // update connection stats
-        function update_stats () {
-            const connected_peers = Array.from (peers.values ()).filter (
-                peer => peer.connection && peer.connection.connectionState === "connected"
-            )
-            
-            document.getElementById ("connected_count").textContent = connected_peers.length
-            
-            const latencies = connected_peers
-                .map (peer => peer.latency)
-                .filter (latency => latency !== null)
-            
+            // Update average latency
+            const latencies = synth_entries.map(([id, peer]) => peer.latency).filter(l => l !== null)
             if (latencies.length > 0) {
-                const avg = Math.round (latencies.reduce ((a, b) => a + b, 0) / latencies.length)
-                document.getElementById ("avg_latency").textContent = `${avg}ms`
+                const avg = Math.round(latencies.reduce((a, b) => a + b, 0) / latencies.length)
+                avg_latency_el.textContent = `${avg}ms`
             } else {
-                document.getElementById ("avg_latency").textContent = "-"
+                avg_latency_el.textContent = '-'
             }
         }
         
-        // volume control
-        volume_el.addEventListener ("input", (e) => {
-            const value = parseFloat (e.target.value)
-            volume_value_el.textContent = value.toFixed (2)
-            
-            // send to all connected peers via param channel (UDP-like)
-            peers.forEach ((peer, id) => {
-                if (peer.param_channel && peer.param_channel.readyState === "open") {
-                    peer.param_channel.send (JSON.stringify ({
-                        type: "param",
-                        name: "volume",
-                        value: value
+        // Send program to all connected synths
+        function send_program(program) {
+            current_program = program
+            peers.forEach((peer, id) => {
+                if (peer.param_channel && peer.param_channel.readyState === 'open') {
+                    peer.param_channel.send(JSON.stringify({
+                        type: 'program',
+                        program: program
                     }))
                 }
             })
-        })
+            console.log(`Sent program with ${Object.keys(program).length} parameters`)
+        }
         
-        // kick other controllers button
-        const kick_others_el = document.getElementById ("kick_others")
-        kick_others_el.addEventListener ("click", () => {
-            console.log ("kicking other controllers")
-            send_message ({
-                type: "kick-other-controllers",
-                source: controller_id
+        // Get current program from UI
+        function get_current_program() {
+            const program = {}
+            
+            param_ids.forEach(id => {
+                const element = param_elements[id]
+                if (element && element.input) {
+                    const value = element.input.type === 'range' ? 
+                        parseFloat(element.input.value) : 
+                        element.input.value
+                    program[id] = value
+                    
+                    // Debug frequency specifically
+                    if (id === 'frequency') {
+                        console.log(`get_current_program: frequency slider value = ${element.input.value}, parsed = ${value}`)
+                    }
+                }
             })
             
-            // clear the other controllers locally and hide warning
-            other_controllers.clear ()
-            update_controller_warning ()
+            // Add expression parameters based on active expression
+            const active_expression = document.querySelector('input[name="expression"]:checked').value
+            if (active_expression !== 'none') {
+                program[`${active_expression}_enabled`] = 1
+            }
+            
+            return program
+        }
+        
+        // Create example program with stochastic elements
+        function create_example_program() {
+            return {
+                frequency: 220,
+                stringMaterial: { type: "choice", options: [0, 1, 2, 3] },
+                stringDamping: { type: "uniform", min: 0.3, max: 0.7 },
+                bowPosition: { type: "uniform", min: 0.08, max: 0.25 },
+                bowSpeed: { type: "normal", mean: 0.6, std: 0.1 },
+                bowForce: { type: "uniform", min: 0.3, max: 0.8 },
+                brightness: { type: "uniform", min: 0.2, max: 0.8 },
+                vibratoRate: { type: "uniform", min: 4.0, max: 7.0 },
+                vibratoDepth: { type: "uniform", min: 0.0, max: 0.3 },
+                bodyType: { type: "choice", options: [0, 1, 2] },
+                bodyResonance: { type: "uniform", min: 0.1, max: 0.6 },
+                masterGain: 0.5
+            }
+        }
+        
+        // Save program to bank
+        function save_to_bank(bank_id) {
+            program_banks.set(bank_id, current_program)
+            peers.forEach((peer, id) => {
+                if (peer.command_channel && peer.command_channel.readyState === 'open') {
+                    peer.command_channel.send(JSON.stringify({
+                        type: 'command',
+                        name: 'save',
+                        value: bank_id
+                    }))
+                }
+            })
+            console.log(`Saved program to bank ${bank_id}`)
+        }
+        
+        // Load program from bank
+        function load_from_bank(bank_id) {
+            if (program_banks.has(bank_id)) {
+                const saved_program = program_banks.get(bank_id)
+                peers.forEach((peer, id) => {
+                    if (peer.command_channel && peer.command_channel.readyState === 'open') {
+                        peer.command_channel.send(JSON.stringify({
+                            type: 'command',
+                            name: 'load',
+                            bank: bank_id,
+                            program: saved_program
+                        }))
+                    }
+                })
+                console.log(`Loaded program from bank ${bank_id}`)
+            } else {
+                console.warn(`Bank ${bank_id} not found`)
+            }
+        }
+        
+        // Update UI display values
+        function update_display_value(id, value) {
+            const element = param_elements[id]
+            if (element && element.value_display) {
+                if (id === 'stringMaterial') {
+                    const materials = ['Steel', 'Gut', 'Nylon', 'Wound']
+                    element.value_display.textContent = materials[value] || materials[0]
+                } else if (id === 'bodyType') {
+                    const bodies = ['Violin', 'Viola', 'Cello', 'Guitar', 'None']
+                    element.value_display.textContent = bodies[value] || bodies[0]
+                } else if (id === 'trillInterval') {
+                    const intervals = ['m2', 'M2', 'm3', 'M3', 'P4', 'TT', 'P5', 'm6', 'M6', 'm7', 'M7', '8va']
+                    element.value_display.textContent = intervals[value - 1] || 'm2'
+                } else if (typeof value === 'number') {
+                    const decimals = value < 1 ? 2 : (value < 10 ? 1 : 0)
+                    element.value_display.textContent = value.toFixed(decimals)
+                } else {
+                    element.value_display.textContent = value.toString()
+                }
+            }
+        }
+        
+        // Update expression group visibility
+        function update_expression_groups() {
+            const active_expression = document.querySelector('input[name="expression"]:checked').value
+            expression_groups.forEach(group => {
+                group.classList.remove('active')
+            })
+            
+            if (active_expression !== 'none') {
+                const active_group = document.querySelector(`.expression-group.${active_expression}`)
+                if (active_group) {
+                    active_group.classList.add('active')
+                }
+            }
+        }
+        
+        function update_controller_warning() {
+            const warning_el = document.getElementById('controller_warning')
+            const other_controllers_el = document.getElementById('other_controllers')
+            
+            if (other_controllers.size > 0) {
+                warning_el.classList.add('show')
+                other_controllers_el.textContent = `Other controllers: ${Array.from(other_controllers).join(', ')}`
+            } else {
+                warning_el.classList.remove('show')
+            }
+        }
+        
+        // Event Listeners
+        
+        // Parameter input handlers (combined with change tracking)
+        param_ids.forEach(id => {
+            const element = param_elements[id]
+            if (element && element.input) {
+                element.input.addEventListener('input', (e) => {
+                    const value = e.target.type === 'range' ? parseFloat(e.target.value) : e.target.value
+                    update_display_value(id, value)
+                    console.log('Combined input event fired for', id, 'new value:', value)
+                    mark_parameter_changed(id)
+                    check_overall_status()
+                })
+            }
         })
         
-        // power on/off control
-        const power_el = document.getElementById ("power")
-        power_el.addEventListener ("change", (e) => {
+        // Expression radio handlers
+        expression_radios.forEach(radio => {
+            radio.addEventListener('change', update_expression_groups)
+        })
+        
+        // Program control buttons
+        document.getElementById('send_current_program').addEventListener('click', () => {
+            update_status_badge('sending')
+            const program = get_current_program()
+            send_program(program)
+            mark_all_parameters_sent()
+            setTimeout(() => update_status_badge('synced'), 500)
+        })
+        
+        // Banking controls
+        document.getElementById('save_bank').addEventListener('click', () => {
+            const bank_id = parseInt(document.getElementById('bank_selector').value)
+            save_to_bank(bank_id)
+        })
+        
+        document.getElementById('load_bank').addEventListener('click', () => {
+            const bank_id = parseInt(document.getElementById('bank_selector').value)
+            load_from_bank(bank_id)
+        })
+        
+        // Power control
+        document.getElementById('power').addEventListener('change', (e) => {
             const is_on = e.target.checked
-            
-            // send to all connected peers via command channel (TCP-like)
-            peers.forEach ((peer, id) => {
-                if (peer.command_channel && peer.command_channel.readyState === "open") {
-                    peer.command_channel.send (JSON.stringify ({
-                        type: "command",
-                        name: "power",
+            peers.forEach((peer, id) => {
+                if (peer.command_channel && peer.command_channel.readyState === 'open') {
+                    peer.command_channel.send(JSON.stringify({
+                        type: 'command',
+                        name: 'power',
                         value: is_on
                     }))
                 }
             })
         })
         
-        // initialize UI to default values (override browser memory)
-        volume_el.value = 0.2
-        volume_value_el.textContent = "0.20"
-        power_el.checked = true
-        
-        // update controller warning display
-        function update_controller_warning () {
-            const warning_el = document.getElementById ("controller_warning")
-            const list_el = document.getElementById ("other_controllers")
-            
-            if (other_controllers.size > 0) {
-                warning_el.style.display = "block"
-                list_el.textContent = `Other controllers: ${Array.from (other_controllers).join (", ")}`
-            } else {
-                warning_el.style.display = "none"
-            }
-        }
-        
-        // wake lock functions
-        async function request_wake_lock () {
-            try {
-                if ('wakeLock' in navigator) {
-                    wake_lock = await navigator.wakeLock.request('screen')
-                    console.log('Wake lock acquired')
-                    
-                    wake_lock.addEventListener('release', () => {
-                        console.log('Wake lock released')
-                    })
-                }
-            } catch (err) {
-                console.log(`Wake lock error: ${err.name}, ${err.message}`)
-            }
-        }
-        
-        async function handle_visibility_change () {
-            if (document.visibilityState === 'visible') {
-                // re-acquire wake lock when page becomes visible
-                await request_wake_lock()
-            }
-        }
-        
-        // visibility change handler
-        document.addEventListener('visibilitychange', handle_visibility_change)
-        
-        // start connection
-        fetch_ice_servers ().then (() => {
-            connect_websocket ()
-            // request wake lock on startup
-            request_wake_lock ()
+        // Kick other controllers
+        document.getElementById('kick_others').addEventListener('click', () => {
+            send_message({
+                type: 'kick-other-controllers'
+            })
+            other_controllers.clear()
+            update_controller_warning()
         })
+        
+        // Initialize UI
+        function initialize_ui() {
+            // Set initial display values
+            param_ids.forEach(id => {
+                const element = param_elements[id]
+                if (element && element.input) {
+                    const value = element.input.type === 'range' ? 
+                        parseFloat(element.input.value) : 
+                        element.input.value
+                    update_display_value(id, value)
+                }
+            })
+            
+            // Initialize expression groups
+            update_expression_groups()
+        
+            // Initialize piano GUI
+            initialize_piano()
+            
+            // Initialize parameter change tracking
+            initialize_parameter_tracking()
+        }
+
+        // Piano GUI functions
+        function calculate_ranges() {
+            return {
+                0: { name: 'Violin', low: note_to_frequency('G', 3), high: note_to_frequency('A', 7) },     // G3 to A7
+                1: { name: 'Viola', low: note_to_frequency('C', 3), high: note_to_frequency('E', 6) },     // C3 to E6
+                2: { name: 'Cello', low: note_to_frequency('C', 2), high: note_to_frequency('C', 6) },     // C2 to C6
+                3: { name: 'Guitar', low: note_to_frequency('E', 3), high: note_to_frequency('E', 6) },    // E3 to E6
+                4: { name: 'None', low: note_to_frequency('A', 1), high: note_to_frequency('C', 8) }       // A1 to C8
+            }
+        }
+        
+        const instrument_ranges = calculate_ranges()
+
+        function note_to_frequency(note, octave) {
+            const notes = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
+            // A4 = 440Hz is note number 69 in MIDI (A4 = 4*12 + 9 = 57, but we need A4=69)
+            // Calculate semitones from A4
+            const note_index = notes.indexOf(note)
+            const semitones_from_a4 = (octave - 4) * 12 + (note_index - 9)
+            return 440 * Math.pow(2, semitones_from_a4 / 12)
+        }
+
+        function frequency_to_note(freq) {
+            // Calculate semitones from A4 (440Hz)
+            const semitones_from_a4 = Math.round(12 * Math.log2(freq / 440))
+            
+            // A4 is octave 4, note index 9 (A)
+            const total_semitones = semitones_from_a4 + (4 * 12) + 9
+            const octave = Math.floor(total_semitones / 12)
+            const note_index = ((total_semitones % 12) + 12) % 12
+            
+            const notes = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
+            return { note: notes[note_index], octave: octave }
+        }
+
+        function initialize_piano() {
+            const piano = document.getElementById('piano')
+            const bodyType = parseInt(document.getElementById('bodyType').value)
+            draw_piano_keys(bodyType)
+            update_piano_range_display(bodyType)
+        
+            // Update piano when body type changes
+            document.getElementById('bodyType').addEventListener('change', (e) => {
+                const newBodyType = parseInt(e.target.value)
+                draw_piano_keys(newBodyType)
+                update_piano_range_display(newBodyType)
+            })
+        }
+
+        function draw_piano_keys(bodyType) {
+            const piano = document.getElementById('piano')
+            const range = instrument_ranges[bodyType]
+            
+            console.log('Drawing piano keys for bodyType:', bodyType, 'range:', range)
+            
+            // Debug: Test a few known frequencies
+            console.log('Test frequencies:')
+            console.log('G3 (violin low):', note_to_frequency('G', 3), 'expected: 196, in range?', note_to_frequency('G', 3) >= range.low && note_to_frequency('G', 3) <= range.high)
+            console.log('F#3 (below violin):', note_to_frequency('F#', 3), 'in range?', note_to_frequency('F#', 3) >= range.low && note_to_frequency('F#', 3) <= range.high)
+            console.log('A4 (440Hz):', note_to_frequency('A', 4), 'in range?', note_to_frequency('A', 4) >= range.low && note_to_frequency('A', 4) <= range.high)
+            console.log('Range:', range.low, 'to', range.high)
+            
+            // Clear existing keys
+            piano.innerHTML = ''
+            
+            // Define full piano range
+            const start_octave = 2
+            const end_octave = 7
+            const white_keys = ['C', 'D', 'E', 'F', 'G', 'A', 'B']
+            const key_width = 16
+            const white_key_height = 60
+            const black_key_height = 35
+            
+            let key_count = 0
+            let white_key_x = 0
+            
+            // Draw white keys first
+            for (let octave = start_octave; octave <= end_octave; octave++) {
+                for (let note of white_keys) {
+                    const freq = note_to_frequency(note, octave)
+                    const in_range = freq >= range.low && freq <= range.high
+                    
+                    const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect')
+                    rect.setAttribute('x', white_key_x)
+                    rect.setAttribute('y', 10)
+                    rect.setAttribute('width', key_width)
+                    rect.setAttribute('height', white_key_height)
+                    rect.setAttribute('fill', in_range ? 'white' : '#f5f5f5')
+                    rect.setAttribute('stroke', '#333')
+                    rect.setAttribute('stroke-width', '1')
+                    rect.setAttribute('data-note', note)
+                    rect.setAttribute('data-octave', octave)
+                    rect.setAttribute('data-freq', freq.toFixed(1))
+                    
+                    if (in_range) {
+                        rect.style.cursor = 'pointer'
+                        rect.addEventListener('click', () => select_frequency(freq))
+                        rect.addEventListener('mouseenter', () => {
+                            if (rect.getAttribute('fill') !== '#007bff') {
+                                rect.setAttribute('fill', '#e6f3ff')
+                            }
+                        })
+                        rect.addEventListener('mouseleave', () => {
+                            if (rect.getAttribute('fill') !== '#007bff') {
+                                rect.setAttribute('fill', 'white')
+                            }
+                        })
+                    }
+                    
+                    piano.appendChild(rect)
+                    key_count++
+                    white_key_x += key_width
+                }
+            }
+            
+            // Draw black keys on top
+            white_key_x = 0
+            for (let octave = start_octave; octave <= end_octave; octave++) {
+                for (let i = 0; i < white_keys.length; i++) {
+                    const note = white_keys[i]
+                    
+                    // Check if there's a black key after this white key
+                    let black_note = null
+                    if (note === 'C') black_note = 'C#'
+                    else if (note === 'D') black_note = 'D#'
+                    else if (note === 'F') black_note = 'F#'
+                    else if (note === 'G') black_note = 'G#'
+                    else if (note === 'A') black_note = 'A#'
+                    
+                    if (black_note) {
+                        const freq = note_to_frequency(black_note, octave)
+                        const in_range = freq >= range.low && freq <= range.high
+                        
+                        const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect')
+                        rect.setAttribute('x', white_key_x + key_width - 6)
+                        rect.setAttribute('y', 10)
+                        rect.setAttribute('width', 12)
+                        rect.setAttribute('height', black_key_height)
+                        rect.setAttribute('fill', in_range ? '#333' : '#ccc')
+                        rect.setAttribute('stroke', '#000')
+                        rect.setAttribute('stroke-width', '1')
+                        rect.setAttribute('data-note', black_note)
+                        rect.setAttribute('data-octave', octave)
+                        rect.setAttribute('data-freq', freq.toFixed(1))
+                        
+                        if (in_range) {
+                            rect.style.cursor = 'pointer'
+                            rect.addEventListener('click', () => select_frequency(freq))
+                            rect.addEventListener('mouseenter', () => {
+                                if (rect.getAttribute('fill') !== '#007bff') {
+                                    rect.setAttribute('fill', '#555')
+                                }
+                            })
+                            rect.addEventListener('mouseleave', () => {
+                                if (rect.getAttribute('fill') !== '#007bff') {
+                                    rect.setAttribute('fill', '#333')
+                                }
+                            })
+                        }
+                        
+                        piano.appendChild(rect)
+                        key_count++
+                    }
+                    
+                    white_key_x += key_width
+                }
+            }
+            
+            console.log('Created', key_count, 'piano keys')
+            document.getElementById('piano-debug').textContent = `Debug: Created ${key_count} keys`
+            
+            // Highlight current frequency
+            setTimeout(() => highlight_current_frequency(), 100)
+        }
+
+        function update_piano_range_display(bodyType) {
+            const range = instrument_ranges[bodyType]
+            const low_note = frequency_to_note(range.low)
+            const high_note = frequency_to_note(range.high)
+            console.log('Range display - low freq:', range.low, 'high freq:', range.high)
+            console.log('Range display - low note:', low_note, 'high note:', high_note)
+            document.getElementById('piano-range-display').textContent = 
+                `Range: ${low_note.note}${low_note.octave}-${high_note.note}${high_note.octave} (${range.name})`
+        }
+
+        function select_frequency(freq) {
+            const freqSlider = document.getElementById('frequency')
+            freqSlider.value = Math.round(freq)
+            update_display_value('frequency', Math.round(freq))
+            highlight_current_frequency()
+            
+            // Trigger change tracking for piano clicks
+            mark_parameter_changed('frequency')
+            check_overall_status()
+        }
+
+        function highlight_current_frequency() {
+            const current_freq = parseFloat(document.getElementById('frequency').value)
+            const piano = document.getElementById('piano')
+        
+            // Remove previous highlights
+            piano.querySelectorAll('rect').forEach(rect => {
+                if (rect.getAttribute('fill') === '#007bff') {
+                    const note = rect.getAttribute('data-note')
+                    const bodyType = parseInt(document.getElementById('bodyType').value)
+                    const range = instrument_ranges[bodyType]
+                    const freq = parseFloat(rect.getAttribute('data-freq'))
+                    const in_range = freq >= range.low && freq <= range.high
+                    
+                    if (note && note.includes('#')) {
+                        rect.setAttributeNS(null, 'fill', in_range ? '#333' : '#ccc')
+                    } else {
+                        rect.setAttributeNS(null, 'fill', in_range ? 'white' : '#f0f0f0')
+                    }
+                }
+            })
+        
+            // Highlight current frequency
+            piano.querySelectorAll('rect').forEach(rect => {
+                const rect_freq = parseFloat(rect.getAttribute('data-freq'))
+                // Use percentage-based tolerance for better matching across frequency ranges
+                const tolerance = Math.max(5, rect_freq * 0.02) // 2% tolerance or 5Hz minimum
+                if (Math.abs(rect_freq - current_freq) < tolerance) {
+                    rect.setAttributeNS(null, 'fill', '#007bff')
+                }
+            })
+        }
+
+        // Update piano highlight when frequency slider changes
+        document.getElementById('frequency').addEventListener('input', highlight_current_frequency)
+
+        // Start the application
+        async function start_controller() {
+            await fetch_ice_servers()
+            initialize_ui()
+            connect_websocket()
+        }
+
+        // Parameter change tracking
+        let sent_program_state = {}
+        
+        function initialize_parameter_tracking() {
+            // Store initial state as "sent"
+            sent_program_state = get_current_program()
+            update_status_badge('synced')
+            
+            // Add listeners to expression radios (parameters already handled above)
+            document.querySelectorAll('input[name="expression"]').forEach(radio => {
+                radio.addEventListener('change', () => {
+                    console.log('Expression radio changed to:', radio.value)
+                    mark_parameter_changed('expression')
+                    check_overall_status()
+                })
+            })
+        }
+        
+        function mark_parameter_changed(param_id) {
+            console.log('Marking parameter changed:', param_id)
+            
+            // Find the control group for this parameter
+            let control_group = null
+            
+            if (param_id === 'expression') {
+                control_group = document.querySelector('input[name="expression"]').closest('.control-group')
+            } else {
+                const element = param_elements[param_id]
+                if (element && element.input) {
+                    control_group = element.input.closest('.control-group')
+                }
+            }
+            
+            if (control_group) {
+                control_group.classList.remove('sent')
+                control_group.classList.add('changed')
+                console.log('Added changed class to', param_id)
+            } else {
+                console.log('Could not find control group for', param_id)
+            }
+        }
+        
+        function mark_all_parameters_sent() {
+            // Remove changed class and briefly add sent class to all parameters
+            param_ids.forEach(id => {
+                const element = param_elements[id]
+                if (element && element.input) {
+                    const control_group = element.input.closest('.control-group')
+                    if (control_group) {
+                        control_group.classList.remove('changed')
+                        control_group.classList.add('sent')
+                        setTimeout(() => {
+                            control_group.classList.remove('sent')
+                        }, 1000)
+                    }
+                }
+            })
+            
+            // Handle expression group
+            const expressionGroup = document.querySelector('input[name="expression"]').closest('.control-group')
+            if (expressionGroup) {
+                expressionGroup.classList.remove('changed')
+                expressionGroup.classList.add('sent')
+                setTimeout(() => {
+                    expressionGroup.classList.remove('sent')
+                }, 1000)
+            }
+            
+            // Update sent state
+            sent_program_state = get_current_program()
+        }
+        
+        function check_overall_status() {
+            const current_state = get_current_program()
+            const has_changes = JSON.stringify(current_state) !== JSON.stringify(sent_program_state)
+            
+            if (has_changes) {
+                update_status_badge('pending')
+            } else {
+                update_status_badge('synced')
+            }
+        }
+        
+        function update_status_badge(status) {
+            const badge = document.getElementById('status_badge')
+            badge.className = `status-badge ${status}`
+            
+            switch(status) {
+                case 'synced':
+                    badge.textContent = '✓ Synced'
+                    break
+                case 'pending':
+                    badge.textContent = '● Changes Pending'
+                    break
+                case 'sending':
+                    badge.textContent = '📡 Sending...'
+                    break
+            }
+        }
+
+        // Start when page loads
+        start_controller()
     </script>
 </body>
 </html>
