@@ -1,0 +1,860 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>String Assembly FM - Multi-Synth Test Client</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            min-height: 100vh;
+            color: white;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            text-shadow: 0 2px 10px rgba(0,0,0,0.3);
+        }
+
+        .controls {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 30px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .control-row {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            background: #3498db;
+            color: white;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        button:hover {
+            background: #2980b9;
+            transform: translateY(-2px);
+        }
+
+        button:disabled {
+            background: #7f8c8d;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .synth-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+        }
+
+        .synth-unit {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 20px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            transition: all 0.3s ease;
+        }
+
+        .synth-unit.active {
+            border-color: #3498db;
+            box-shadow: 0 0 20px rgba(52, 152, 219, 0.3);
+        }
+
+        .synth-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .synth-id {
+            font-weight: bold;
+            font-size: 1.1em;
+        }
+
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #e74c3c;
+        }
+
+        .status-dot.connected {
+            background: #2ecc71;
+        }
+
+        .note-display {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 6px;
+            padding: 10px;
+            margin-bottom: 10px;
+            font-family: monospace;
+            min-height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2em;
+        }
+
+        .expression-display {
+            font-size: 0.9em;
+            color: rgba(255, 255, 255, 0.8);
+            margin-bottom: 10px;
+        }
+
+        .level-meter {
+            height: 100px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 6px;
+            position: relative;
+            overflow: hidden;
+            margin-bottom: 10px;
+        }
+
+        .level-bar {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: linear-gradient(to top, #2ecc71, #f1c40f, #e74c3c);
+            transition: height 0.1s ease;
+        }
+
+        .pan-control {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 0.9em;
+        }
+
+        .pan-slider {
+            flex: 1;
+        }
+
+        .log-area {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 6px;
+            padding: 15px;
+            margin-top: 30px;
+            font-family: monospace;
+            font-size: 0.9em;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .log-entry {
+            margin-bottom: 5px;
+            opacity: 0.8;
+        }
+
+        .log-entry.error {
+            color: #e74c3c;
+        }
+
+        .log-entry.info {
+            color: #3498db;
+        }
+
+        input[type="number"] {
+            width: 60px;
+            padding: 5px;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            border-radius: 4px;
+        }
+
+        input[type="range"] {
+            width: 100%;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎼 Multi-Synth Test Ensemble</h1>
+        
+        <div class="controls">
+            <div class="control-row">
+                <label>Number of Synths:</label>
+                <input type="number" id="synth-count" value="4" min="1" max="8">
+                <button onclick="initializeEnsemble()">Initialize</button>
+                <button onclick="connectToController()">Connect to Controller</button>
+                <button id="start-all" onclick="startAllSynths()" disabled>Start All</button>
+                <button id="stop-all" onclick="stopAllSynths()" disabled>Stop All</button>
+            </div>
+            <div class="control-row">
+                <label>Master Volume:</label>
+                <input type="range" id="master-volume" min="0" max="1" step="0.01" value="0.7">
+                <span id="volume-display">70%</span>
+            </div>
+        </div>
+
+        <div class="synth-grid" id="synth-grid">
+            <!-- Synth units will be generated here -->
+        </div>
+
+        <div class="log-area" id="log-area">
+            <div class="log-entry info">Multi-synth test client ready. Click Initialize to begin.</div>
+        </div>
+    </div>
+
+    <script>
+        // Global state
+        let audioContext = null;
+        let synths = [];
+        let controllerConnection = null;
+        let masterGain = null;
+        let isInitialized = false;
+
+        // Real WebRTC configuration
+        const rtcConfig = {
+            iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' }
+            ]
+        }
+
+        // Synth class
+        class TestSynth {
+            constructor(id, index, totalSynths) {
+                this.id = id;
+                this.index = index;
+                this.element = null;
+                this.noteDisplay = null;
+                this.expressionDisplay = null;
+                this.levelMeter = null;
+                this.panControl = null;
+                
+                // Audio nodes
+                this.bowedString = null;
+                this.gain = null;
+                this.panner = null;
+                this.analyser = null;
+                
+                // State
+                this.currentNote = null;
+                this.currentExpression = null;
+                this.isActive = false;
+                this.currentProgram = null;
+                
+                // Banking
+                this.synthBanks = new Map();
+                
+                // WebRTC connections (will be set up later)
+                this.ws = null;
+                this.controllers = new Map();
+                
+                // Calculate pan position
+                this.panPosition = totalSynths === 1 ? 0 : (index / (totalSynths - 1)) * 2 - 1;
+            }
+
+            async initialize(audioCtx, destination) {
+                // Create audio nodes
+                this.gain = audioCtx.createGain();
+                this.gain.gain.value = 0;
+                
+                this.panner = audioCtx.createStereoPanner();
+                this.panner.pan.value = this.panPosition;
+                
+                this.analyser = audioCtx.createAnalyser();
+                this.analyser.fftSize = 256;
+                
+                // Create bowed string worklet
+                try {
+                    // Verify worklet is available
+                    if (!audioCtx.audioWorklet) {
+                        throw new Error('AudioWorklet not supported');
+                    }
+                    
+                    this.bowedString = new AudioWorkletNode(audioCtx, 'continuous-excitation-processor', {
+                        numberOfInputs: 0,
+                        numberOfOutputs: 1,
+                        outputChannelCount: [2]
+                    });
+                    
+                    // Connect audio graph
+                    this.bowedString.connect(this.gain);
+                    this.gain.connect(this.analyser);
+                    this.analyser.connect(this.panner);
+                    this.panner.connect(destination);
+                    
+                    // Initialize parameters to defaults
+                    const defaultParams = {
+                        fundamentalFrequency: 220,
+                        bowForce: 0.3,
+                        bowPosition: 0.1,
+                        bowSpeed: 0.5,
+                        stringDamping: 0.1,
+                        stringMaterial: 0.5,
+                        brightness: 0.5,
+                        masterGain: 0.8
+                    };
+                    
+                    for (const [param, value] of Object.entries(defaultParams)) {
+                        if (this.bowedString.parameters.has(param)) {
+                            this.bowedString.parameters.get(param).setValueAtTime(value, audioCtx.currentTime);
+                        }
+                    }
+                    
+                    log(`[${this.id}] Audio graph initialized`, 'info');
+                } catch (error) {
+                    log(`[${this.id}] Failed to create audio nodes: ${error.message}`, 'error');
+                    console.error(error);
+                }
+            }
+
+            handleParamMessage(event) {
+                const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+                
+                log(`[${this.id}] Received param message: ${data.type}`, 'info');
+                
+                if (data.type === 'program') {
+                    this.applyProgram(data.program);
+                } else if (data.type === 'ping') {
+                    if (this.paramChannel && this.paramChannel.readyState === 'open') {
+                        this.paramChannel.send(JSON.stringify({
+                            type: 'pong',
+                            timestamp: data.timestamp,
+                            state: {
+                                audio_enabled: true,
+                                joined: this.isActive
+                            }
+                        }));
+                    }
+                }
+            }
+
+            handleCommandMessage(event) {
+                const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+                
+                if (data.type === 'command') {
+                    if (data.name === 'power') {
+                        this.setPower(data.value);
+                    } else if (data.name === 'save') {
+                        this.handleSaveCommand(data.bank || data.value);
+                    } else if (data.name === 'load') {
+                        this.handleLoadCommand(data.bank, data.fallbackProgram);
+                    }
+                }
+            }
+
+            applyProgram(program) {
+                log(`[${this.id}] Applying program: freq=${program.fundamentalFrequency?.toFixed(1)}Hz`, 'info');
+                
+                // Store current program for banking
+                this.currentProgram = program;
+                
+                // Update display
+                if (program.fundamentalFrequency) {
+                    const noteInfo = this.frequencyToNote(program.fundamentalFrequency);
+                    this.currentNote = noteInfo.note;
+                    this.noteDisplay.textContent = noteInfo.note;
+                }
+                
+                // Update expression display
+                let expression = 'None';
+                if (program.vibratoEnabled) expression = 'Vibrato';
+                else if (program.tremoloEnabled) expression = 'Tremolo';
+                else if (program.trillEnabled) expression = 'Trill';
+                this.currentExpression = expression;
+                this.expressionDisplay.textContent = `Expression: ${expression}`;
+                
+                // Apply to worklet
+                if (this.bowedString) {
+                    for (const [param, value] of Object.entries(program)) {
+                        if (this.bowedString.parameters.has(param)) {
+                            this.bowedString.parameters.get(param).setValueAtTime(value, audioContext.currentTime);
+                        }
+                    }
+                    
+                    // Start bowing
+                    this.bowedString.port.postMessage({ type: 'setBowing', value: true });
+                }
+                
+                this.element.classList.add('active');
+            }
+
+            setPower(on) {
+                const targetGain = on ? 0.7 : 0;
+                this.gain.gain.linearRampToValueAtTime(targetGain, audioContext.currentTime + 0.1);
+                this.isActive = on;
+                
+                if (on) {
+                    this.element.classList.add('active');
+                } else {
+                    this.element.classList.remove('active');
+                }
+            }
+
+            handleSaveCommand(bankId) {
+                if (!this.currentProgram) {
+                    log(`[${this.id}] No current program to save`, 'error');
+                    return;
+                }
+                
+                // Store a deep copy of current resolved parameters
+                const savedProgram = JSON.parse(JSON.stringify(this.currentProgram));
+                this.synthBanks.set(bankId, savedProgram);
+                
+                // Also save to localStorage for persistence
+                try {
+                    const allBanks = {};
+                    this.synthBanks.forEach((program, id) => {
+                        allBanks[id] = program;
+                    });
+                    localStorage.setItem(`synth-banks-${this.id}`, JSON.stringify(allBanks));
+                    log(`[${this.id}] Saved resolved parameters to bank ${bankId}`, 'info');
+                } catch (e) {
+                    log(`[${this.id}] Failed to save banks to localStorage: ${e.message}`, 'error');
+                }
+            }
+
+            handleLoadCommand(bankId, fallbackProgram) {
+                if (this.synthBanks.has(bankId)) {
+                    // This synth has saved state - restore exact values
+                    const savedProgram = this.synthBanks.get(bankId);
+                    log(`[${this.id}] Loading saved parameters from bank ${bankId}`, 'info');
+                    this.applyProgram(savedProgram);
+                } else if (fallbackProgram) {
+                    // New synth - use fallback program from controller
+                    log(`[${this.id}] New synth using fallback program for bank ${bankId}`, 'info');
+                    this.applyProgram(fallbackProgram);
+                } else {
+                    log(`[${this.id}] Bank ${bankId} not found and no fallback program provided`, 'error');
+                }
+            }
+
+            loadSynthBanksFromStorage() {
+                try {
+                    const saved = localStorage.getItem(`synth-banks-${this.id}`);
+                    if (saved) {
+                        const banksData = JSON.parse(saved);
+                        Object.entries(banksData).forEach(([bankId, program]) => {
+                            this.synthBanks.set(parseInt(bankId), program);
+                        });
+                        log(`[${this.id}] Loaded ${this.synthBanks.size} saved banks from storage`, 'info');
+                    }
+                } catch (e) {
+                    log(`[${this.id}] Failed to load banks from storage: ${e.message}`, 'error');
+                }
+            }
+
+            frequencyToNote(freq) {
+                const A4 = 440;
+                const semitones = Math.round(12 * Math.log2(freq / A4));
+                const noteNames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+                const octave = Math.floor((semitones + 57) / 12);
+                const noteIndex = (semitones + 69) % 12;
+                return { note: noteNames[noteIndex] + octave, semitones };
+            }
+
+            updateLevel() {
+                if (!this.analyser || !this.levelMeter) return;
+                
+                const dataArray = new Uint8Array(this.analyser.frequencyBinCount);
+                this.analyser.getByteFrequencyData(dataArray);
+                
+                let sum = 0;
+                for (let i = 0; i < dataArray.length; i++) {
+                    sum += dataArray[i];
+                }
+                const average = sum / dataArray.length;
+                const normalizedLevel = average / 255;
+                
+                this.levelMeter.style.height = `${normalizedLevel * 100}%`;
+            }
+
+            createUI() {
+                const unit = document.createElement('div');
+                unit.className = 'synth-unit';
+                
+                unit.innerHTML = `
+                    <div class="synth-header">
+                        <span class="synth-id">${this.id}</span>
+                        <div class="status-dot connected"></div>
+                    </div>
+                    <div class="note-display">--</div>
+                    <div class="expression-display">Expression: None</div>
+                    <div class="level-meter">
+                        <div class="level-bar"></div>
+                    </div>
+                    <div class="pan-control">
+                        <label>Pan:</label>
+                        <input type="range" class="pan-slider" min="-1" max="1" step="0.1" value="${this.panPosition}">
+                        <span class="pan-value">${this.panPosition.toFixed(1)}</span>
+                    </div>
+                `;
+                
+                this.element = unit;
+                this.noteDisplay = unit.querySelector('.note-display');
+                this.expressionDisplay = unit.querySelector('.expression-display');
+                this.levelMeter = unit.querySelector('.level-bar');
+                this.panControl = unit.querySelector('.pan-slider');
+                
+                // Pan control
+                this.panControl.addEventListener('input', (e) => {
+                    const value = parseFloat(e.target.value);
+                    this.panner.pan.value = value;
+                    unit.querySelector('.pan-value').textContent = value.toFixed(1);
+                });
+                
+                return unit;
+            }
+        }
+
+        // Initialize ensemble
+        async function initializeEnsemble() {
+            const synthCount = parseInt(document.getElementById('synth-count').value);
+            
+            try {
+                if (!audioContext) {
+                    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                    
+                    // Resume context if suspended (handles user gesture requirement)
+                    if (audioContext.state === 'suspended') {
+                        await audioContext.resume();
+                        log('Audio context resumed', 'info');
+                    }
+                    
+                    // Create master gain first
+                    masterGain = audioContext.createGain();
+                    masterGain.gain.value = 0.7;
+                    masterGain.connect(audioContext.destination);
+                    
+                    // Load worklet modules and wait for completion
+                    log('Loading audio worklets...', 'info');
+                    await audioContext.audioWorklet.addModule('bowed_string_worklet.js');
+                    await audioContext.audioWorklet.addModule('reverb_worklet.js');
+                    await audioContext.audioWorklet.addModule('pink_noise.js');
+                    log('Audio worklets loaded successfully', 'info');
+                }
+                
+                // Clear existing synths
+                synths.forEach(synth => {
+                    if (synth.element && synth.element.parentNode) {
+                        synth.element.parentNode.removeChild(synth.element);
+                    }
+                });
+                synths = [];
+                
+                // Create new synths AFTER worklets are loaded
+                const synthGrid = document.getElementById('synth-grid');
+                synthGrid.innerHTML = '';
+                
+                for (let i = 0; i < synthCount; i++) {
+                    const synth = new TestSynth(`test-synth-${i}`, i, synthCount);
+                    await synth.initialize(audioContext, masterGain);
+                    synth.loadSynthBanksFromStorage();
+                    synthGrid.appendChild(synth.createUI());
+                    synths.push(synth);
+                }
+                
+                // Enable controls
+                document.getElementById('start-all').disabled = false;
+                document.getElementById('stop-all').disabled = false;
+                
+                isInitialized = true;
+                log(`Initialized ${synthCount} synths`, 'info');
+                
+                // Start level meter updates
+                updateLevelMeters();
+            } catch (error) {
+                log(`Failed to initialize ensemble: ${error.message}`, 'error');
+                console.error(error);
+            }
+        }
+
+        // Connect to controller
+    async function connectToController() {
+        if (!isInitialized) {
+            log('Please initialize synths first', 'error');
+            return;
+        }
+            
+        // Create real WebSocket connections for each synth
+        for (const synth of synths) {
+            const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+            const ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
+            synth.ws = ws;
+                
+            ws.onopen = () => {
+                log(`[${synth.id}] Connected to server`, 'info');
+                    
+                // Register synth
+                ws.send(JSON.stringify({
+                    type: 'register',
+                    client_id: synth.id
+                }));
+                    
+                // Request controllers
+                ws.send(JSON.stringify({
+                    type: 'request-controllers',
+                    source: synth.id
+                }));
+            };
+                
+            ws.onmessage = async (event) => {
+                const message = JSON.parse(event.data);
+                    
+                if (message.type === 'controllers-list') {
+                    // Connect to each controller
+                    for (const controllerId of message.controllers) {
+                        if (!synth.controllers.has(controllerId)) {
+                            synth.controllers.set(controllerId, {
+                                id: controllerId,
+                                connection: null,
+                                channel: null,
+                                connected: false
+                            });
+                            await connectSynthToController(synth, controllerId);
+                        }
+                    }
+                } else if (message.type === 'controller-joined') {
+                    log(`[${synth.id}] New controller joined: ${message.controller_id}`, 'info');
+                    if (!synth.controllers.has(message.controller_id)) {
+                        synth.controllers.set(message.controller_id, {
+                            id: message.controller_id,
+                            connection: null,
+                            channel: null,
+                            connected: false
+                        });
+                        await connectSynthToController(synth, message.controller_id);
+                    }
+                } else if (message.type === 'answer') {
+                    // Handle answer from controller
+                    await handleControllerAnswer(synth, message);
+                } else if (message.type === 'ice') {
+                    await handleIceCandidate(synth, message);
+                }
+            };
+                
+            ws.onclose = () => {
+                log(`[${synth.id}] Disconnected from server`, 'info');
+            };
+        }
+            
+        log('Connecting all synths to controller...', 'info');
+    }
+
+    async function connectSynthToController(synth, controllerId) {
+        log(`[${synth.id}] Initiating connection to controller ${controllerId}`, 'info');
+            
+        const pc = new RTCPeerConnection(rtcConfig);
+        const controller = synth.controllers.get(controllerId);
+        controller.connection = pc;
+        controller.ice_queue = [];
+            
+        // Create data channels
+        const param_channel = pc.createDataChannel('params', {
+            ordered: false,
+            maxRetransmits: 0
+        });
+        const command_channel = pc.createDataChannel('commands', {
+            ordered: true
+        });
+        
+        controller.channel = param_channel;
+        controller.command_channel = command_channel;
+        
+        // Set up param channel handlers
+        param_channel.addEventListener('open', () => {
+            log(`[${synth.id}] Param channel open to ${controllerId}`, 'info');
+            controller.connected = true;
+            
+            // Send immediate state update (like a pong without a ping)
+            param_channel.send(JSON.stringify({
+                type: 'pong',
+                timestamp: Date.now(),
+                state: {
+                    audio_enabled: true,
+                    joined: synth.isActive
+                }
+            }));
+        });
+        
+        param_channel.addEventListener('message', (event) => {
+            synth.handleParamMessage(event);
+        });
+        
+        param_channel.addEventListener('close', () => {
+            log(`[${synth.id}] Param channel closed to ${controllerId}`, 'info');
+            controller.connected = false;
+        });
+        
+        // Set up command channel handlers
+        command_channel.addEventListener('message', (event) => {
+            const command = JSON.parse(event.data);
+            if (command.type === 'command') {
+                synth.handleCommandMessage(event);
+            }
+        });
+            
+        // Handle ICE candidates
+        pc.addEventListener('icecandidate', (event) => {
+            if (event.candidate) {
+                synth.ws.send(JSON.stringify({
+                    type: 'ice',
+                    source: synth.id,
+                    target: controllerId,
+                    data: event.candidate
+                }));
+            }
+        });
+        
+        // Handle connection state
+        pc.addEventListener('connectionstatechange', () => {
+            log(`[${synth.id}] Connection state to ${controllerId}: ${pc.connectionState}`, 'info');
+            
+            if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
+                controller.connected = false;
+            }
+        });
+        
+        // Create and send offer
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        
+        synth.ws.send(JSON.stringify({
+            type: 'offer',
+            source: synth.id,
+            target: controllerId,
+            data: offer
+        }));
+    }
+
+    async function handleControllerAnswer(synth, message) {
+        const controller = synth.controllers.get(message.source);
+        if (controller && controller.connection) {
+            await controller.connection.setRemoteDescription(message.data);
+            
+            // Process any queued ICE candidates
+            if (controller.ice_queue && controller.ice_queue.length > 0) {
+                log(`[${synth.id}] Processing ${controller.ice_queue.length} queued ICE candidates`, 'info');
+                for (const candidate of controller.ice_queue) {
+                    await controller.connection.addIceCandidate(candidate);
+                }
+                controller.ice_queue = [];
+            }
+        }
+    }
+
+    async function handleIceCandidate(synth, message) {
+        const controller = synth.controllers.get(message.source);
+        if (controller && controller.connection) {
+            if (controller.connection.remoteDescription) {
+                await controller.connection.addIceCandidate(message.data);
+            } else {
+                // Queue ICE candidate until remote description is set
+                if (!controller.ice_queue) controller.ice_queue = [];
+                controller.ice_queue.push(message.data);
+            }
+        }
+    }
+
+        // Start all synths
+        function startAllSynths() {
+            synths.forEach(synth => synth.setPower(true));
+            log('All synths started', 'info');
+        }
+
+        // Stop all synths
+        function stopAllSynths() {
+            synths.forEach(synth => synth.setPower(false));
+            log('All synths stopped', 'info');
+        }
+
+        // Update level meters
+        function updateLevelMeters() {
+            synths.forEach(synth => synth.updateLevel());
+            requestAnimationFrame(updateLevelMeters);
+        }
+
+        // Master volume control
+        document.getElementById('master-volume').addEventListener('input', (e) => {
+            const value = parseFloat(e.target.value);
+            if (masterGain) {
+                masterGain.gain.value = value;
+            }
+            document.getElementById('volume-display').textContent = `${Math.round(value * 100)}%`;
+        });
+
+        // Logging
+        function log(message, type = 'info') {
+            const logArea = document.getElementById('log-area');
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            logArea.insertBefore(entry, logArea.firstChild);
+            
+            // Keep only last 50 entries
+            while (logArea.children.length > 50) {
+                logArea.removeChild(logArea.lastChild);
+            }
+        }
+
+
+
+        // Test function to simulate chord distribution
+        window.testChordDistribution = function() {
+            const testChord = ['C4', 'E4', 'G4', 'C5'];
+            const frequencies = {
+                'C4': 261.63,
+                'E4': 329.63,
+                'G4': 392.00,
+                'C5': 523.25
+            };
+            
+            synths.forEach((synth, index) => {
+                const note = testChord[index % testChord.length];
+                const program = {
+                    fundamentalFrequency: frequencies[note],
+                    bowForce: 0.3,
+                    bowPosition: 0.1 + (index * 0.05),
+                    bowSpeed: 0.5,
+                    vibratoEnabled: index % 3 === 0,
+                    tremoloEnabled: index % 3 === 1,
+                    trillEnabled: index % 3 === 2
+                };
+                
+                synth.handleParamMessage({
+                    data: JSON.stringify({
+                        type: 'program',
+                        program: program
+                    })
+                });
+            });
+            
+            log('Test chord distributed to all synths', 'info');
+        };
+
+        log('Multi-synth test client loaded. Use testChordDistribution() to test.', 'info');
+    </script>
+</body>
+</html>

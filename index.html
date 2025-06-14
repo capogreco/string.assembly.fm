@@ -632,6 +632,18 @@
                 }
             }
             
+            // Handle octave doubling if present
+            if ('octaveDoubling' in resolved && 'fundamentalFrequency' in resolved) {
+                const octaveShift = resolved.octaveDoubling
+                if (octaveShift > 0) {
+                    // Apply octave shift (12 semitones = double frequency)
+                    resolved.fundamentalFrequency *= Math.pow(2, octaveShift / 12)
+                    console.log(`Applied octave shift: ${octaveShift} semitones, new freq: ${resolved.fundamentalFrequency}Hz`)
+                }
+                // Remove octaveDoubling from resolved params as it's not a worklet parameter
+                delete resolved.octaveDoubling
+            }
+            
             return resolved
         }
         
@@ -646,9 +658,26 @@
                     const u1 = Math.random()
                     const u2 = Math.random()
                     const z0 = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2)
+                    // For frequency micro-detuning, std is in cents
+                    if (param_def.std <= 50) { // Assume cents if std is small
+                        // Convert cents to frequency multiplier
+                        const cents = z0 * param_def.std
+                        return param_def.mean * Math.pow(2, cents / 1200)
+                    }
                     return param_def.mean + z0 * param_def.std
                     
                 case 'choice':
+                    // Handle weighted choices if weights are provided
+                    if (param_def.weights) {
+                        const rand = Math.random()
+                        let cumulative = 0
+                        for (let i = 0; i < param_def.options.length; i++) {
+                            cumulative += param_def.weights[i]
+                            if (rand <= cumulative) {
+                                return param_def.options[i]
+                            }
+                        }
+                    }
                     return param_def.options[Math.floor(Math.random() * param_def.options.length)]
                     
                 default:

@@ -509,13 +509,11 @@
                     break
                     
                 case 'save':
-                    // Bank saving is handled by controller
-                    console.log(`Save to bank ${message.value} requested`)
+                    handleSaveCommand(message.bank || message.value)
                     break
                     
                 case 'load':
-                    // Bank loading is handled by controller
-                    console.log(`Load from bank ${message.bank} requested`)
+                    handleLoadCommand(message.bank, message.fallbackProgram)
                     break
                     
                 default:
@@ -548,6 +546,69 @@
             }
             
             updateStatus()
+        }
+
+        // Program banking - each synth manages its own resolved parameter state
+        const synthBanks = new Map()
+
+        // Handle save command - store current resolved parameters
+        function handleSaveCommand(bankId) {
+            if (!currentProgram) {
+                console.warn('No current program to save')
+                return
+            }
+            
+            // Store a deep copy of current resolved parameters
+            const savedProgram = JSON.parse(JSON.stringify(currentProgram))
+            synthBanks.set(bankId, savedProgram)
+            
+            // Also save to localStorage for persistence
+            try {
+                const allBanks = {}
+                synthBanks.forEach((program, id) => {
+                    allBanks[id] = program
+                })
+                localStorage.setItem(`synth-banks-${comm.synth_id}`, JSON.stringify(allBanks))
+                console.log(`✓ Synth saved resolved parameters to bank ${bankId}`)
+            } catch (e) {
+                console.warn('Failed to save banks to localStorage:', e)
+            }
+        }
+
+        // Handle load command - restore saved parameters or use fallback
+        function handleLoadCommand(bankId, fallbackProgram) {
+            if (synthBanks.has(bankId)) {
+                // This synth has saved state - restore exact values
+                const savedProgram = synthBanks.get(bankId)
+                console.log(`✓ Synth loading saved parameters from bank ${bankId}`)
+                currentProgram = savedProgram
+                applyProgram(currentProgram)
+                updateParameterDisplay()
+            } else if (fallbackProgram) {
+                // New synth - use fallback program from controller
+                console.log(`✓ New synth using fallback program for bank ${bankId}`)
+                currentProgram = fallbackProgram
+                applyProgram(currentProgram)
+                updateParameterDisplay()
+            } else {
+                console.warn(`Bank ${bankId} not found and no fallback program provided`)
+            }
+        }
+
+        // Load saved banks from localStorage on startup
+        function loadSynthBanksFromStorage() {
+            try {
+                const saved = localStorage.getItem(`synth-banks-${comm.synth_id}`)
+                if (saved) {
+                    const banksData = JSON.parse(saved)
+                    Object.entries(banksData).forEach(([bankId, program]) => {
+                        synthBanks.set(parseInt(bankId), program)
+                    })
+                    console.log(`Loaded ${synthBanks.size} saved banks from storage`)
+                }
+            } catch (e) {
+                console.warn('Failed to load banks from storage:', e)
+            }
         }
 
         // Apply program parameters to synthesis engine
@@ -694,7 +755,10 @@
         }
 
         // Start the application
-        document.addEventListener('DOMContentLoaded', init)
+        document.addEventListener('DOMContentLoaded', () => {
+            init()
+            loadSynthBanksFromStorage()
+        })
     </script>
 </body>
 </html>

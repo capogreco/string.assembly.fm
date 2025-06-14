@@ -173,9 +173,9 @@
         .expression-group {
             margin-top: 15px;
             padding: 15px;
-            background: #fff;
-            border-radius: 6px;
-            border: 1px solid #e0e0e0;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid #3498db;
             display: none;
         }
         
@@ -184,15 +184,15 @@
         }
         
         .expression-group.vibrato {
-            border-left: 4px solid #3498db;
+            border-left: 4px solid #e74c3c;
         }
         
         .expression-group.trill {
-            border-left: 4px solid #e67e22;
+            border-left: 4px solid #3498db;
         }
         
         .expression-group.tremolo {
-            border-left: 4px solid #d35400;
+            border-left: 4px solid #f39c12;
         }
         
         .expression-group-title {
@@ -202,15 +202,15 @@
         }
         
         .expression-group.vibrato .expression-group-title {
-            color: #3498db;
+            color: #e74c3c;
         }
         
         .expression-group.trill .expression-group-title {
-            color: #e67e22;
+            color: #3498db;
         }
         
         .expression-group.tremolo .expression-group-title {
-            color: #d35400;
+            color: #f39c12;
         }
         
         .program-controls {
@@ -227,9 +227,8 @@
         
         .banking-controls {
             display: flex;
-            gap: 10px;
             align-items: center;
-            margin-top: 15px;
+            gap: 10px;
         }
         
         .banking-controls select {
@@ -239,6 +238,31 @@
         .banking-controls button {
             padding: 8px 16px;
             font-size: 0.9em;
+            transition: all 0.2s ease;
+        }
+        
+        .banking-controls button.success {
+            background: #28a745;
+            color: white;
+            animation: flash-success 0.8s ease-out;
+        }
+        
+        .banking-controls button.error {
+            background: #dc3545;
+            color: white;
+            animation: flash-error 0.8s ease-out;
+        }
+        
+        @keyframes flash-success {
+            0% { background: #28a745; transform: scale(1); }
+            50% { background: #34ce57; transform: scale(1.05); }
+            100% { background: #28a745; transform: scale(1); }
+        }
+        
+        @keyframes flash-error {
+            0% { background: #dc3545; transform: scale(1); }
+            50% { background: #e94560; transform: scale(1.05); }
+            100% { background: #dc3545; transform: scale(1); }
         }
         
         #synths {
@@ -451,6 +475,47 @@
             border: 1px solid #d2b4de;
         }
         
+        /* Harmonic Ratio Selector Styles */
+        .harmonic-selector {
+            margin: 5px 0;
+        }
+        
+        .harmonic-row {
+            display: flex;
+            gap: 4px;
+            margin-bottom: 2px;
+        }
+        
+        .harmonic-number {
+            width: 28px;
+            height: 28px;
+            text-align: center;
+            line-height: 28px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background: white;
+            cursor: pointer;
+            font-size: 0.9em;
+            user-select: none;
+            transition: all 0.2s ease;
+        }
+        
+        .harmonic-number:hover {
+            border-color: #667eea;
+            background: #f0f4ff;
+        }
+        
+        .harmonic-number.selected {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+        }
+        
+        .harmonic-number.selecting {
+            background: #b3c6f7;
+            border-color: #667eea;
+        }
+        
         /* Piano keyboard wrapper for interactive expressions */
         .piano-keyboard {
             position: relative;
@@ -509,8 +574,8 @@
         <div class="section">
             <div class="section-title">Chord & Expression Control</div>
             
-            <div style="margin-bottom: 15px; padding: 10px; background: #f8f9fa; border-radius: 8px; font-size: 0.9em; color: #666;">
-                Click piano keys to add/remove notes from chord
+            <div style="margin-bottom: 15px; padding: 10px; background: #f8f9fa; border-radius: 8px;">
+                <strong>Current Chord: </strong><span id="chord-display" style="color: #667eea;">None</span>
             </div>
             
             <div class="section-title">Piano</div>
@@ -524,97 +589,147 @@
                 <div id="piano-debug" style="font-size: 0.7em; color: #999; margin-top: 5px;">Debug: Loading...</div>
             </div>
             
-            <div style="margin-top: 10px; padding: 10px; background: #e9ecef; border-radius: 6px; font-size: 0.9em;">
-                <strong>🎵 Gesture Controls:</strong><br>
-                ↑ Drag UP = Vibrato | ↓ Drag DOWN = Tremolo | 
-                → Drag to note = Trill | • Click = Clear
-            </div>
-            
-            <div class="expression-display" id="expression-display">
-                <strong>Current Chord: </strong><span id="chord-display" style="color: #667eea;">None</span>
-                <div style="margin-top: 10px;">
-                    <strong>Expressions:</strong>
-                    <div id="expression-content" style="margin-top: 5px;">
-                        <div style="color: #666; font-style: italic;">No expressions set - use drag gestures on piano keys</div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-    <div class="section">
-        <div class="section-title">Expression Parameters</div>
-        <div class="controls">
-            <div style="margin-bottom: 15px; padding: 10px; background: #cfe2ff; border-radius: 6px; font-size: 0.9em; color: #0842a0;">
-                <strong>Note:</strong> Use drag gestures on the piano above to set expressions for each chord note.
-                The parameters below control the behavior when expressions are active.
-            </div>
-            
             <div class="expression-group vibrato">
                 <div class="expression-group-title">Vibrato Parameters</div>
                 <div class="control-group">
-                    <label for="vibratoRate">Rate</label>
+                    <label for="vibratoRate">Base Rate</label>
                     <input type="range" id="vibratoRate" value="5.0" min="0.0" max="10.0" step="0.1">
                     <span id="vibratoRateValue" class="value-display">5.0</span>
                 </div>
-                <div class="control-group">
-                    <label for="vibratoDepth">Depth</label>
-                    <input type="range" id="vibratoDepth" value="0.0" min="0.0" max="1.0" step="0.01">
-                    <span id="vibratoDepthValue" class="value-display">0.00</span>
+                <div class="control-group" style="margin-top: 15px;">
+                    <label>Vibrato Harmonic Ratios</label>
+                    <div class="harmonic-selector" data-expression="vibrato">
+                        <div class="harmonic-row" data-type="numerator">
+                            <span class="harmonic-number" data-value="1">1</span>
+                            <span class="harmonic-number" data-value="2">2</span>
+                            <span class="harmonic-number" data-value="3">3</span>
+                            <span class="harmonic-number" data-value="4">4</span>
+                            <span class="harmonic-number" data-value="5">5</span>
+                            <span class="harmonic-number" data-value="6">6</span>
+                            <span class="harmonic-number" data-value="7">7</span>
+                            <span class="harmonic-number" data-value="8">8</span>
+                            <span class="harmonic-number" data-value="9">9</span>
+                            <span class="harmonic-number" data-value="10">10</span>
+                            <span class="harmonic-number" data-value="11">11</span>
+                            <span class="harmonic-number" data-value="12">12</span>
+                        </div>
+                        <div class="harmonic-row" data-type="denominator">
+                            <span class="harmonic-number" data-value="1">1</span>
+                            <span class="harmonic-number" data-value="2">2</span>
+                            <span class="harmonic-number" data-value="3">3</span>
+                            <span class="harmonic-number" data-value="4">4</span>
+                            <span class="harmonic-number" data-value="5">5</span>
+                            <span class="harmonic-number" data-value="6">6</span>
+                            <span class="harmonic-number" data-value="7">7</span>
+                            <span class="harmonic-number" data-value="8">8</span>
+                            <span class="harmonic-number" data-value="9">9</span>
+                            <span class="harmonic-number" data-value="10">10</span>
+                            <span class="harmonic-number" data-value="11">11</span>
+                            <span class="harmonic-number" data-value="12">12</span>
+                        </div>
+                    </div>
                 </div>
+
             </div>
             
             <div class="expression-group trill">
                 <div class="expression-group-title">Trill Parameters</div>
+
                 <div class="control-group">
-                    <label for="trillInterval">Interval</label>
-                    <select id="trillInterval">
-                        <option value="1">Minor 2nd</option>
-                        <option value="2">Major 2nd</option>
-                        <option value="3">Minor 3rd</option>
-                        <option value="4">Major 3rd</option>
-                        <option value="5">Perfect 4th</option>
-                        <option value="6">Tritone</option>
-                        <option value="7">Perfect 5th</option>
-                        <option value="8">Minor 6th</option>
-                        <option value="9">Major 6th</option>
-                        <option value="10">Minor 7th</option>
-                        <option value="11">Major 7th</option>
-                        <option value="12">Octave</option>
-                    </select>
-                    <span id="trillIntervalValue" class="value-display">m2</span>
+                    <label for="trillArticulation">Articulation</label>
+                    <input type="range" id="trillArticulation" value="0.7" min="0.1" max="0.95" step="0.01">
+                    <span id="trillArticulationValue" class="value-display">0.70</span>
                 </div>
                 <div class="control-group">
                     <label for="trillSpeed">Speed</label>
                     <input type="range" id="trillSpeed" value="5.0" min="3.0" max="12.0" step="0.1">
                     <span id="trillSpeedValue" class="value-display">5.0</span>
                 </div>
-                <div class="control-group">
-                    <label for="trillArticulation">Articulation</label>
-                    <input type="range" id="trillArticulation" value="0.7" min="0.1" max="0.95" step="0.01">
-                    <span id="trillArticulationValue" class="value-display">0.70</span>
+                <div class="control-group" style="margin-top: 15px;">
+                    <label>Trill Harmonic Ratios</label>
+                    <div class="harmonic-selector" data-expression="trill">
+                        <div class="harmonic-row" data-type="numerator">
+                            <span class="harmonic-number" data-value="1">1</span>
+                            <span class="harmonic-number" data-value="2">2</span>
+                            <span class="harmonic-number" data-value="3">3</span>
+                            <span class="harmonic-number" data-value="4">4</span>
+                            <span class="harmonic-number" data-value="5">5</span>
+                            <span class="harmonic-number" data-value="6">6</span>
+                            <span class="harmonic-number" data-value="7">7</span>
+                            <span class="harmonic-number" data-value="8">8</span>
+                            <span class="harmonic-number" data-value="9">9</span>
+                            <span class="harmonic-number" data-value="10">10</span>
+                            <span class="harmonic-number" data-value="11">11</span>
+                            <span class="harmonic-number" data-value="12">12</span>
+                        </div>
+                        <div class="harmonic-row" data-type="denominator">
+                            <span class="harmonic-number" data-value="1">1</span>
+                            <span class="harmonic-number" data-value="2">2</span>
+                            <span class="harmonic-number" data-value="3">3</span>
+                            <span class="harmonic-number" data-value="4">4</span>
+                            <span class="harmonic-number" data-value="5">5</span>
+                            <span class="harmonic-number" data-value="6">6</span>
+                            <span class="harmonic-number" data-value="7">7</span>
+                            <span class="harmonic-number" data-value="8">8</span>
+                            <span class="harmonic-number" data-value="9">9</span>
+                            <span class="harmonic-number" data-value="10">10</span>
+                            <span class="harmonic-number" data-value="11">11</span>
+                            <span class="harmonic-number" data-value="12">12</span>
+                        </div>
+                    </div>
                 </div>
             </div>
             
             <div class="expression-group tremolo">
                 <div class="expression-group-title">Tremolo Parameters</div>
                 <div class="control-group">
+                    <label for="tremoloArticulation">Articulation</label>
+                    <input type="range" id="tremoloArticulation" value="0.8" min="0.1" max="0.95" step="0.01">
+                    <span id="tremoloArticulationValue" class="value-display">0.80</span>
+                </div>
+
+                <div class="control-group">
                     <label for="tremoloSpeed">Speed</label>
                     <input type="range" id="tremoloSpeed" value="4.0" min="1.0" max="12.0" step="0.1">
                     <span id="tremoloSpeedValue" class="value-display">4.0</span>
                 </div>
-                <div class="control-group">
-                    <label for="tremoloDepth">Depth</label>
-                    <input type="range" id="tremoloDepth" value="0.7" min="0.0" max="1.0" step="0.01">
-                    <span id="tremoloDepthValue" class="value-display">0.70</span>
-                </div>
-                <div class="control-group">
-                    <label for="tremoloArticulation">Articulation</label>
-                    <input type="range" id="tremoloArticulation" value="0.5" min="0.01" max="0.99" step="0.01">
-                    <span id="tremoloArticulationValue" class="value-display">0.50</span>
+                <div class="control-group" style="margin-top: 15px;">
+                    <label>Tremolo Harmonic Ratios</label>
+                    <div class="harmonic-selector" data-expression="tremolo">
+                        <div class="harmonic-row" data-type="numerator">
+                            <span class="harmonic-number" data-value="1">1</span>
+                            <span class="harmonic-number" data-value="2">2</span>
+                            <span class="harmonic-number" data-value="3">3</span>
+                            <span class="harmonic-number" data-value="4">4</span>
+                            <span class="harmonic-number" data-value="5">5</span>
+                            <span class="harmonic-number" data-value="6">6</span>
+                            <span class="harmonic-number" data-value="7">7</span>
+                            <span class="harmonic-number" data-value="8">8</span>
+                            <span class="harmonic-number" data-value="9">9</span>
+                            <span class="harmonic-number" data-value="10">10</span>
+                            <span class="harmonic-number" data-value="11">11</span>
+                            <span class="harmonic-number" data-value="12">12</span>
+                        </div>
+                        <div class="harmonic-row" data-type="denominator">
+                            <span class="harmonic-number" data-value="1">1</span>
+                            <span class="harmonic-number" data-value="2">2</span>
+                            <span class="harmonic-number" data-value="3">3</span>
+                            <span class="harmonic-number" data-value="4">4</span>
+                            <span class="harmonic-number" data-value="5">5</span>
+                            <span class="harmonic-number" data-value="6">6</span>
+                            <span class="harmonic-number" data-value="7">7</span>
+                            <span class="harmonic-number" data-value="8">8</span>
+                            <span class="harmonic-number" data-value="9">9</span>
+                            <span class="harmonic-number" data-value="10">10</span>
+                            <span class="harmonic-number" data-value="11">11</span>
+                            <span class="harmonic-number" data-value="12">12</span>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
-    </div>
+        
+
 
     <div class="section">
             <div class="section-title">Instrument</div>
@@ -676,73 +791,6 @@
                 </div>
             </div>
         </div>
-                
-                <div class="expression-group vibrato">
-                    <div class="expression-group-title">Vibrato Parameters</div>
-                    <div class="control-group">
-                        <label for="vibratoRate">Rate</label>
-                        <input type="range" id="vibratoRate" value="5.0" min="0.0" max="10.0" step="0.1">
-                        <span id="vibratoRateValue" class="value-display">5.0</span>
-                    </div>
-                    <div class="control-group">
-                        <label for="vibratoDepth">Depth</label>
-                        <input type="range" id="vibratoDepth" value="0.0" min="0.0" max="1.0" step="0.01">
-                        <span id="vibratoDepthValue" class="value-display">0.00</span>
-                    </div>
-                </div>
-                
-                <div class="expression-group trill">
-                    <div class="expression-group-title">Trill Parameters</div>
-                    <div class="control-group">
-                        <label for="trillInterval">Interval</label>
-                        <select id="trillInterval">
-                            <option value="1">Minor 2nd</option>
-                            <option value="2">Major 2nd</option>
-                            <option value="3">Minor 3rd</option>
-                            <option value="4">Major 3rd</option>
-                            <option value="5">Perfect 4th</option>
-                            <option value="6">Tritone</option>
-                            <option value="7">Perfect 5th</option>
-                            <option value="8">Minor 6th</option>
-                            <option value="9">Major 6th</option>
-                            <option value="10">Minor 7th</option>
-                            <option value="11">Major 7th</option>
-                            <option value="12">Octave</option>
-                        </select>
-                        <span id="trillIntervalValue" class="value-display">m2</span>
-                    </div>
-                    <div class="control-group">
-                        <label for="trillSpeed">Speed</label>
-                        <input type="range" id="trillSpeed" value="5.0" min="3.0" max="12.0" step="0.1">
-                        <span id="trillSpeedValue" class="value-display">5.0</span>
-                    </div>
-                    <div class="control-group">
-                        <label for="trillArticulation">Articulation</label>
-                        <input type="range" id="trillArticulation" value="0.7" min="0.1" max="0.95" step="0.01">
-                        <span id="trillArticulationValue" class="value-display">0.70</span>
-                    </div>
-                </div>
-                
-                <div class="expression-group tremolo">
-                    <div class="expression-group-title">Tremolo Parameters</div>
-                    <div class="control-group">
-                        <label for="tremoloSpeed">Speed</label>
-                        <input type="range" id="tremoloSpeed" value="4.0" min="1.0" max="12.0" step="0.1">
-                        <span id="tremoloSpeedValue" class="value-display">4.0</span>
-                    </div>
-                    <div class="control-group">
-                        <label for="tremoloDepth">Depth</label>
-                        <input type="range" id="tremoloDepth" value="0.7" min="0.0" max="1.0" step="0.01">
-                        <span id="tremoloDepthValue" class="value-display">0.70</span>
-                    </div>
-                    <div class="control-group">
-                        <label for="tremoloArticulation">Articulation</label>
-                        <input type="range" id="tremoloArticulation" value="0.5" min="0.01" max="0.99" step="0.01">
-                        <span id="tremoloArticulationValue" class="value-display">0.50</span>
-                    </div>
-                </div>
-            </div>
-        </div>
 
 
 
@@ -773,14 +821,17 @@
             <div class="banking-controls">
                 <label for="bank_selector">Bank:</label>
                 <select id="bank_selector">
-                    <option value="1">Bank 1</option>
-                    <option value="2">Bank 2</option>
-                    <option value="3">Bank 3</option>
-                    <option value="4">Bank 4</option>
-                    <option value="5">Bank 5</option>
+                    <option value="1">Bank 1 ⚪</option>
+                    <option value="2">Bank 2 ⚪</option>
+                    <option value="3">Bank 3 ⚪</option>
+                    <option value="4">Bank 4 ⚪</option>
+                    <option value="5">Bank 5 ⚪</option>
                 </select>
                 <button id="save_bank">Save</button>
                 <button id="load_bank">Load</button>
+            </div>
+            <div style="font-size: 0.8em; color: #666; margin-top: 5px;">
+                Banks store: Parameters + Harmonic Ratios + Chord + Expressions
             </div>
         </div>
         
@@ -798,8 +849,48 @@
         let heartbeat_interval = null
         let wake_lock = null
         let kicked = false
-        let current_program = create_example_program()
+        let current_program = null
         const program_banks = new Map()
+        
+        // Harmonic ratio selector functionality
+        let harmonicSelections = {
+            'vibrato-numerator': new Set([1]),
+            'vibrato-denominator': new Set([1]),
+            'trill-numerator': new Set([1]),
+            'trill-denominator': new Set([1]),
+            'tremolo-numerator': new Set([1]),
+            'tremolo-denominator': new Set([1])
+        }
+        
+        // Load saved banks from localStorage
+        function loadBanksFromStorage() {
+            try {
+                const saved = localStorage.getItem('string-assembly-banks')
+                if (saved) {
+                    const banksData = JSON.parse(saved)
+                    Object.entries(banksData).forEach(([bankId, program]) => {
+                        program_banks.set(parseInt(bankId), program)
+                    })
+                    console.log('Loaded banks from storage:', program_banks.size, 'banks')
+                }
+            } catch (e) {
+                console.warn('Failed to load banks from storage:', e)
+            }
+        }
+        
+        // Save banks to localStorage
+        function saveBanksToStorage() {
+            try {
+                const banksData = {}
+                program_banks.forEach((program, bankId) => {
+                    banksData[bankId] = program
+                })
+                localStorage.setItem('string-assembly-banks', JSON.stringify(banksData))
+                console.log('Saved banks to storage')
+            } catch (e) {
+                console.warn('Failed to save banks to storage:', e)
+            }
+        }
         
         // WebRTC configuration
         let rtc_config = {
@@ -835,9 +926,9 @@
         const param_ids = [
             'stringMaterial', 'stringDamping',
             'bowPosition', 'bowSpeed', 'bowForce', 'brightness',
-            'vibratoRate', 'vibratoDepth', 'trillInterval', 'trillSpeed', 'trillArticulation',
-            'tremoloSpeed', 'tremoloDepth', 'tremoloArticulation',
-            'bodyType', 'bodyResonance', 'masterGain'
+            'vibratoRate', 'trillSpeed', 'trillArticulation',
+            'tremoloSpeed', 'tremoloArticulation',
+            'bodyType', 'bodyResonance', 'masterGain', 'volume'
         ]
         
         // Initialize parameter elements
@@ -849,7 +940,7 @@
             }
         })
         
-        // Expression controls
+        // Expression controls (may not exist if using per-note expressions)
         const expression_radios = document.querySelectorAll('input[name="expression"]')
         const expression_groups = document.querySelectorAll('.expression-group')
         
@@ -1110,28 +1201,119 @@
             }
         }
         
-        // Send program to all connected synths
-        function send_program(program) {
-            current_program = program
-            peers.forEach((peer, id) => {
-                if (peer.param_channel && peer.param_channel.readyState === 'open') {
-                    peer.param_channel.send(JSON.stringify({
-                        type: 'program',
-                        program: program
-                    }))
+        // Generate random harmonic ratio from selections for specific expression
+        function getRandomHarmonicRatio(expression) {
+            const numeratorKey = `${expression}-numerator`;
+            const denominatorKey = `${expression}-denominator`;
+            
+            const numerators = Array.from(harmonicSelections[numeratorKey]);
+            const denominators = Array.from(harmonicSelections[denominatorKey]);
+            
+            if (numerators.length === 0 || denominators.length === 0) {
+                return 1.0; // Default ratio if no selections
+            }
+            
+            const randomNumerator = numerators[Math.floor(Math.random() * numerators.length)];
+            const randomDenominator = denominators[Math.floor(Math.random() * denominators.length)];
+            
+            return randomNumerator / randomDenominator;
+        }
+
+        // Distribute chord to connected synths
+        function distribute_chord() {
+            if (currentChord.length === 0) {
+                alert('Please select at least one note in the chord')
+                return
+            }
+            
+            // Get all connected, audio-enabled synths
+            const availableSynths = Array.from(peers.entries()).filter(([id, peer]) => 
+                peer.param_channel && peer.param_channel.readyState === 'open'
+            )
+            
+            if (availableSynths.length === 0) {
+                alert('No synths connected')
+                return
+            }
+            
+            console.log(`Distributing chord [${currentChord.join(', ')}] to ${availableSynths.length} synths`)
+            
+            // Get base program (all parameters except frequency/expression)
+            const baseProgram = get_current_program()
+            
+            // Get expressions for each note
+            const expressions = svgExpression ? svgExpression.getAllExpressions() : {}
+            
+            // Distribute notes evenly across synths
+            let sentCount = 0
+            availableSynths.forEach(([synthId, peer], index) => {
+                // Assign note in round-robin fashion
+                const noteIndex = index % currentChord.length
+                const assignedNote = currentChord[noteIndex]
+                const assignedExpression = expressions[assignedNote] || { type: 'none' }
+                
+                // Create program for this synth
+                const synthProgram = { ...baseProgram }
+                
+                // Set frequency
+                const frequency = note_to_frequency(assignedNote.slice(0, -1), parseInt(assignedNote.slice(-1)))
+                synthProgram.fundamentalFrequency = frequency
+                
+                // Apply expression for this note
+                switch (assignedExpression.type) {
+                    case 'vibrato':
+                        synthProgram.vibratoEnabled = 1
+                        // Apply random harmonic ratio to vibrato rate
+                        const vibratoRatio = getRandomHarmonicRatio('vibrato');
+                        synthProgram.vibratoRate = (synthProgram.vibratoRate || 4) * vibratoRatio;
+                        // Use per-note depth from piano roll gesture
+                        synthProgram.vibratoDepth = assignedExpression.depth || 0.01;
+                        console.log(`${synthId} vibrato: ${synthProgram.vibratoRate.toFixed(2)}Hz (${vibratoRatio.toFixed(2)}x)`);
+                        break
+                    case 'tremolo':
+                        synthProgram.tremoloEnabled = 1
+                        // Apply random harmonic ratio to tremolo speed
+                        const tremoloRatio = getRandomHarmonicRatio('tremolo');
+                        synthProgram.tremoloSpeed = (synthProgram.tremoloSpeed || 10) * tremoloRatio;
+                        // Use per-note depth from piano roll gesture
+                        synthProgram.tremoloDepth = assignedExpression.depth || 0.3;
+                        synthProgram.tremoloArticulation = synthProgram.tremoloArticulation || 0.8;
+                        console.log(`${synthId} tremolo: ${synthProgram.tremoloSpeed.toFixed(2)}Hz (${tremoloRatio.toFixed(2)}x)`);
+                        break
+                    case 'trill':
+                        synthProgram.trillEnabled = 1
+                        // Apply random harmonic ratio to trill speed
+                        const trillRatio = getRandomHarmonicRatio('trill');
+                        synthProgram.trillSpeed = (synthProgram.trillSpeed || 8) * trillRatio;
+                        // Use per-note interval from piano roll gesture
+                        synthProgram.trillInterval = assignedExpression.interval || 2;
+                        synthProgram.trillArticulation = synthProgram.trillArticulation || 0.7;
+                        console.log(`${synthId} trill: ${synthProgram.trillSpeed.toFixed(2)}Hz (${trillRatio.toFixed(2)}x)`);
+                        break
+                    default:
+                        synthProgram.vibratoEnabled = 0
+                        synthProgram.tremoloEnabled = 0
+                        synthProgram.trillEnabled = 0
                 }
+                
+                // Send to synth
+                peer.param_channel.send(JSON.stringify({
+                    type: 'program',
+                    program: synthProgram
+                }))
+                
+                console.log(`${synthId}: ${assignedNote} (${frequency.toFixed(1)}Hz) - ${assignedExpression.type}`)
+                sentCount++
             })
-            console.log(`Sent program with ${Object.keys(program).length} parameters`)
+            
+            console.log(`Distributed chord to ${sentCount} synths`)
         }
         
-        // Get current program from UI
+        // Get current program from UI (excluding frequency and expressions - those are handled by chord distribution)
         function get_current_program() {
             const program = {}
             
             param_ids.forEach(id => {
-                // Skip frequency since it's now set per-note in chord distribution
-                if (id === 'frequency') return
-                
                 const element = param_elements[id]
                 if (element && element.input) {
                     const value = element.input.type === 'range' ? 
@@ -1140,9 +1322,6 @@
                     program[id] = value
                 }
             })
-            
-            // Note: Expression is now handled per-note via drag gestures
-            // Global expression parameters are still included for each expression type
             
             return program
         }
@@ -1166,37 +1345,111 @@
         
         // Save program to bank
         function save_to_bank(bank_id) {
-            program_banks.set(bank_id, current_program)
+            // Get current UI state (the "recipe" for new synths)
+            current_program = get_current_program()
+            
+            // Store harmonic selections (convert Sets to Arrays for JSON serialization)
+            const harmonicSelectionsForSave = {}
+            Object.keys(harmonicSelections).forEach(key => {
+                harmonicSelectionsForSave[key] = Array.from(harmonicSelections[key])
+            })
+            
+            const controllerState = {
+                ...current_program,
+                harmonicSelections: harmonicSelectionsForSave,
+                chordNotes: currentChord ? [...currentChord] : [],
+                expressions: svgExpression ? svgExpression.getAllExpressions() : {}
+            }
+            
+            // Store controller state for new synths
+            program_banks.set(bank_id, controllerState)
+            
+            // Tell each synth to save its own resolved parameter values
             peers.forEach((peer, id) => {
                 if (peer.command_channel && peer.command_channel.readyState === 'open') {
                     peer.command_channel.send(JSON.stringify({
                         type: 'command',
                         name: 'save',
-                        value: bank_id
+                        bank: bank_id
                     }))
                 }
             })
-            console.log(`Saved program to bank ${bank_id}`)
+            
+            console.log(`✓ Saved controller state to bank ${bank_id}, told ${peers.size} synths to save their resolved values`)
+                
+            // Save to localStorage
+            saveBanksToStorage()
+                
+            // Update bank selector display
+            updateBankDisplay()
         }
         
         // Load program from bank
         function load_from_bank(bank_id) {
-            if (program_banks.has(bank_id)) {
-                const saved_program = program_banks.get(bank_id)
-                peers.forEach((peer, id) => {
-                    if (peer.command_channel && peer.command_channel.readyState === 'open') {
-                        peer.command_channel.send(JSON.stringify({
-                            type: 'command',
-                            name: 'load',
-                            bank: bank_id,
-                            program: saved_program
-                        }))
-                    }
-                })
-                console.log(`Loaded program from bank ${bank_id}`)
-            } else {
+            console.log(`Loading from bank ${bank_id}...`)
+            if (!program_banks.has(bank_id)) {
                 console.warn(`Bank ${bank_id} not found`)
+                return false
             }
+            
+            const saved_state = program_banks.get(bank_id)
+            if (!saved_state) {
+                console.warn(`Bank ${bank_id} has no data`)
+                return false
+            }
+            
+            console.log('Restoring controller state from bank:', saved_state)
+            
+            // Restore controller UI state
+            param_ids.forEach(id => {
+                if (saved_state[id] !== undefined) {
+                    const element = param_elements[id]
+                    if (element && element.input) {
+                        element.input.value = saved_state[id]
+                        update_display_value(id, saved_state[id])
+                    }
+                }
+            })
+            
+            // Restore harmonic selections
+            if (saved_state.harmonicSelections) {
+                for (const key in saved_state.harmonicSelections) {
+                    if (harmonicSelections[key] && Array.isArray(saved_state.harmonicSelections[key])) {
+                        harmonicSelections[key].clear()
+                        saved_state.harmonicSelections[key].forEach(value => {
+                            harmonicSelections[key].add(value)
+                        })
+                    }
+                }
+            }
+            
+            // Restore chord and expressions
+            if (saved_state.chordNotes && Array.isArray(saved_state.chordNotes)) {
+                currentChord = [...saved_state.chordNotes]
+                if (svgExpression) {
+                    svgExpression.setChordNotes(currentChord)
+                    if (saved_state.expressions) {
+                        svgExpression.setMultipleExpressions(saved_state.expressions)
+                    }
+                }
+            }
+            
+            current_program = saved_state
+            
+            // Tell each synth to load its own saved values (or generate new ones if it's new)
+            peers.forEach((peer, id) => {
+                if (peer.command_channel && peer.command_channel.readyState === 'open') {
+                    peer.command_channel.send(JSON.stringify({
+                        type: 'command',
+                        name: 'load',
+                        bank: bank_id,
+                        fallbackProgram: get_current_program() // For new synths that don't have saved state
+                    }))
+                }
+            })
+            
+            console.log(`✓ Restored controller state from bank ${bank_id}, told ${peers.size} synths to load their saved values`)
+            return true
         }
         
         // Update UI display values
@@ -1266,33 +1519,80 @@
                     console.log('Combined input event fired for', id, 'new value:', value)
                     mark_parameter_changed(id)
                     check_overall_status()
+                    // Update current program with new values
+                    if (current_program) {
+                        current_program[id] = value
+                    }
                 })
             }
         })
         
-        // Expression radio handlers
-        expression_radios.forEach(radio => {
-            radio.addEventListener('change', update_expression_groups)
-        })
+        // Expression radio handlers (only if they exist)
+        if (expression_radios.length > 0) {
+            expression_radios.forEach(radio => {
+                radio.addEventListener('change', update_expression_groups)
+            })
+        }
         
         // Program control buttons
         document.getElementById('send_current_program').addEventListener('click', () => {
             update_status_badge('sending')
-            const program = get_current_program()
-            send_program(program)
+            distribute_chord()
             mark_all_parameters_sent()
             setTimeout(() => update_status_badge('synced'), 500)
         })
         
         // Banking controls
-        document.getElementById('save_bank').addEventListener('click', () => {
+        document.getElementById('save_bank').addEventListener('click', (e) => {
             const bank_id = parseInt(document.getElementById('bank_selector').value)
             save_to_bank(bank_id)
+            
+            // Visual feedback
+            e.target.classList.add('success')
+            e.target.textContent = '✓ Saved'
+            setTimeout(() => {
+                e.target.classList.remove('success')
+                e.target.textContent = 'Save'
+            }, 1500)
+            
+            console.log(`✓ Program saved to Bank ${bank_id}`)
         })
         
-        document.getElementById('load_bank').addEventListener('click', () => {
+        document.getElementById('load_bank').addEventListener('click', (e) => {
             const bank_id = parseInt(document.getElementById('bank_selector').value)
-            load_from_bank(bank_id)
+            const success = load_from_bank(bank_id)
+            
+            if (success) {
+                // Visual feedback
+                e.target.classList.add('success')
+                e.target.textContent = '✓ Loaded'
+                setTimeout(() => {
+                    e.target.classList.remove('success')
+                    e.target.textContent = 'Load'
+                }, 1500)
+                
+                // Update harmonic displays after DOM is ready
+                setTimeout(() => {
+                    ['vibrato', 'trill', 'tremolo'].forEach(expression => {
+                        ['numerator', 'denominator'].forEach(type => {
+                            if (typeof updateHarmonicDisplay === 'function') {
+                                updateHarmonicDisplay(expression, type)
+                            }
+                        })
+                    })
+                    if (typeof updateExpressionDisplay === 'function') {
+                        updateExpressionDisplay()
+                    }
+                }, 100)
+            } else {
+                // Error feedback
+                e.target.classList.add('error')
+                e.target.textContent = '✗ Empty'
+                setTimeout(() => {
+                    e.target.classList.remove('error')
+                    e.target.textContent = 'Load'
+                }, 1500)
+            }
         })
         
         // Power control
@@ -1339,6 +1639,9 @@
             
             // Initialize parameter change tracking
             initialize_parameter_tracking()
+            
+            // Initialize harmonic selectors
+            initializeHarmonicSelectors()
         }
 
         // Piano GUI functions
@@ -1610,11 +1913,161 @@
             return;
         }
 
+        // harmonicSelections moved to top of script
+        
+        function initializeHarmonicSelectors() {
+            const selectors = document.querySelectorAll('.harmonic-selector');
+            
+            // Set initial display for default selections
+            ['vibrato', 'trill', 'tremolo'].forEach(expression => {
+                ['numerator', 'denominator'].forEach(type => {
+                    updateHarmonicDisplay(expression, type);
+                });
+            });
+            
+            selectors.forEach(selector => {
+                const expression = selector.dataset.expression;
+                
+                ['numerator', 'denominator'].forEach(type => {
+                    const row = selector.querySelector(`[data-type="${type}"]`);
+                    if (!row) return;
+                
+                let isSelecting = false;
+                let startValue = null;
+                
+                const numbers = row.querySelectorAll('.harmonic-number');
+                
+                numbers.forEach(number => {
+                    let dragStarted = false;
+                    
+                    // Mouse down - prepare for potential drag
+                    number.addEventListener('mousedown', (e) => {
+                        e.preventDefault();
+                        dragStarted = false;
+                        isSelecting = true;
+                        startValue = parseInt(number.dataset.value);
+                    });
+                    
+                    // Mouse enter during drag
+                    number.addEventListener('mouseenter', (e) => {
+                        if (isSelecting && startValue !== null) {
+                            if (!dragStarted) {
+                                dragStarted = true;
+                                clearHarmonicSelection(expression, type);
+                            }
+                            const currentValue = parseInt(number.dataset.value);
+                            clearHarmonicSelection(expression, type);
+                            selectHarmonicRange(expression, type, startValue, currentValue);
+                        }
+                    });
+                    
+                    // Click to toggle (only if no drag occurred)
+                    number.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        if (!dragStarted) {
+                            const value = parseInt(number.dataset.value);
+                            toggleHarmonicValue(expression, type, value);
+                        }
+                    });
+                });
+                
+                // Mouse up to end selection
+                document.addEventListener('mouseup', () => {
+                    if (isSelecting) {
+                        isSelecting = false;
+                        startValue = null;
+                        // Remove selecting class from all numbers
+                        numbers.forEach(n => n.classList.remove('selecting'));
+                        updateHarmonicDisplay(expression, type);
+                    }
+                    });
+                });
+            });
+        }
+        
+        function toggleHarmonicValue(expression, type, value) {
+            const key = `${expression}-${type}`;
+            const selection = harmonicSelections[key];
+            if (selection.has(value)) {
+                selection.delete(value);
+            } else {
+                selection.add(value);
+            }
+            updateHarmonicDisplay(expression, type);
+        }
+        
+        function selectHarmonicValue(expression, type, value) {
+            const key = `${expression}-${type}`;
+            harmonicSelections[key].add(value);
+            updateHarmonicDisplay(expression, type);
+        }
+        
+        function selectHarmonicRange(expression, type, start, end) {
+            const min = Math.min(start, end);
+            const max = Math.max(start, end);
+            const key = `${expression}-${type}`;
+            const selection = harmonicSelections[key];
+            
+            for (let i = min; i <= max; i++) {
+                selection.add(i);
+            }
+            updateHarmonicDisplay(expression, type);
+        }
+        
+        function clearHarmonicSelection(expression, type) {
+            const key = `${expression}-${type}`;
+            harmonicSelections[key].clear();
+            updateHarmonicDisplay(expression, type);
+        }
+        
+        function updateHarmonicDisplay(expression, type) {
+            const selector = document.querySelector(`[data-expression="${expression}"]`);
+            if (!selector) return;
+            
+            const row = selector.querySelector(`[data-type="${type}"]`);
+            if (!row) return;
+            
+            const numbers = row.querySelectorAll('.harmonic-number');
+            const key = `${expression}-${type}`;
+            const selection = harmonicSelections[key];
+            
+            numbers.forEach(number => {
+                const value = parseInt(number.dataset.value);
+                if (selection.has(value)) {
+                    number.classList.add('selected');
+                } else {
+                    number.classList.remove('selected');
+                }
+            });
+            
+            console.log(`${key}:`, Array.from(selection).sort((a, b) => a - b));
+        }
+        
+        function updateBankDisplay() {
+            const selector = document.getElementById('bank_selector');
+            for (let i = 1; i <= 5; i++) {
+                const option = selector.querySelector(`option[value="${i}"]`);
+                if (option) {
+                    const hasData = program_banks.has(i);
+                    const baseText = `Bank ${i}`;
+                    option.textContent = hasData ? `${baseText} ●` : `${baseText} ⚪`;
+                }
+            }
+        }
+        
         // Start the application
         async function start_controller() {
             await fetch_ice_servers()
             initialize_ui()
             connect_websocket()
+            // Load saved banks
+            loadBanksFromStorage()
+            
+            // Initialize current program with UI state
+            current_program = get_current_program()
+            
+            // Update bank display
+            updateBankDisplay()
         }
 
         // Parameter change tracking
@@ -1626,13 +2079,16 @@
             update_status_badge('synced')
             
             // Add listeners to expression radios (parameters already handled above)
-            document.querySelectorAll('input[name="expression"]').forEach(radio => {
-                radio.addEventListener('change', () => {
-                    console.log('Expression radio changed to:', radio.value)
-                    mark_parameter_changed('expression')
-                    check_overall_status()
+            const expressionRadios = document.querySelectorAll('input[name="expression"]')
+            if (expressionRadios.length > 0) {
+                expressionRadios.forEach(radio => {
+                    radio.addEventListener('change', () => {
+                        console.log('Expression radio changed to:', radio.value)
+                        mark_parameter_changed('expression')
+                        check_overall_status()
+                    })
                 })
-            })
+            }
         }
         
         function mark_parameter_changed(param_id) {
@@ -1642,7 +2098,10 @@
             let control_group = null
             
             if (param_id === 'expression') {
-                control_group = document.querySelector('input[name="expression"]').closest('.control-group')
+                const expressionRadio = document.querySelector('input[name="expression"]')
+                if (expressionRadio) {
+                    control_group = expressionRadio.closest('.control-group')
+                }
             } else {
                 const element = param_elements[param_id]
                 if (element && element.input) {
@@ -1675,14 +2134,17 @@
                 }
             })
             
-            // Handle expression group
-            const expressionGroup = document.querySelector('input[name="expression"]').closest('.control-group')
-            if (expressionGroup) {
-                expressionGroup.classList.remove('changed')
-                expressionGroup.classList.add('sent')
-                setTimeout(() => {
-                    expressionGroup.classList.remove('sent')
-                }, 1000)
+            // Handle expression group (if it exists)
+            const expressionRadio = document.querySelector('input[name="expression"]')
+            if (expressionRadio) {
+                const expressionGroup = expressionRadio.closest('.control-group')
+                if (expressionGroup) {
+                    expressionGroup.classList.remove('changed')
+                    expressionGroup.classList.add('sent')
+                    setTimeout(() => {
+                        expressionGroup.classList.remove('sent')
+                    }, 1000)
+                }
             }
             
             // Update sent state
@@ -1779,6 +2241,7 @@
             }
             
             updateExpressionDisplay();
+            updateExpressionGroups();
         }
         
         function updateExpressionDisplay() {
@@ -1888,6 +2351,36 @@
             });
             
             content.innerHTML = displayItems.join('');
+        }
+        
+        // Update expression group visibility based on what's in use
+        function updateExpressionGroups() {
+            if (!svgExpression) return;
+            
+            const expressions = svgExpression.getAllExpressions();
+            const activeTypes = new Set();
+            
+            // Find which expression types are in use
+            Object.values(expressions).forEach(expr => {
+                if (expr.type !== 'none') {
+                    activeTypes.add(expr.type);
+                }
+            });
+            
+            // Show/hide expression groups
+            const vibratoGroup = document.querySelector('.expression-group.vibrato');
+            const trillGroup = document.querySelector('.expression-group.trill');
+            const tremoloGroup = document.querySelector('.expression-group.tremolo');
+            
+            if (vibratoGroup) {
+                vibratoGroup.classList.toggle('active', activeTypes.has('vibrato'));
+            }
+            if (trillGroup) {
+                trillGroup.classList.toggle('active', activeTypes.has('trill'));
+            }
+            if (tremoloGroup) {
+                tremoloGroup.classList.toggle('active', activeTypes.has('tremolo'));
+            }
         }
         
 
