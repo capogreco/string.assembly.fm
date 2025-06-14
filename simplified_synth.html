@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>String Assembly FM - Simplified Synth</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+            min-height: 100vh;
+            color: white;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .container {
+            max-width: 600px;
+            width: 100%;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 15px 35px rgba(0,0,0,0.3);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .synth-title {
+            text-align: center;
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            color: #fff;
+            text-shadow: 0 2px 10px rgba(0,0,0,0.3);
+        }
+
+        .synth-id {
+            text-align: center;
+            margin-bottom: 30px;
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 1.1em;
+        }
+
+        .status-section {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 25px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .section-title {
+            font-size: 1.2em;
+            margin-bottom: 15px;
+            color: #fff;
+            text-align: center;
+        }
+
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+        }
+
+        .status-item {
+            text-align: center;
+            padding: 10px;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 8px;
+        }
+
+        .status-label {
+            font-size: 0.9em;
+            color: rgba(255, 255, 255, 0.7);
+            margin-bottom: 5px;
+        }
+
+        .status-value {
+            font-size: 1.1em;
+            font-weight: bold;
+            color: #fff;
+        }
+
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 8px;
+            background: #e74c3c;
+        }
+
+        .status-indicator.connected {
+            background: #2ecc71;
+        }
+
+        .visualizer {
+            width: 100%;
+            height: 120px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 8px;
+            margin: 20px 0;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .controls {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 15px;
+        }
+
+        button {
+            padding: 12px 20px;
+            border: none;
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+
+        button:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: translateY(-2px);
+        }
+
+        button:disabled {
+            background: rgba(255, 255, 255, 0.1);
+            cursor: not-allowed;
+            transform: none;
+            opacity: 0.5;
+        }
+
+        .primary-button {
+            background: #3498db;
+            border-color: #3498db;
+        }
+
+        .primary-button:hover {
+            background: #2980b9;
+            border-color: #2980b9;
+        }
+
+        .success-button {
+            background: #2ecc71;
+            border-color: #2ecc71;
+        }
+
+        .success-button:hover {
+            background: #27ae60;
+            border-color: #27ae60;
+        }
+
+        .controller-list {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 15px;
+            min-height: 60px;
+        }
+
+        .controller-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 12px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 6px;
+            margin-bottom: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .controller-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .latency {
+            font-size: 0.9em;
+            color: rgba(255, 255, 255, 0.7);
+            background: rgba(0, 0, 0, 0.3);
+            padding: 2px 8px;
+            border-radius: 4px;
+        }
+
+        .empty-state {
+            text-align: center;
+            color: rgba(255, 255, 255, 0.5);
+            padding: 20px;
+            font-style: italic;
+        }
+
+        .parameter-display {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 15px;
+        }
+
+        .param-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-size: 0.9em;
+        }
+
+        .param-name {
+            color: rgba(255, 255, 255, 0.7);
+        }
+
+        .param-value {
+            color: #fff;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="synth-title">🎻 String Synth</div>
+        <div class="synth-id" id="synth-id">Loading...</div>
+
+        <!-- Status Section -->
+        <div class="status-section">
+            <div class="section-title">System Status</div>
+            <div class="status-grid">
+                <div class="status-item">
+                    <div class="status-label">Server</div>
+                    <div class="status-value">
+                        <span class="status-indicator" id="server-indicator"></span>
+                        <span id="server-status">Disconnected</span>
+                    </div>
+                </div>
+                <div class="status-item">
+                    <div class="status-label">Audio</div>
+                    <div class="status-value">
+                        <span class="status-indicator" id="audio-indicator"></span>
+                        <span id="audio-status">Stopped</span>
+                    </div>
+                </div>
+                <div class="status-item">
+                    <div class="status-label">Controllers</div>
+                    <div class="status-value" id="controller-count">0</div>
+                </div>
+                <div class="status-item">
+                    <div class="status-label">Mode</div>
+                    <div class="status-value" id="synth-mode">Standby</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Audio Visualizer -->
+        <canvas class="visualizer" id="visualizer" width="600" height="120"></canvas>
+
+        <!-- Controls -->
+        <div class="controls">
+            <button class="primary-button" id="init-audio" onclick="initAudio()">
+                Initialize Audio
+            </button>
+            <button id="join-instrument" onclick="joinInstrument()" disabled>
+                Join Instrument
+            </button>
+            <button class="success-button" id="calibrate" onclick="startCalibration()" disabled>
+                Calibrate
+            </button>
+        </div>
+
+        <!-- Controller List -->
+        <div class="controller-list" id="controller-list">
+            <div class="empty-state">No controllers connected</div>
+        </div>
+
+        <!-- Current Parameters Display -->
+        <div class="parameter-display" id="parameter-display" style="display: none;">
+            <div class="section-title">Current Parameters</div>
+            <div id="parameter-content"></div>
+        </div>
+    </div>
+
+    <!-- Include our simplified modules -->
+    <script src="simplified_communication.js"></script>
+    <script src="standard_parameters.js"></script>
+
+    <script>
+        // Global state
+        let synthId = `synth-${Math.random().toString(36).substr(2, 9)}`
+        let comm = null
+        let audioContext = null
+        let bowedStringNode = null
+        let calibrationGain = null
+        let synthesisGain = null
+        let analyser = null
+        let mixer = null
+        
+        let isCalibrationMode = false
+        let isPoweredOn = false
+        let currentProgram = {}
+        let storedVolume = 0.7
+        
+        // Audio worklet modules
+        const WORKLET_MODULES = [
+            'bowed_string_worklet.js',
+            'reverb_worklet.js',
+            'pink_noise.js'
+        ]
+
+        // Initialize application
+        function init() {
+            document.getElementById('synth-id').textContent = synthId
+            
+            // Set up communication
+            comm = new SimplifiedComm('synth', synthId)
+            comm.onPeerConnected = handleControllerConnected
+            comm.onPeerDisconnected = handleControllerDisconnected
+            comm.onMessage = handleMessage
+            
+            // Connect to server
+            comm.connect()
+            
+            // Initialize current program
+            currentProgram = ParameterUtils.getDefaultProgram()
+            
+            // Set up periodic updates
+            setInterval(updateStatus, 1000)
+            setInterval(drawVisualizer, 50)
+            
+            updateStatus()
+        }
+
+        // Initialize audio system
+        async function initAudio() {
+            try {
+                document.getElementById('init-audio').disabled = true
+                document.getElementById('init-audio').textContent = 'Initializing...'
+                
+                // Create audio context
+                audioContext = new (window.AudioContext || window.webkitAudioContext)()
+                
+                if (audioContext.state === 'suspended') {
+                    await audioContext.resume()
+                }
+                
+                // Load audio worklet modules
+                for (const module of WORKLET_MODULES) {
+                    try {
+                        await audioContext.audioWorklet.addModule(module)
+                        console.log(`Loaded worklet: ${module}`)
+                    } catch (error) {
+                        console.warn(`Failed to load worklet ${module}:`, error)
+                    }
+                }
+                
+                // Create audio graph
+                await createAudioGraph()
+                
+                // Enable other controls
+                document.getElementById('join-instrument').disabled = false
+                document.getElementById('calibrate').disabled = false
+                
+                updateStatus()
+                
+            } catch (error) {
+                console.error('Failed to initialize audio:', error)
+                document.getElementById('init-audio').disabled = false
+                document.getElementById('init-audio').textContent = 'Initialize Audio'
+            }
+        }
+
+        // Create audio processing graph
+        async function createAudioGraph() {
+            // Create bowed string synthesizer
+            bowedStringNode = new AudioWorkletNode(audioContext, 'bowed-string-processor', {
+                numberOfInputs: 0,
+                numberOfOutputs: 1,
+                outputChannelCount: [2]
+            })
+            
+            // Initialize with default parameters
+            await initializeSynthParameters()
+            
+            // Create gain nodes for different modes
+            calibrationGain = audioContext.createGain()
+            synthesisGain = audioContext.createGain()
+            mixer = audioContext.createGain()
+            
+            // Create analyser for visualization
+            analyser = audioContext.createAnalyser()
+            analyser.fftSize = 256
+            
+            // Set initial gain values
+            calibrationGain.gain.value = 0
+            synthesisGain.gain.value = 0
+            mixer.gain.value = 1
+            
+            // Connect audio graph
+            bowedStringNode.connect(calibrationGain)
+            bowedStringNode.connect(synthesisGain)
+            calibrationGain.connect(mixer)
+            synthesisGain.connect(mixer)
+            mixer.connect(analyser)
+            mixer.connect(audioContext.destination)
+            
+            console.log('Audio graph created successfully')
+        }
+
+        // Initialize synthesis parameters
+        async function initializeSynthParameters() {
+            // Set all parameters to their default values
+            for (const [paramName, paramDef] of Object.entries(SYNTH_PARAMETERS)) {
+                if (bowedStringNode.parameters.has(paramName)) {
+                    const audioParam = bowedStringNode.parameters.get(paramName)
+                    audioParam.setValueAtTime(paramDef.default, audioContext.currentTime)
+                }
+            }
+            
+            // Start with bowing disabled
+            bowedStringNode.port.postMessage({ type: 'setBowing', value: false })
+        }
+
+        // Start calibration mode
+        function startCalibration() {
+            if (!audioContext || !bowedStringNode) return
+            
+            isCalibrationMode = true
+            
+            // Enable calibration path, disable synthesis path
+            calibrationGain.gain.value = isPoweredOn ? storedVolume : 0
+            synthesisGain.gain.value = 0
+            
+            // Start bowing for calibration
+            bowedStringNode.port.postMessage({ type: 'setBowing', value: true })
+            
+            updateStatus()
+        }
+
+        // Join instrument (synthesis mode)
+        function joinInstrument() {
+            if (!audioContext || !bowedStringNode) return
+            
+            isCalibrationMode = false
+            
+            // Disable calibration path, enable synthesis path
+            calibrationGain.gain.value = 0
+            synthesisGain.gain.value = isPoweredOn ? storedVolume : 0
+            
+            // Apply current program parameters
+            applyProgram(currentProgram)
+            
+            // Start bowing for synthesis
+            bowedStringNode.port.postMessage({ type: 'setBowing', value: true })
+            
+            updateStatus()
+        }
+
+        // Handle controller connection
+        function handleControllerConnected(controllerId) {
+            console.log(`Controller connected: ${controllerId}`)
+            updateStatus()
+        }
+
+        // Handle controller disconnection
+        function handleControllerDisconnected(controllerId) {
+            console.log(`Controller disconnected: ${controllerId}`)
+            updateStatus()
+        }
+
+        // Handle incoming messages
+        function handleMessage(controllerId, message) {
+            console.log(`Message from ${controllerId}:`, message)
+            
+            switch (message.type) {
+                case 'program':
+                    handleProgramMessage(message)
+                    break
+                    
+                case 'command':
+                    handleCommandMessage(message)
+                    break
+                    
+                case 'ping':
+                    handlePingMessage(controllerId, message)
+                    break
+                    
+                default:
+                    console.warn(`Unknown message type: ${message.type}`)
+            }
+        }
+
+        // Handle program updates
+        function handleProgramMessage(message) {
+            currentProgram = message.parameters
+            applyProgram(currentProgram)
+            updateParameterDisplay()
+        }
+
+        // Handle command messages
+        function handleCommandMessage(message) {
+            switch (message.name) {
+                case 'power':
+                    handlePowerCommand(message.value)
+                    break
+                    
+                case 'save':
+                    // Bank saving is handled by controller
+                    console.log(`Save to bank ${message.value} requested`)
+                    break
+                    
+                case 'load':
+                    // Bank loading is handled by controller
+                    console.log(`Load from bank ${message.bank} requested`)
+                    break
+                    
+                default:
+                    console.warn(`Unknown command: ${message.name}`)
+            }
+        }
+
+        // Handle ping messages
+        function handlePingMessage(controllerId, message) {
+            // Send pong response with current status
+            const pongMessage = MessageBuilder.pong(message.timestamp, {
+                audioEnabled: !!(audioContext && audioContext.state === 'running'),
+                mode: isCalibrationMode ? 'calibration' : 'synthesis',
+                powered: isPoweredOn
+            })
+            
+            comm.sendToPeer(controllerId, pongMessage)
+        }
+
+        // Handle power command
+        function handlePowerCommand(powerOn) {
+            isPoweredOn = powerOn
+            
+            const targetVolume = powerOn ? storedVolume : 0
+            
+            if (isCalibrationMode && calibrationGain) {
+                calibrationGain.gain.value = targetVolume
+            } else if (!isCalibrationMode && synthesisGain) {
+                synthesisGain.gain.value = targetVolume
+            }
+            
+            updateStatus()
+        }
+
+        // Apply program parameters to synthesis engine
+        function applyProgram(program) {
+            if (!bowedStringNode) return
+            
+            // Apply each parameter directly (no mapping needed with standardized names)
+            for (const [paramName, value] of Object.entries(program)) {
+                if (paramName === 'volume') {
+                    storedVolume = value
+                    if (isPoweredOn) {
+                        if (isCalibrationMode && calibrationGain) {
+                            calibrationGain.gain.value = value
+                        } else if (!isCalibrationMode && synthesisGain) {
+                            synthesisGain.gain.value = value
+                        }
+                    }
+                } else if (bowedStringNode.parameters.has(paramName)) {
+                    const audioParam = bowedStringNode.parameters.get(paramName)
+                    audioParam.setValueAtTime(value, audioContext.currentTime)
+                }
+            }
+        }
+
+        // Update status display
+        function updateStatus() {
+            // Server status
+            const serverIndicator = document.getElementById('server-indicator')
+            const serverStatus = document.getElementById('server-status')
+            
+            if (comm && comm.ws && comm.ws.readyState === WebSocket.OPEN) {
+                serverIndicator.classList.add('connected')
+                serverStatus.textContent = 'Connected'
+            } else {
+                serverIndicator.classList.remove('connected')
+                serverStatus.textContent = 'Disconnected'
+            }
+            
+            // Audio status
+            const audioIndicator = document.getElementById('audio-indicator')
+            const audioStatus = document.getElementById('audio-status')
+            
+            if (audioContext && audioContext.state === 'running') {
+                audioIndicator.classList.add('connected')
+                audioStatus.textContent = 'Running'
+            } else {
+                audioIndicator.classList.remove('connected')
+                audioStatus.textContent = 'Stopped'
+            }
+            
+            // Controller count
+            const controllerCount = document.getElementById('controller-count')
+            const connectedControllers = comm ? comm.getConnectedPeers() : []
+            controllerCount.textContent = connectedControllers.length
+            
+            // Synth mode
+            const synthMode = document.getElementById('synth-mode')
+            if (!audioContext) {
+                synthMode.textContent = 'Standby'
+            } else if (isCalibrationMode) {
+                synthMode.textContent = 'Calibration'
+            } else {
+                synthMode.textContent = 'Synthesis'
+            }
+            
+            updateControllerList(connectedControllers)
+        }
+
+        // Update controller list display
+        function updateControllerList(controllers) {
+            const listEl = document.getElementById('controller-list')
+            
+            if (controllers.length === 0) {
+                listEl.innerHTML = '<div class="empty-state">No controllers connected</div>'
+                return
+            }
+            
+            listEl.innerHTML = controllers.map(controllerId => `
+                <div class="controller-item">
+                    <span>${controllerId}</span>
+                    <span class="latency" id="latency-${controllerId}">--ms</span>
+                </div>
+            `).join('')
+        }
+
+        // Update parameter display
+        function updateParameterDisplay() {
+            const displayEl = document.getElementById('parameter-display')
+            const contentEl = document.getElementById('parameter-content')
+            
+            if (Object.keys(currentProgram).length === 0) {
+                displayEl.style.display = 'none'
+                return
+            }
+            
+            displayEl.style.display = 'block'
+            
+            const paramRows = Object.entries(currentProgram).map(([name, value]) => {
+                const paramDef = SYNTH_PARAMETERS[name]
+                const displayName = paramDef ? paramDef.displayName : name
+                const displayValue = typeof value === 'number' ? value.toFixed(3) : value.toString()
+                
+                return `
+                    <div class="param-row">
+                        <span class="param-name">${displayName}</span>
+                        <span class="param-value">${displayValue}</span>
+                    </div>
+                `
+            }).join('')
+            
+            contentEl.innerHTML = paramRows
+        }
+
+        // Draw audio visualizer
+        function drawVisualizer() {
+            if (!analyser) return
+            
+            const canvas = document.getElementById('visualizer')
+            const ctx = canvas.getContext('2d')
+            const bufferLength = analyser.frequencyBinCount
+            const dataArray = new Uint8Array(bufferLength)
+            
+            analyser.getByteFrequencyData(dataArray)
+            
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.3)'
+            ctx.fillRect(0, 0, canvas.width, canvas.height)
+            
+            const barWidth = (canvas.width / bufferLength) * 2.5
+            let barHeight
+            let x = 0
+            
+            for (let i = 0; i < bufferLength; i++) {
+                barHeight = (dataArray[i] / 255) * canvas.height
+                
+                const r = barHeight + 25 * (i / bufferLength)
+                const g = 250 * (i / bufferLength)
+                const b = 50
+                
+                ctx.fillStyle = `rgb(${r},${g},${b})`
+                ctx.fillRect(x, canvas.height - barHeight, barWidth, barHeight)
+                
+                x += barWidth + 1
+            }
+        }
+
+        // Start the application
+        document.addEventListener('DOMContentLoaded', init)
+    </script>
+</body>
+</html>

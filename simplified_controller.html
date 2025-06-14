@@ -1,0 +1,791 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>String Assembly FM - Simplified Controller</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 20px;
+        }
+
+        .section {
+            background: white;
+            border-radius: 12px;
+            padding: 25px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+        }
+
+        .section-title {
+            font-size: 1.4em;
+            font-weight: bold;
+            margin-bottom: 20px;
+            color: #2c3e50;
+            border-bottom: 3px solid #667eea;
+            padding-bottom: 10px;
+        }
+
+        /* Connection Status Section */
+        .connection-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            align-items: center;
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px;
+            border-radius: 8px;
+            background: #f8f9fa;
+        }
+
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #dc3545;
+        }
+
+        .status-dot.connected {
+            background: #28a745;
+        }
+
+        .synth-list {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 15px;
+            min-height: 100px;
+        }
+
+        .synth-item {
+            padding: 8px 12px;
+            margin: 5px 0;
+            background: white;
+            border-radius: 6px;
+            border-left: 4px solid #28a745;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .synth-item.disconnected {
+            border-left-color: #dc3545;
+            opacity: 0.6;
+        }
+
+        .latency {
+            font-size: 0.8em;
+            color: #666;
+            background: #e9ecef;
+            padding: 2px 6px;
+            border-radius: 4px;
+        }
+
+        /* Sound Parameters Section */
+        .parameters-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+        }
+
+        .param-category {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 15px;
+        }
+
+        .category-title {
+            font-weight: bold;
+            color: #495057;
+            margin-bottom: 12px;
+            font-size: 0.9em;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .param-control {
+            display: grid;
+            grid-template-columns: 1fr 2fr 60px;
+            gap: 10px;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .param-label {
+            font-size: 0.9em;
+            color: #495057;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            height: 6px;
+            border-radius: 3px;
+            background: #ddd;
+            outline: none;
+            cursor: pointer;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            appearance: none;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: #667eea;
+            cursor: pointer;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+
+        input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            accent-color: #667eea;
+        }
+
+        .param-value {
+            font-family: monospace;
+            font-size: 0.8em;
+            color: #666;
+            text-align: center;
+            background: #e9ecef;
+            padding: 2px 4px;
+            border-radius: 4px;
+        }
+
+        /* Program Management Section */
+        .program-controls {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+        }
+
+        .control-group {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 15px;
+        }
+
+        .control-group h4 {
+            margin-bottom: 10px;
+            color: #495057;
+            font-size: 0.9em;
+        }
+
+        button {
+            width: 100%;
+            padding: 10px;
+            border: none;
+            border-radius: 6px;
+            background: #667eea;
+            color: white;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background 0.2s;
+            margin-bottom: 8px;
+        }
+
+        button:hover {
+            background: #5a6fd8;
+        }
+
+        button:disabled {
+            background: #adb5bd;
+            cursor: not-allowed;
+        }
+
+        select {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            background: white;
+            margin-bottom: 8px;
+        }
+
+        .master-power {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            margin-bottom: 15px;
+        }
+
+        .power-switch {
+            width: 50px;
+            height: 28px;
+            background: #ccc;
+            border-radius: 14px;
+            position: relative;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        .power-switch.on {
+            background: #28a745;
+        }
+
+        .power-switch::before {
+            content: '';
+            width: 24px;
+            height: 24px;
+            background: white;
+            border-radius: 50%;
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            transition: transform 0.3s;
+        }
+
+        .power-switch.on::before {
+            transform: translateX(22px);
+        }
+
+        /* Piano keyboard for frequency selection */
+        .piano-keyboard {
+            display: flex;
+            margin: 15px 0;
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 10px;
+            overflow-x: auto;
+        }
+
+        .piano-key {
+            width: 30px;
+            height: 80px;
+            border: 1px solid #ddd;
+            background: white;
+            cursor: pointer;
+            display: flex;
+            align-items: flex-end;
+            justify-content: center;
+            font-size: 0.7em;
+            color: #666;
+            padding-bottom: 5px;
+            transition: background 0.2s;
+        }
+
+        .piano-key:hover {
+            background: #f0f0f0;
+        }
+
+        .piano-key.active {
+            background: #667eea;
+            color: white;
+        }
+
+        .piano-key.black {
+            background: #333;
+            color: white;
+            width: 20px;
+            height: 50px;
+            margin: 0 -10px;
+            z-index: 1;
+        }
+
+        .piano-key.black:hover {
+            background: #555;
+        }
+
+        .piano-key.black.active {
+            background: #667eea;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Section 1: Connection Status -->
+        <div class="section">
+            <div class="section-title">🔗 Connection Status</div>
+            <div class="connection-grid">
+                <div class="status-indicator">
+                    <div class="status-dot" id="server-status"></div>
+                    <span>Server: <span id="server-text">Disconnected</span></span>
+                </div>
+                <div class="status-indicator">
+                    <div class="status-dot" id="synth-status"></div>
+                    <span>Synths: <span id="synth-count">0</span> connected</span>
+                </div>
+            </div>
+            <div class="synth-list" id="synth-list">
+                <div style="text-align: center; color: #666; padding: 20px;">
+                    No synthesizers connected
+                </div>
+            </div>
+        </div>
+
+        <!-- Section 2: Sound Parameters -->
+        <div class="section">
+            <div class="section-title">🎛️ Sound Parameters</div>
+            
+            <!-- Master Power Control -->
+            <div class="master-power">
+                <div class="power-switch" id="master-power" onclick="togglePower()">
+                </div>
+                <span><strong>Master Power</strong></span>
+            </div>
+
+            <!-- Piano Keyboard for Frequency -->
+            <div>
+                <h4 style="margin-bottom: 8px;">Frequency Selection</h4>
+                <div class="piano-keyboard" id="piano-keyboard">
+                    <!-- Piano keys will be generated by JavaScript -->
+                </div>
+            </div>
+
+            <!-- Parameter Categories -->
+            <div class="parameters-grid" id="parameters-grid">
+                <!-- Parameters will be generated by JavaScript -->
+            </div>
+        </div>
+
+        <!-- Section 3: Program Management -->
+        <div class="section">
+            <div class="section-title">💾 Program Management</div>
+            <div class="program-controls">
+                <div class="control-group">
+                    <h4>Quick Actions</h4>
+                    <button onclick="resetToDefaults()">Reset to Defaults</button>
+                    <button onclick="randomizeProgram()">Randomize Program</button>
+                </div>
+                
+                <div class="control-group">
+                    <h4>Program Banks</h4>
+                    <select id="bank-selector">
+                        <option value="1">Bank 1</option>
+                        <option value="2">Bank 2</option>
+                        <option value="3">Bank 3</option>
+                        <option value="4">Bank 4</option>
+                        <option value="5">Bank 5</option>
+                    </select>
+                    <button onclick="saveToBank()">Save to Bank</button>
+                    <button onclick="loadFromBank()">Load from Bank</button>
+                </div>
+                
+                <div class="control-group">
+                    <h4>Program Status</h4>
+                    <div style="text-align: center; color: #28a745; font-weight: bold; padding: 10px;">
+                        <span id="program-status">Ready</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Include our simplified communication and parameter modules -->
+    <script src="simplified_communication.js"></script>
+    <script src="standard_parameters.js"></script>
+
+    <script>
+        // Global state
+        let comm = null
+        let currentProgram = {}
+        let masterPowerOn = false
+        let programBanks = new Map()
+        
+        // Piano keyboard notes and frequencies
+        const PIANO_NOTES = [
+            { note: 'C3', freq: 130.81 },
+            { note: 'C#3', freq: 138.59, black: true },
+            { note: 'D3', freq: 146.83 },
+            { note: 'D#3', freq: 155.56, black: true },
+            { note: 'E3', freq: 164.81 },
+            { note: 'F3', freq: 174.61 },
+            { note: 'F#3', freq: 185.00, black: true },
+            { note: 'G3', freq: 196.00 },
+            { note: 'G#3', freq: 207.65, black: true },
+            { note: 'A3', freq: 220.00 },
+            { note: 'A#3', freq: 233.08, black: true },
+            { note: 'B3', freq: 246.94 },
+            { note: 'C4', freq: 261.63 },
+            { note: 'C#4', freq: 277.18, black: true },
+            { note: 'D4', freq: 293.66 },
+            { note: 'D#4', freq: 311.13, black: true },
+            { note: 'E4', freq: 329.63 },
+            { note: 'F4', freq: 349.23 },
+            { note: 'F#4', freq: 369.99, black: true },
+            { note: 'G4', freq: 392.00 },
+            { note: 'G#4', freq: 415.30, black: true },
+            { note: 'A4', freq: 440.00 },
+            { note: 'A#4', freq: 466.16, black: true },
+            { note: 'B4', freq: 493.88 },
+            { note: 'C5', freq: 523.25 }
+        ]
+
+        // Initialize application
+        function init() {
+            // Set up communication
+            const controllerId = `ctrl-${Math.random().toString(36).substr(2, 9)}`
+            comm = new SimplifiedComm('controller', controllerId)
+            
+            // Set up communication callbacks
+            comm.onPeerConnected = handlePeerConnected
+            comm.onPeerDisconnected = handlePeerDisconnected
+            comm.onMessage = handleMessage
+            
+            // Connect to server
+            comm.connect()
+            
+            // Initialize UI
+            initializeProgram()
+            generatePianoKeyboard()
+            generateParameterControls()
+            updateConnectionStatus()
+            
+            // Set up periodic status updates
+            setInterval(updateConnectionStatus, 1000)
+        }
+
+        // Initialize program with default values
+        function initializeProgram() {
+            currentProgram = ParameterUtils.getDefaultProgram()
+        }
+
+        // Generate piano keyboard
+        function generatePianoKeyboard() {
+            const keyboard = document.getElementById('piano-keyboard')
+            keyboard.innerHTML = ''
+            
+            PIANO_NOTES.forEach(note => {
+                const key = document.createElement('div')
+                key.className = `piano-key ${note.black ? 'black' : ''}`
+                key.textContent = note.note
+                key.onclick = () => setFrequency(note.freq)
+                keyboard.appendChild(key)
+            })
+            
+            updatePianoHighlight()
+        }
+
+        // Update piano keyboard highlight
+        function updatePianoHighlight() {
+            const currentFreq = currentProgram.fundamentalFrequency
+            const keys = document.querySelectorAll('.piano-key')
+            
+            keys.forEach((key, index) => {
+                const note = PIANO_NOTES[index]
+                if (Math.abs(note.freq - currentFreq) < 1) {
+                    key.classList.add('active')
+                } else {
+                    key.classList.remove('active')
+                }
+            })
+        }
+
+        // Set frequency from piano keyboard
+        function setFrequency(freq) {
+            updateParameter('fundamentalFrequency', freq)
+            updatePianoHighlight()
+        }
+
+        // Generate parameter controls
+        function generateParameterControls() {
+            const grid = document.getElementById('parameters-grid')
+            grid.innerHTML = ''
+            
+            // Group parameters by category
+            const categories = {}
+            Object.entries(SYNTH_PARAMETERS).forEach(([name, def]) => {
+                if (!categories[def.category]) {
+                    categories[def.category] = []
+                }
+                categories[def.category].push([name, def])
+            })
+            
+            // Create category sections
+            Object.entries(PARAMETER_CATEGORIES).forEach(([catKey, catDef]) => {
+                if (!categories[catKey]) return
+                
+                const categoryDiv = document.createElement('div')
+                categoryDiv.className = 'param-category'
+                
+                const title = document.createElement('div')
+                title.className = 'category-title'
+                title.textContent = catDef.name
+                categoryDiv.appendChild(title)
+                
+                categories[catKey].forEach(([paramName, paramDef]) => {
+                    const control = createParameterControl(paramName, paramDef)
+                    categoryDiv.appendChild(control)
+                })
+                
+                grid.appendChild(categoryDiv)
+            })
+        }
+
+        // Create individual parameter control
+        function createParameterControl(paramName, paramDef) {
+            const control = document.createElement('div')
+            control.className = 'param-control'
+            
+            const label = document.createElement('div')
+            label.className = 'param-label'
+            label.textContent = paramDef.displayName
+            
+            let input
+            if (paramDef.type === 'boolean') {
+                input = document.createElement('input')
+                input.type = 'checkbox'
+                input.checked = currentProgram[paramName]
+                input.onchange = (e) => updateParameter(paramName, e.target.checked)
+            } else {
+                input = document.createElement('input')
+                input.type = 'range'
+                input.min = paramDef.min
+                input.max = paramDef.max
+                input.step = paramDef.type === 'int' ? 1 : 0.01
+                input.value = currentProgram[paramName]
+                input.oninput = (e) => updateParameter(paramName, parseFloat(e.target.value))
+            }
+            
+            const valueDisplay = document.createElement('div')
+            valueDisplay.className = 'param-value'
+            valueDisplay.id = `value-${paramName}`
+            updateValueDisplay(paramName, currentProgram[paramName])
+            
+            control.appendChild(label)
+            control.appendChild(input)
+            control.appendChild(valueDisplay)
+            
+            return control
+        }
+
+        // Update parameter value and push to synths
+        function updateParameter(paramName, value) {
+            currentProgram[paramName] = ParameterUtils.clampParameter(paramName, value)
+            updateValueDisplay(paramName, currentProgram[paramName])
+            
+            // Proactively push complete program to all connected synths
+            pushCurrentProgram()
+        }
+
+        // Update value display
+        function updateValueDisplay(paramName, value) {
+            const display = document.getElementById(`value-${paramName}`)
+            if (display) {
+                const paramDef = SYNTH_PARAMETERS[paramName]
+                if (paramDef.type === 'boolean') {
+                    display.textContent = value ? 'On' : 'Off'
+                } else if (paramDef.type === 'int') {
+                    display.textContent = `${value}${paramDef.unit ? ' ' + paramDef.unit : ''}`
+                } else {
+                    display.textContent = `${value.toFixed(2)}${paramDef.unit ? ' ' + paramDef.unit : ''}`
+                }
+            }
+        }
+
+        // Push current program to all connected synths
+        function pushCurrentProgram() {
+            const message = MessageBuilder.program(currentProgram)
+            const sent = comm.broadcast(message)
+            
+            if (sent > 0) {
+                updateProgramStatus(`Sent to ${sent} synth${sent !== 1 ? 's' : ''}`)
+            } else {
+                updateProgramStatus('No synths connected')
+            }
+        }
+
+        // Update program status display
+        function updateProgramStatus(status) {
+            document.getElementById('program-status').textContent = status
+            setTimeout(() => {
+                document.getElementById('program-status').textContent = 'Ready'
+            }, 2000)
+        }
+
+        // Toggle master power
+        function togglePower() {
+            masterPowerOn = !masterPowerOn
+            const powerSwitch = document.getElementById('master-power')
+            powerSwitch.classList.toggle('on', masterPowerOn)
+            
+            const message = MessageBuilder.command('power', masterPowerOn)
+            comm.broadcast(message)
+            
+            updateProgramStatus(masterPowerOn ? 'Power ON' : 'Power OFF')
+        }
+
+        // Reset to default program
+        function resetToDefaults() {
+            currentProgram = ParameterUtils.getDefaultProgram()
+            refreshAllControls()
+            pushCurrentProgram()
+            updateProgramStatus('Reset to defaults')
+        }
+
+        // Randomize program
+        function randomizeProgram() {
+            Object.entries(SYNTH_PARAMETERS).forEach(([paramName, paramDef]) => {
+                if (paramDef.type === 'boolean') {
+                    currentProgram[paramName] = Math.random() > 0.5
+                } else if (paramDef.type === 'int') {
+                    currentProgram[paramName] = Math.floor(Math.random() * (paramDef.max - paramDef.min + 1)) + paramDef.min
+                } else {
+                    currentProgram[paramName] = Math.random() * (paramDef.max - paramDef.min) + paramDef.min
+                }
+            })
+            
+            refreshAllControls()
+            pushCurrentProgram()
+            updateProgramStatus('Randomized')
+        }
+
+        // Save current program to bank
+        function saveToBank() {
+            const bankId = parseInt(document.getElementById('bank-selector').value)
+            programBanks.set(bankId, {...currentProgram})
+            
+            const message = MessageBuilder.command('save', bankId)
+            comm.broadcast(message)
+            
+            updateProgramStatus(`Saved to Bank ${bankId}`)
+        }
+
+        // Load program from bank
+        function loadFromBank() {
+            const bankId = parseInt(document.getElementById('bank-selector').value)
+            
+            if (programBanks.has(bankId)) {
+                currentProgram = {...programBanks.get(bankId)}
+                refreshAllControls()
+                pushCurrentProgram()
+                updateProgramStatus(`Loaded Bank ${bankId}`)
+            } else {
+                updateProgramStatus(`Bank ${bankId} is empty`)
+            }
+        }
+
+        // Refresh all UI controls to match current program
+        function refreshAllControls() {
+            Object.entries(currentProgram).forEach(([paramName, value]) => {
+                const paramDef = SYNTH_PARAMETERS[paramName]
+                if (paramDef) {
+                    // Update input control
+                    const inputs = document.querySelectorAll(`input`)
+                    inputs.forEach(input => {
+                        if (input.oninput && input.oninput.toString().includes(paramName)) {
+                            if (paramDef.type === 'boolean') {
+                                input.checked = value
+                            } else {
+                                input.value = value
+                            }
+                        }
+                    })
+                    
+                    // Update value display
+                    updateValueDisplay(paramName, value)
+                }
+            })
+            
+            updatePianoHighlight()
+        }
+
+        // Handle peer connection
+        function handlePeerConnected(peerId) {
+            console.log(`Synth connected: ${peerId}`)
+            updateConnectionStatus()
+            
+            // Send current program to newly connected synth
+            setTimeout(() => pushCurrentProgram(), 500)
+        }
+
+        // Handle peer disconnection
+        function handlePeerDisconnected(peerId) {
+            console.log(`Synth disconnected: ${peerId}`)
+            updateConnectionStatus()
+        }
+
+        // Handle incoming messages
+        function handleMessage(peerId, message) {
+            console.log(`Message from ${peerId}:`, message)
+            
+            if (message.type === 'pong') {
+                // Update latency info for this peer
+                updatePeerLatency(peerId, message.latency)
+            }
+        }
+
+        // Update connection status display
+        function updateConnectionStatus() {
+            const serverStatus = document.getElementById('server-status')
+            const serverText = document.getElementById('server-text')
+            const synthStatus = document.getElementById('synth-status')
+            const synthCount = document.getElementById('synth-count')
+            
+            // Server status
+            if (comm && comm.ws && comm.ws.readyState === WebSocket.OPEN) {
+                serverStatus.classList.add('connected')
+                serverText.textContent = 'Connected'
+            } else {
+                serverStatus.classList.remove('connected')
+                serverText.textContent = 'Disconnected'
+            }
+            
+            // Synth status
+            const connectedPeers = comm ? comm.getConnectedPeers() : []
+            synthCount.textContent = connectedPeers.length
+            
+            if (connectedPeers.length > 0) {
+                synthStatus.classList.add('connected')
+            } else {
+                synthStatus.classList.remove('connected')
+            }
+            
+            updateSynthList(connectedPeers)
+        }
+
+        // Update synth list display
+        function updateSynthList(connectedPeers) {
+            const synthList = document.getElementById('synth-list')
+            
+            if (connectedPeers.length === 0) {
+                synthList.innerHTML = '<div style="text-align: center; color: #666; padding: 20px;">No synthesizers connected</div>'
+                return
+            }
+            
+            synthList.innerHTML = connectedPeers.map(peerId => {
+                return `
+                    <div class="synth-item">
+                        <span>${peerId}</span>
+                        <span class="latency" id="latency-${peerId}">--ms</span>
+                    </div>
+                `
+            }).join('')
+        }
+
+        // Update latency display for specific peer
+        function updatePeerLatency(peerId, latency) {
+            const latencyEl = document.getElementById(`latency-${peerId}`)
+            if (latencyEl) {
+                latencyEl.textContent = `${latency}ms`
+            }
+        }
+
+        // Start the application
+        document.addEventListener('DOMContentLoaded', init)
+    </script>
+</body>
+</html>
