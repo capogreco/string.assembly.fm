@@ -7,6 +7,7 @@ class StochasticChordDistributor {
         this.strategies = {
             'round-robin': this.distributeRoundRobin.bind(this),
             'balanced': this.distributeBalanced.bind(this),
+            'randomized-balanced': this.distributeRandomizedBalanced.bind(this),
             'weighted': this.distributeWeighted.bind(this),
             'ensemble': this.distributeEnsemble.bind(this)
         }
@@ -45,6 +46,10 @@ class StochasticChordDistributor {
             seed = null
         } = options
         
+        console.log('🎼 StochasticChordDistributor.distributeChord called with:')
+        console.log('  - chord notes:', chord.notes)
+        console.log('  - expressions:', expressions)
+        
         // Use seeded random if provided
         const random = seed ? this.createSeededRandom(seed) : Math.random
         
@@ -55,6 +60,8 @@ class StochasticChordDistributor {
             { random, ...options }
         )
         
+        console.log('  - base assignments:', baseAssignments)
+        
         // Apply stochastic variations and expressions
         const finalAssignments = this.applyStochasticVariations(
             baseAssignments,
@@ -62,6 +69,8 @@ class StochasticChordDistributor {
             expressions,
             random
         )
+        
+        console.log('  - final assignments with expressions:', finalAssignments)
         
         return finalAssignments
     }
@@ -103,6 +112,53 @@ class StochasticChordDistributor {
                 synthIndex++
             }
         }
+        
+        return assignments
+    }
+    
+    // Randomized balanced distribution - maintains equal note distribution but randomizes synth assignments
+    // 
+    // This strategy ensures that:
+    // 1. Each note in the chord gets roughly equal representation across synths
+    // 2. The specific synth-to-note assignments are randomized each time
+    // 3. If you have 4 synths and 2 notes, you'll get 2 synths per note, but which 2 is random
+    // 
+    // Example with 6 synths and 3 notes [C4, E4, G4]:
+    // - Balanced would assign: synth1→C4, synth2→E4, synth3→G4, synth4→C4, synth5→E4, synth6→G4
+    // - Randomized-balanced might assign: synth3→C4, synth1→E4, synth5→G4, synth2→C4, synth6→E4, synth4→G4
+    // - Both strategies ensure 2 synths per note, but randomized shuffles the assignments
+    distributeRandomizedBalanced(notes, synthIds, options) {
+        const random = options.random || Math.random
+        
+        // Create a balanced allocation of notes (same as balanced strategy)
+        const noteAssignments = []
+        const synthsPerNote = Math.floor(synthIds.length / notes.length)
+        const remainder = synthIds.length % notes.length
+        
+        for (let noteIndex = 0; noteIndex < notes.length; noteIndex++) {
+            // Base allocation - each note gets synthsPerNote synths
+            // First 'remainder' notes get one extra synth
+            const synthCount = synthsPerNote + (noteIndex < remainder ? 1 : 0)
+            
+            for (let i = 0; i < synthCount; i++) {
+                noteAssignments.push({
+                    baseNote: notes[noteIndex],
+                    noteIndex: noteIndex
+                })
+            }
+        }
+        
+        // Shuffle the synth IDs to randomize which synth gets which note
+        // This is the key difference from balanced strategy
+        const shuffledSynthIds = [...synthIds]
+        this.shuffleArray(shuffledSynthIds, random)
+        
+        // Combine shuffled synths with balanced note assignments
+        const assignments = noteAssignments.map((noteAssignment, index) => ({
+            synthId: shuffledSynthIds[index],
+            baseNote: noteAssignment.baseNote,
+            noteIndex: noteAssignment.noteIndex
+        }))
         
         return assignments
     }
@@ -223,7 +279,9 @@ class StochasticChordDistributor {
             
             // Apply expression if provided
             const expression = expressions[assignment.baseNote] || { type: 'none' }
+            console.log(`  - Looking up expression for ${assignment.baseNote}:`, expression)
             result.expression = this.processExpression(expression, assignment.baseNote, random)
+            console.log(`  - Processed expression for ${assignment.baseNote}:`, result.expression)
             
             return result
         })
@@ -340,8 +398,21 @@ class StochasticChordDistributor {
         }
     }
     
+    // Fisher-Yates shuffle algorithm with custom random function
+    shuffleArray(array, random = Math.random) {
+        for (let i = array.length - 1; i > 0; i--) {
+            const j = Math.floor(random() * (i + 1))
+            ;[array[i], array[j]] = [array[j], array[i]]
+        }
+        return array
+    }
+    
     // Generate program for each synth
     generatePrograms(assignments, baseProgram, expressions) {
+        console.log('🎹 generatePrograms called with:')
+        console.log('  - assignments:', assignments)
+        console.log('  - expressions param:', expressions)
+        
         return assignments.map(assignment => {
             const program = { ...baseProgram }
             
@@ -355,6 +426,7 @@ class StochasticChordDistributor {
             
             // Apply expression parameters
             const expr = assignment.expression
+            console.log(`  - Processing assignment for ${assignment.synthId}, note ${assignment.baseNote}, expression:`, expr)
             switch (expr.type) {
                 case 'trill':
                     program.trillEnabled = true

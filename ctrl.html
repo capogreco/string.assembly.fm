@@ -578,6 +578,17 @@
                 <strong>Current Chord: </strong><span id="chord-display" style="color: #667eea;">None</span>
             </div>
             
+            <div style="margin-bottom: 15px; padding: 10px; background: #f0f8ff; border-radius: 8px;">
+                <label for="distribution-strategy" style="display: block; margin-bottom: 5px; font-weight: bold;">Distribution Strategy:</label>
+                <select id="distribution-strategy" style="width: 100%; padding: 5px; border: 1px solid #ddd; border-radius: 4px;">
+                    <option value="randomized-balanced">Randomized Balanced (Equal notes, random synths)</option>
+                    <option value="balanced">Balanced (Sequential allocation)</option>
+                    <option value="weighted">Weighted (Root/Fifth emphasis)</option>
+                    <option value="round-robin">Round Robin</option>
+                    <option value="ensemble">Ensemble Sections</option>
+                </select>
+            </div>
+            
             <div class="section-title">Piano</div>
             <div id="piano-container" style="margin: 10px 0;">
                 <svg id="piano" width="750" height="80" style="border: 1px solid #ddd; border-radius: 4px; background: #fafafa;" xmlns="http://www.w3.org/2000/svg">
@@ -850,6 +861,7 @@
         let wake_lock = null
         let kicked = false
         let current_program = null
+        let current_chord_state = null // Store current chord and distribution info
         const program_banks = new Map()
         
         // Harmonic ratio selector functionality
@@ -1057,8 +1069,38 @@
                     peer.param_channel = channel
                     
                     channel.addEventListener('open', () => {
-                        console.log(`Param channel open to ${synth_id}`)
+                        console.log(`🔗 Param channel open to ${synth_id}`)
                         update_synth_list()
+                        
+                        // Automatically send current program to newly connected synth
+                        console.log(`📤 Auto-sending program to newly connected ${synth_id}...`)
+                        const assignment = assignNoteToSynth(synth_id)
+                        if (assignment) {
+                            channel.send(JSON.stringify({
+                                type: 'program',
+                                program: assignment.program
+                            }))
+                            console.log(`🎵 Automatically assigned ${assignment.note} (${assignment.frequency.toFixed(1)}Hz, ${assignment.expression}) to newly connected ${synth_id}`)
+                        } else if (current_program && Object.keys(current_program).length > 0) {
+                            // Fallback to stored program if no chord state
+                            channel.send(JSON.stringify({
+                                type: 'program',
+                                program: current_program
+                            }))
+                            console.log(`📦 Automatically sent stored program to newly connected ${synth_id} (no chord active)`)
+                        } else {
+                            // If no current program, send default program from UI
+                            const default_program = get_current_program()
+                            if (default_program && Object.keys(default_program).length > 0) {
+                                channel.send(JSON.stringify({
+                                    type: 'program',
+                                    program: default_program
+                                }))
+                                console.log(`⚙️ Automatically sent default UI program to newly connected ${synth_id}`)
+                            } else {
+                                console.log(`⚠️ No program available to send to newly connected ${synth_id}`)
+                            }
+                        }
                         
                         // Start ping interval
                         const ping_interval = setInterval(() => {
@@ -1084,26 +1126,30 @@
                             update_synth_list()
                         } else if (data.type === 'request_program') {
                             // send current program to requesting synth
-                            console.log(`Received program request from ${synth_id}`)
+                            console.log(`📞 Received program request from ${synth_id}`)
                             
-                            // Note: Frequency is now set per-note via chord distribution
-                            
-                            console.log('Current program object:', current_program)
-                            console.log('Current program has keys:', Object.keys(current_program || {}))
-                            if (current_program && Object.keys(current_program).length > 0) {
+                            const assignment = assignNoteToSynth(synth_id)
+                            if (assignment) {
+                                channel.send(JSON.stringify({
+                                    type: 'program',
+                                    program: assignment.program
+                                }))
+                                console.log(`🎵 Sent chord-based program to requesting ${synth_id}: ${assignment.note} (${assignment.frequency.toFixed(1)}Hz, ${assignment.expression})`)
+                            } else if (current_program && Object.keys(current_program).length > 0) {
+                                // Fallback to stored program if no chord state
                                 channel.send(JSON.stringify({
                                     type: 'program',
                                     program: current_program
                                 }))
-                                console.log(`Sent current program to ${synth_id}:`, current_program)
+                                console.log(`📦 Sent stored program to requesting ${synth_id} (no chord active)`)
                             } else {
-                                console.log(`No program to send to ${synth_id} - creating default program`)
+                                console.log(`⚙️ No stored program for ${synth_id} - creating default from UI`)
                                 const default_program = get_current_program()
                                 channel.send(JSON.stringify({
                                     type: 'program',
                                     program: default_program
                                 }))
-                                console.log(`Sent default program to ${synth_id}:`, default_program)
+                                console.log(`⚙️ Sent default UI program to ${synth_id}`)
                             }
                         }
                     })
@@ -1219,6 +1265,67 @@
             return randomNumerator / randomDenominator;
         }
 
+        // Helper function to assign a note from current chord to a synth
+        function assignNoteToSynth(synthId) {
+            if (!current_chord_state || current_chord_state.chord.length === 0) {
+                console.log(`🚫 No chord state available for ${synthId} - cannot assign note`)
+                return null;
+            }
+            
+            // Assign a note from the current chord to this synth
+            const assignedNote = current_chord_state.chord[Math.floor(Math.random() * current_chord_state.chord.length)]
+            const synthProgram = { ...current_chord_state.baseProgram }
+            console.log(`🎲 Assigning random note ${assignedNote} from chord [${current_chord_state.chord.join(', ')}] to ${synthId}`)
+            
+            // Set frequency for assigned note
+            const frequency = note_to_frequency(assignedNote.slice(0, -1), parseInt(assignedNote.slice(-1)))
+            synthProgram.fundamentalFrequency = frequency
+            
+            // Apply expressions if available
+            const expressions = svgExpression ? svgExpression.getAllExpressions() : {}
+            console.log(`🔍 Looking for expression for ${assignedNote} in:`, expressions)
+            const assignedExpression = expressions[assignedNote] || { type: 'none' }
+            console.log(`🔍 Found expression for ${assignedNote}:`, assignedExpression)
+            
+            // Apply expression parameters
+            switch (assignedExpression.type) {
+                case 'vibrato':
+                    synthProgram.vibratoEnabled = true
+                    const vibratoRatio = getRandomHarmonicRatio('vibrato')
+                    synthProgram.vibratoRate = (synthProgram.vibratoRate || 4) * vibratoRatio
+                    synthProgram.vibratoDepth = assignedExpression.depth || 0.01
+                    break
+                case 'tremolo':
+                    synthProgram.tremoloEnabled = true
+                    const tremoloRatio = getRandomHarmonicRatio('tremolo')
+                    synthProgram.tremoloSpeed = (synthProgram.tremoloSpeed || 10) * tremoloRatio
+                    synthProgram.tremoloDepth = assignedExpression.depth || 0.3
+                    synthProgram.tremoloArticulation = synthProgram.tremoloArticulation || 0.8
+                    console.log(`🥁 Tremolo assigned to ${assignedNote}: enabled=${synthProgram.tremoloEnabled}, speed=${synthProgram.tremoloSpeed}, depth=${synthProgram.tremoloDepth}`)
+                    break
+                case 'trill':
+                    synthProgram.trillEnabled = true
+                    const trillRatio = getRandomHarmonicRatio('trill')
+                    synthProgram.trillSpeed = (synthProgram.trillSpeed || 8) * trillRatio
+                    synthProgram.trillInterval = assignedExpression.interval || 2
+                    synthProgram.trillArticulation = synthProgram.trillArticulation || 0.7
+                    console.log(`🎹 Trill assigned to ${assignedNote}: enabled=${synthProgram.trillEnabled}, interval=${synthProgram.trillInterval}, speed=${synthProgram.trillSpeed}, articulation=${synthProgram.trillArticulation}, targetNote=${assignedExpression.targetNote}`)
+                    console.log(`🎹 Full trill expression data:`, assignedExpression)
+                    break
+                default:
+                    synthProgram.vibratoEnabled = false
+                    synthProgram.tremoloEnabled = false
+                    synthProgram.trillEnabled = false
+            }
+            
+            return {
+                program: synthProgram,
+                note: assignedNote,
+                frequency: frequency,
+                expression: assignedExpression.type
+            }
+        }
+
         // Distribute chord to connected synths
         function distribute_chord() {
             if (currentChord.length === 0) {
@@ -1243,70 +1350,114 @@
             
             // Get expressions for each note
             const expressions = svgExpression ? svgExpression.getAllExpressions() : {}
+            console.log('🎭 All expressions:', expressions)
+            console.log('🎵 Chord notes being distributed:', currentChord)
             
-            // Distribute notes evenly across synths
-            let sentCount = 0
-            availableSynths.forEach(([synthId, peer], index) => {
-                // Assign note in round-robin fashion
-                const noteIndex = index % currentChord.length
-                const assignedNote = currentChord[noteIndex]
-                const assignedExpression = expressions[assignedNote] || { type: 'none' }
-                
-                // Create program for this synth
-                const synthProgram = { ...baseProgram }
-                
-                // Set frequency
-                const frequency = note_to_frequency(assignedNote.slice(0, -1), parseInt(assignedNote.slice(-1)))
-                synthProgram.fundamentalFrequency = frequency
-                
-                // Apply expression for this note
-                switch (assignedExpression.type) {
-                    case 'vibrato':
-                        synthProgram.vibratoEnabled = 1
-                        // Apply random harmonic ratio to vibrato rate
-                        const vibratoRatio = getRandomHarmonicRatio('vibrato');
-                        synthProgram.vibratoRate = (synthProgram.vibratoRate || 4) * vibratoRatio;
-                        // Use per-note depth from piano roll gesture
-                        synthProgram.vibratoDepth = assignedExpression.depth || 0.01;
-                        console.log(`${synthId} vibrato: ${synthProgram.vibratoRate.toFixed(2)}Hz (${vibratoRatio.toFixed(2)}x)`);
-                        break
-                    case 'tremolo':
-                        synthProgram.tremoloEnabled = 1
-                        // Apply random harmonic ratio to tremolo speed
-                        const tremoloRatio = getRandomHarmonicRatio('tremolo');
-                        synthProgram.tremoloSpeed = (synthProgram.tremoloSpeed || 10) * tremoloRatio;
-                        // Use per-note depth from piano roll gesture
-                        synthProgram.tremoloDepth = assignedExpression.depth || 0.3;
-                        synthProgram.tremoloArticulation = synthProgram.tremoloArticulation || 0.8;
-                        console.log(`${synthId} tremolo: ${synthProgram.tremoloSpeed.toFixed(2)}Hz (${tremoloRatio.toFixed(2)}x)`);
-                        break
-                    case 'trill':
-                        synthProgram.trillEnabled = 1
-                        // Apply random harmonic ratio to trill speed
-                        const trillRatio = getRandomHarmonicRatio('trill');
-                        synthProgram.trillSpeed = (synthProgram.trillSpeed || 8) * trillRatio;
-                        // Use per-note interval from piano roll gesture
-                        synthProgram.trillInterval = assignedExpression.interval || 2;
-                        synthProgram.trillArticulation = synthProgram.trillArticulation || 0.7;
-                        console.log(`${synthId} trill: ${synthProgram.trillSpeed.toFixed(2)}Hz (${trillRatio.toFixed(2)}x)`);
-                        break
-                    default:
-                        synthProgram.vibratoEnabled = 0
-                        synthProgram.tremoloEnabled = 0
-                        synthProgram.trillEnabled = 0
+            // Filter out notes that are ONLY trill targets
+            const actualNotes = currentChord.filter(note => {
+                const expr = expressions[note]
+                if (!expr || expr.type === 'none') {
+                    // Check if this note is a trill target of another note
+                    for (const [otherNote, otherExpr] of Object.entries(expressions)) {
+                        if (otherExpr.type === 'trill' && otherExpr.targetNote === note) {
+                            // This is just a trill target, exclude it
+                            return false
+                        }
+                    }
                 }
-                
-                // Send to synth
-                peer.param_channel.send(JSON.stringify({
-                    type: 'program',
-                    program: synthProgram
-                }))
-                
-                console.log(`${synthId}: ${assignedNote} (${frequency.toFixed(1)}Hz) - ${assignedExpression.type}`)
-                sentCount++
+                // Include all other notes (those with expressions or standalone notes)
+                return true
             })
             
-            console.log(`Distributed chord to ${sentCount} synths`)
+            console.log('🎵 Actual notes to distribute (excluding trill targets):', actualNotes)
+            
+            // Get synth IDs only
+            const synthIds = availableSynths.map(([synthId, peer]) => synthId)
+            
+            // Get selected distribution strategy
+            const strategySelect = document.getElementById('distribution-strategy')
+            const selectedStrategy = strategySelect ? strategySelect.value : 'randomized-balanced'
+            
+            // Filter expressions to only include those for notes we're actually distributing
+            const filteredExpressions = {}
+            actualNotes.forEach(note => {
+                if (expressions[note]) {
+                    filteredExpressions[note] = expressions[note]
+                }
+            })
+            console.log('📋 Filtered expressions for actual notes:', filteredExpressions)
+            
+            // Use StochasticChordDistributor with selected strategy
+            const assignments = chordDistributor.distributeChord(
+                { notes: actualNotes },
+                synthIds,
+                { 
+                    strategy: selectedStrategy,
+                    stochasticParams: {
+                        microDetuning: { enabled: false },
+                        octaveDoubling: { enabled: false },
+                        harmonicEnrichment: { enabled: false },
+                        dynamicVariation: { enabled: false }
+                    },
+                    expressions: filteredExpressions
+                }
+            )
+            
+            // Generate programs for each synth
+            console.log('📋 Assignments after distribution:', assignments)
+            
+            const programs = chordDistributor.generatePrograms(
+                assignments,
+                baseProgram,
+                filteredExpressions
+            )
+            
+            // Send programs to synths
+            let sentCount = 0
+            programs.forEach(({ synthId, program, metadata }) => {
+                const peer = peers.get(synthId)
+                if (peer && peer.param_channel && peer.param_channel.readyState === 'open') {
+                    // Apply harmonic ratios to expression parameters (preserving existing behavior)
+                    if (program.vibratoEnabled === true) {
+                        const vibratoRatio = getRandomHarmonicRatio('vibrato')
+                        program.vibratoRate = (program.vibratoRate || 4) * vibratoRatio
+                        console.log(`${synthId} vibrato: ${program.vibratoRate.toFixed(2)}Hz (${vibratoRatio.toFixed(2)}x)`)
+                    }
+                    if (program.tremoloEnabled === true) {
+                        const tremoloRatio = getRandomHarmonicRatio('tremolo')
+                        program.tremoloSpeed = (program.tremoloSpeed || 10) * tremoloRatio
+                        console.log(`${synthId} tremolo: ${program.tremoloSpeed.toFixed(2)}Hz (${tremoloRatio.toFixed(2)}x)`)
+                    }
+                    if (program.trillEnabled === true) {
+                        const trillRatio = getRandomHarmonicRatio('trill')
+                        program.trillSpeed = (program.trillSpeed || 8) * trillRatio
+                        console.log(`${synthId} trill: ${program.trillSpeed.toFixed(2)}Hz (${trillRatio.toFixed(2)}x), interval=${program.trillInterval}`)
+                    }
+                    
+                    // Send to synth
+                    peer.param_channel.send(JSON.stringify({
+                        type: 'program',
+                        program: program
+                    }))
+                    
+                    console.log(`${synthId}: ${metadata.baseNote} (${program.fundamentalFrequency.toFixed(1)}Hz) - ${metadata.expression}`)
+                    sentCount++
+                }
+            })
+            
+            console.log(`🎼 Distributed chord [${actualNotes.join(', ')}] to ${sentCount} synths using ${selectedStrategy} strategy`)
+            
+            // Store current chord state so newly connected synths can be assigned notes
+            current_chord_state = {
+                chord: [...actualNotes],
+                baseProgram: { ...baseProgram },
+                strategy: selectedStrategy,
+                timestamp: Date.now()
+            }
+            console.log(`💾 Stored chord state for new synth connections:`, current_chord_state)
+            
+            // Also store the base program as current_program for fallback
+            current_program = { ...baseProgram }
         }
         
         // Get current program from UI (excluding frequency and expressions - those are handled by chord distribution)
@@ -1322,6 +1473,12 @@
                     program[id] = value
                 }
             })
+            
+            // Initialize expression parameters to disabled state
+            // These will be overridden during chord distribution if expressions are active
+            program.vibratoEnabled = false
+            program.tremoloEnabled = false
+            program.trillEnabled = false
             
             return program
         }
@@ -1859,28 +2016,27 @@
                     const processedNotes = new Set();
                     const chordParts = [];
                     
-                    currentChord.forEach(note => {
-                        if (processedNotes.has(note)) return;
-                        
+                    // Filter out notes that are only trill targets
+                    const actualChordNotes = currentChord.filter(note => {
+                        const expr = expressions[note];
+                        if (!expr || expr.type === 'none') {
+                            // Check if this note is a trill target
+                            for (const [otherNote, otherExpr] of Object.entries(expressions)) {
+                                if (otherExpr.type === 'trill' && otherExpr.targetNote === note) {
+                                    return false;
+                                }
+                            }
+                        }
+                        return true;
+                    });
+                    
+                    actualChordNotes.forEach(note => {
                         const expr = expressions[note];
                         if (expr && expr.type === 'trill' && expr.targetNote) {
                             // Show trill with target in brackets
                             chordParts.push(`${note} (→${expr.targetNote})`);
-                            processedNotes.add(note);
-                            processedNotes.add(expr.targetNote);
                         } else {
-                            // Check if this is a trill target
-                            let isTrillTarget = false;
-                            for (const [otherNote, otherExpr] of Object.entries(expressions)) {
-                                if (otherExpr && otherExpr.type === 'trill' && otherExpr.targetNote === note) {
-                                    isTrillTarget = true;
-                                    break;
-                                }
-                            }
-                            if (!isTrillTarget) {
-                                chordParts.push(note);
-                                processedNotes.add(note);
-                            }
+                            chordParts.push(note);
                         }
                     });
                     
@@ -2227,9 +2383,9 @@
         }
         
         function handleExpressionChange(note, expression) {
-            console.log('Expression change:', note, expression);
+            console.log('Expression changed:', note, expression);
             
-            // Sync chord array with expression system
+            // Update current chord if needed
             if (svgExpression) {
                 const chordNotes = svgExpression.getChordNotes();
                 currentChord = chordNotes.sort((a, b) => {
@@ -2238,6 +2394,43 @@
                     return freqA - freqB;
                 });
                 console.log('Updated chord from expression system:', currentChord);
+                
+                // Update chord display immediately
+                const chordDisplay = document.getElementById('chord-display');
+                if (chordDisplay) {
+                    if (currentChord.length > 0) {
+                        const expressions = svgExpression.getAllExpressions();
+                        const chordParts = [];
+                        
+                        // Filter out notes that are only trill targets
+                        const actualChordNotes = currentChord.filter(note => {
+                            const expr = expressions[note];
+                            if (!expr || expr.type === 'none') {
+                                // Check if this note is a trill target
+                                for (const [otherNote, otherExpr] of Object.entries(expressions)) {
+                                    if (otherExpr.type === 'trill' && otherExpr.targetNote === note) {
+                                        return false;
+                                    }
+                                }
+                            }
+                            return true;
+                        });
+                        
+                        actualChordNotes.forEach(note => {
+                            const expr = expressions[note];
+                            if (expr && expr.type === 'trill' && expr.targetNote) {
+                                // Show trill with target in brackets
+                                chordParts.push(`${note} (→${expr.targetNote})`);
+                            } else {
+                                chordParts.push(note);
+                            }
+                        });
+                        
+                        chordDisplay.textContent = chordParts.join(', ');
+                    } else {
+                        chordDisplay.textContent = 'None';
+                    }
+                }
             }
             
             updateExpressionDisplay();
@@ -2253,31 +2446,29 @@
             if (chordDisplay) {
                 if (currentChord.length > 0) {
                     const expressions = svgExpression ? svgExpression.getAllExpressions() : {};
-                    const processedNotes = new Set();
                     const chordParts = [];
                     
-                    currentChord.forEach(note => {
-                        if (processedNotes.has(note)) return;
-                        
+                    // Filter out notes that are only trill targets
+                    const actualChordNotes = currentChord.filter(note => {
+                        const expr = expressions[note];
+                        if (!expr || expr.type === 'none') {
+                            // Check if this note is a trill target
+                            for (const [otherNote, otherExpr] of Object.entries(expressions)) {
+                                if (otherExpr.type === 'trill' && otherExpr.targetNote === note) {
+                                    return false;
+                                }
+                            }
+                        }
+                        return true;
+                    });
+                    
+                    actualChordNotes.forEach(note => {
                         const expr = expressions[note];
                         if (expr && expr.type === 'trill' && expr.targetNote) {
                             // Show trill with target in brackets
                             chordParts.push(`${note} (→${expr.targetNote})`);
-                            processedNotes.add(note);
-                            processedNotes.add(expr.targetNote);
                         } else {
-                            // Check if this is a trill target
-                            let isTrillTarget = false;
-                            for (const [otherNote, otherExpr] of Object.entries(expressions)) {
-                                if (otherExpr && otherExpr.type === 'trill' && otherExpr.targetNote === note) {
-                                    isTrillTarget = true;
-                                    break;
-                                }
-                            }
-                            if (!isTrillTarget) {
-                                chordParts.push(note);
-                                processedNotes.add(note);
-                            }
+                            chordParts.push(note);
                         }
                     });
                     

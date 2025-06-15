@@ -220,7 +220,12 @@ export class SynthCore {
             });
         }
         
-        this.log(`Applied program: freq=${program.fundamentalFrequency?.toFixed(1)}Hz`);
+        // Log program with expression status
+        const hasVibrato = program.vibratoEnabled === true || program.vibratoEnabled === 1;
+        const hasTremolo = program.tremoloEnabled === true || program.tremoloEnabled === 1;
+        const hasTrill = program.trillEnabled === true || program.trillEnabled === 1;
+        const expression = hasVibrato ? 'vibrato' : hasTremolo ? 'tremolo' : hasTrill ? 'trill' : 'none';
+        this.log(`Applied program: ${program.fundamentalFrequency?.toFixed(1)}Hz, expression: ${expression}`);
     }
     
     // Set power state

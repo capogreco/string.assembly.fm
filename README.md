@@ -90,12 +90,19 @@ deno task dev
 - WebRTC connection management
 - Latency monitoring
 - Controller conflict detection (warns if multiple controllers are open)
+- Chord distribution with selectable strategies
 
 **index.html** (407 lines)
 - Synthesizer client
 - Pink noise generation via AudioWorklet
 - Visual feedback (frequency analyzer)
 - Automatic connection to available controllers
+
+**stochastic_chords.js** (400+ lines)
+- Advanced chord distribution system
+- Multiple allocation strategies including randomized-balanced
+- Stochastic variations and expression support
+- Equal note representation with randomized synth assignments
 
 **pink_noise.js** (65 lines)
 - AudioWorklet processor
@@ -139,6 +146,54 @@ The template uses the ping/pong mechanism for state synchronization between cont
 - Controllers always have current synth state without explicit requests
 
 This pattern keeps the codebase clean and makes state management predictable and debuggable.
+
+## Chord Distribution Strategies
+
+The system includes sophisticated chord distribution strategies for allocating notes to synths:
+
+### Available Strategies
+
+**Randomized Balanced** (Recommended)
+- Maintains equal note representation across synths
+- Randomizes which specific synths get which notes
+- Example: 6 synths, 3 notes → each note gets 2 synths, but assignments are shuffled
+- Perfect for creating natural ensemble variations
+
+**Balanced**
+- Sequential allocation ensuring equal note distribution
+- Predictable synth-to-note assignments
+- Good for debugging and consistent setups
+
+**Weighted**
+- Emphasizes root and fifth notes with more synths
+- Creates harmonic emphasis in the ensemble
+- Root gets 2x weight, fifth gets 1.5x weight
+
+**Round Robin**
+- Simple cycling through notes for each synth
+- Lightweight but may create uneven distribution
+
+**Ensemble**
+- Creates "sections" of synths that focus on similar notes
+- 70% of each section plays the primary note, 30% varies
+- Mimics real orchestral section behavior
+
+### Using Distribution Strategies
+
+In the controller interface, select your preferred strategy from the dropdown in the "Chord & Expression Control" section. The strategy affects how notes are distributed when you click "Send Current Program".
+
+```javascript
+// Programmatic usage
+const assignments = chordDistributor.distributeChord(
+    { notes: ['C4', 'E4', 'G4'] },
+    ['synth1', 'synth2', 'synth3', 'synth4', 'synth5', 'synth6'],
+    { strategy: 'randomized-balanced' }
+);
+```
+
+### Testing Distribution Strategies
+
+Use `test-randomized-allocation.html` to visualize and compare different allocation strategies with various chord/synth combinations.
 
 ## Extending the Template
 
