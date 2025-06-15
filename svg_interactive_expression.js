@@ -3,6 +3,8 @@
 
 class SVGInteractiveExpression {
     constructor(svgElement, noteMapping) {
+        this.instanceId = Math.random().toString(36).substr(2, 9)
+        console.log('Creating SVGInteractiveExpression instance:', this.instanceId)
         this.svg = svgElement
         this.noteMapping = noteMapping // Array of {element: SVGRect, note: 'C4', freq: 261.63}
         this.expressions = new Map() // note -> expression data
@@ -23,8 +25,9 @@ class SVGInteractiveExpression {
         
         // Gesture thresholds
         this.DRAG_THRESHOLD = 10 // pixels before drag is recognized
-        this.VIBRATO_THRESHOLD = -20 // pixels up for vibrato
-        this.TREMOLO_THRESHOLD = 20 // pixels down for tremolo
+        this.VIBRATO_THRESHOLD = -30 // pixels up for vibrato (increased to avoid accidental triggers)
+        this.TREMOLO_THRESHOLD = 30 // pixels down for tremolo
+        this.HORIZONTAL_THRESHOLD = 15 // pixels horizontal to prioritize trill
         
         // Expression colors
         this.EXPRESSION_COLORS = {
@@ -66,17 +69,25 @@ class SVGInteractiveExpression {
         // Create canvas overlay for drawing expression indicators
         const svgRect = this.svg.getBoundingClientRect()
         
+        // Clean up any existing expression canvases in the parent
+        const parent = this.svg.parentElement
+        const existingCanvases = parent.querySelectorAll('canvas[data-expression-canvas]')
+        existingCanvases.forEach(canvas => {
+            console.log('Removing existing expression canvas:', canvas.getAttribute('data-expression-canvas'))
+            canvas.remove()
+        })
+        
         this.overlay = document.createElement('canvas')
         this.overlay.style.position = 'absolute'
         this.overlay.style.pointerEvents = 'none'
-        this.overlay.style.zIndex = '100'
+        this.overlay.style.zIndex = '1000'
+        this.overlay.setAttribute('data-expression-canvas', this.instanceId)
         
         // Size canvas larger than SVG to allow indicators outside
         this.overlay.width = svgRect.width + (this.canvasPadding * 2)
         this.overlay.height = svgRect.height + (this.canvasPadding * 2)
         
         // Position canvas over SVG
-        const parent = this.svg.parentElement
         parent.style.position = 'relative'
         parent.appendChild(this.overlay)
         
@@ -221,8 +232,10 @@ class SVGInteractiveExpression {
         // Convert to SVG coordinates
         const svgPoint = point.matrixTransform(this.svg.getScreenCTM().inverse())
         
-        // Check each note's bounding box
-        for (const noteData of this.noteMapping) {
+        // Check each note's bounding box in reverse order (black keys first)
+        // This ensures black keys, which are drawn on top, are checked before white keys
+        for (let i = this.noteMapping.length - 1; i >= 0; i--) {
+            const noteData = this.noteMapping[i]
             const rect = noteData.element
             const bbox = rect.getBBox()
             
@@ -284,6 +297,31 @@ class SVGInteractiveExpression {
                 this.chordNotes.add(this.dragStartNote)
                 expression = { type: 'none' }
             }
+        } else if (Math.abs(dx) > this.HORIZONTAL_THRESHOLD) {
+            // Check for horizontal drag first - trill
+            const targetNote = this.getNoteFromPosition(x, y)
+            console.log('Checking for trill target:', targetNote)
+            if (targetNote && targetNote.note !== this.dragStartNote) {
+                // Add main note to chord if not already
+                if (!this.chordNotes.has(this.dragStartNote)) {
+                    this.chordNotes.add(this.dragStartNote)
+                }
+                
+                expression = {
+                    type: 'trill',
+                    targetNote: targetNote.note,
+                    targetFreq: targetNote.freq,
+                    interval: this.calculateInterval(this.dragStartNote, targetNote.note),
+                    speed: 8
+                }
+                console.log('Trill detected:', expression)
+                
+                // Mark the target note as related but don't add to chord
+                this.relatedNotes.set(targetNote.note, {
+                    relatedTo: this.dragStartNote,
+                    type: 'trill-target'
+                })
+            }
         } else if (dy < this.VIBRATO_THRESHOLD) {
             // Dragged up - vibrato (negative dy means up)
             console.log('Vibrato detected')
@@ -311,34 +349,6 @@ class SVGInteractiveExpression {
                 type: 'tremolo',
                 depth: Math.min(1, dy / 100),
                 speed: 10
-            }
-        } else {
-            // Horizontal drag - check for trill target
-            const targetNote = this.getNoteFromPosition(x, y)
-            console.log('Checking for trill target:', targetNote)
-            if (targetNote && targetNote.note !== this.dragStartNote) {
-                // Add main note to chord if not already
-                if (!this.chordNotes.has(this.dragStartNote)) {
-                    this.chordNotes.add(this.dragStartNote)
-                }
-                
-                expression = {
-                    type: 'trill',
-                    targetNote: targetNote.note,
-                    targetFreq: targetNote.freq,
-                    interval: this.calculateInterval(this.dragStartNote, targetNote.note),
-                    speed: 8
-                }
-                console.log('Trill detected:', expression)
-                
-                // Also add the target note to chord and mark as related
-                if (!this.chordNotes.has(targetNote.note)) {
-                    this.chordNotes.add(targetNote.note)
-                }
-                this.relatedNotes.set(targetNote.note, {
-                    relatedTo: this.dragStartNote,
-                    type: 'trill-target'
-                })
             }
         }
         
@@ -439,9 +449,15 @@ class SVGInteractiveExpression {
         return result
     }
     
-    // Get current chord notes
+    // Get current chord notes (excluding trill targets)
     getChordNotes() {
-        return Array.from(this.chordNotes)
+        // Filter out notes that are only trill targets
+        const actualChordNotes = Array.from(this.chordNotes).filter(note => {
+            // Keep the note if it has its own expression or if it's not a trill target
+            const relatedInfo = this.relatedNotes.get(note)
+            return !relatedInfo || relatedInfo.type !== 'trill-target' || this.expressions.has(note)
+        })
+        return actualChordNotes
     }
     
     highlightKey(element, highlighted) {
@@ -472,12 +488,11 @@ class SVGInteractiveExpression {
         if (!element.hasAttribute('data-original-fill')) {
             element.setAttribute('data-original-fill', element.getAttribute('fill') || 'white')
             element.setAttribute('data-original-stroke', element.getAttribute('stroke') || '#000')
-            element.setAttribute('data-original-stroke-width', element.getAttribute('stroke-width') || '1')
         }
         
         // If note is in chord, use expression color for fill
         if (this.chordNotes.has(note)) {
-            let color, strokeWidth
+            let color
             
             // Check if this is a related note (like trill target)
             const relatedInfo = this.relatedNotes.get(note)
@@ -486,11 +501,9 @@ class SVGInteractiveExpression {
                 const mainNote = relatedInfo.relatedTo
                 const mainExpression = this.getExpression(mainNote)
                 color = this.EXPRESSION_COLORS_LIGHT[mainExpression.type]
-                strokeWidth = '2'
             } else {
                 // Use full color for main notes
                 color = this.EXPRESSION_COLORS[expression.type]
-                strokeWidth = '3'
             }
             
             // Store current fill to check if it needs updating
@@ -499,12 +512,10 @@ class SVGInteractiveExpression {
             // Apply visual changes
             element.setAttribute('fill', color)
             element.setAttribute('stroke', '#000')
-            element.setAttribute('stroke-width', strokeWidth)
             
             // Force style update to ensure visibility
             element.style.fill = color
             element.style.stroke = '#000'
-            element.style.strokeWidth = strokeWidth + 'px'
             element.style.opacity = '1'
             
             // Add visual feedback that this is a chord note
@@ -514,31 +525,43 @@ class SVGInteractiveExpression {
                 element.style.filter = 'brightness(1.2) saturate(1.2)'
             }
             
-            // Force a reflow if the color didn't change
-            if (currentFill === color) {
-                element.style.display = 'none'
-                element.offsetHeight // Force reflow
-                element.style.display = ''
-            }
+            // No need for force reflow - the style changes will update naturally
         } else {
             // Reset to original appearance
-            element.setAttribute('fill', element.getAttribute('data-original-fill'))
-            element.setAttribute('stroke', element.getAttribute('data-original-stroke'))
-            element.setAttribute('stroke-width', element.getAttribute('data-original-stroke-width'))
-            element.style.opacity = '1'
+            const originalFill = element.getAttribute('data-original-fill')
+            const originalStroke = element.getAttribute('data-original-stroke')
             
-            // Clear inline styles
+            if (originalFill) element.setAttribute('fill', originalFill)
+            if (originalStroke) element.setAttribute('stroke', originalStroke)
+            
+            // Clear ALL inline styles to ensure SVG attributes take effect
             element.style.fill = ''
             element.style.stroke = ''
-            element.style.strokeWidth = ''
             element.style.filter = ''
+            element.style.opacity = ''
+            element.style.display = ''
         }
     }
     
     render() {
-        if (!this.overlayCtx) return
+        if (!this.overlay || !this.overlayCtx) {
+            console.log('No overlay or context available for rendering')
+            return
+        }
         
-        // Clear canvas
+        // Ensure we have a valid context (canvas dimensions might have been reset)
+        if (this.overlay.width === 0 || this.overlay.height === 0) {
+            console.log('Canvas has no dimensions, repositioning overlay')
+            this.positionOverlay()
+            this.overlayCtx = this.overlay.getContext('2d')
+        }
+        
+        console.log('SVGInteractiveExpression.render() called')
+        console.log('Stack trace:', new Error().stack)
+        console.log('Current expressions:', this.expressions.size, Array.from(this.expressions.keys()))
+        console.log('Canvas dimensions:', this.overlay.width, 'x', this.overlay.height)
+        
+        // Always clear canvas first
         this.overlayCtx.clearRect(0, 0, this.overlay.width, this.overlay.height)
         
         // Draw expression indicators
@@ -554,16 +577,19 @@ class SVGInteractiveExpression {
         const ctx = this.overlayCtx
         const svgRect = this.svg.getBoundingClientRect()
         
-        for (const [note, expression] of this.expressions) {
-            // Only draw indicators for notes in the chord
-            if (!this.chordNotes.has(note)) continue
-            
+        console.log('drawExpressionIndicators() - chordNotes:', this.chordNotes.size, Array.from(this.chordNotes))
+        
+        // Draw expression for each chord note
+        for (const note of this.chordNotes) {
             const noteData = this.noteMapping.find(n => n.note === note)
             if (!noteData) continue
             
-            const rect = noteData.element.getBoundingClientRect()
+            const expression = this.getExpression(note)
+            if (expression.type === 'none') continue
             
-            // Convert to canvas coordinates (with padding offset)
+            console.log(`Drawing indicator for ${note}, type: ${expression.type}`)
+            
+            const rect = noteData.element.getBoundingClientRect()
             const x = rect.left - svgRect.left + rect.width / 2 + this.canvasPadding
             const y = rect.top - svgRect.top + this.canvasPadding
             
@@ -585,29 +611,12 @@ class SVGInteractiveExpression {
         const ctx = this.overlayCtx
         ctx.save()
         
-        ctx.strokeStyle = this.EXPRESSION_COLORS.vibrato
-        ctx.lineWidth = 3
-        
-        const amplitude = 8 * expression.depth
-        y -= 25 // Draw further above the key
-        
-        ctx.beginPath()
-        for (let i = -width/2; i <= width/2; i += 2) {
-            const phase = (i + width/2) / 10
-            const waveY = y + Math.sin(phase) * amplitude
-            if (i === -width/2) {
-                ctx.moveTo(x + i, waveY)
-            } else {
-                ctx.lineTo(x + i, waveY)
-            }
-        }
-        ctx.stroke()
-        
-        // Add "V" label
+        // Add depth percentage label above the key
         ctx.fillStyle = this.EXPRESSION_COLORS.vibrato
         ctx.font = 'bold 12px sans-serif'
         ctx.textAlign = 'center'
-        ctx.fillText('V', x, y - amplitude - 5)
+        const depthPercent = Math.round(expression.depth * 100)
+        ctx.fillText(`${depthPercent}%`, x, y - 10)
         
         ctx.restore()
     }
@@ -616,25 +625,12 @@ class SVGInteractiveExpression {
         const ctx = this.overlayCtx
         ctx.save()
         
+        // Add depth percentage label below the key
         ctx.fillStyle = this.EXPRESSION_COLORS.tremolo
-        
-        const barCount = Math.ceil(3 * expression.depth)
-        const barWidth = 4
-        const barSpacing = 6
-        const totalWidth = barCount * (barWidth + barSpacing)
-        const startX = x - totalWidth / 2
-        y += 15 // Draw further below the key
-        
-        for (let i = 0; i < barCount; i++) {
-            const barX = startX + i * (barWidth + barSpacing)
-            const height = 8 + i * 3
-            ctx.fillRect(barX, y, barWidth, height)
-        }
-        
-        // Add "T" label
         ctx.font = 'bold 12px sans-serif'
         ctx.textAlign = 'center'
-        ctx.fillText('T', x, y + 20 + barCount * 3)
+        const depthPercent = Math.round(expression.depth * 100)
+        ctx.fillText(`${depthPercent}%`, x, y + 15)
         
         ctx.restore()
     }
@@ -725,20 +721,21 @@ class SVGInteractiveExpression {
         let label = ''
         let depth = 0
         
-        if (dy < this.VIBRATO_THRESHOLD) {
-            color = this.EXPRESSION_COLORS.vibrato
-            depth = Math.min(1, Math.abs(dy) / 100)
-            label = `Vibrato ↑ ${Math.round(depth * 100)}%`
-        } else if (dy > this.TREMOLO_THRESHOLD) {
-            color = this.EXPRESSION_COLORS.tremolo
-            depth = Math.min(1, dy / 100)
-            label = `Tremolo ↓ ${Math.round(depth * 100)}%`
-        } else {
+        // Check horizontal movement first for trill
+        if (Math.abs(dx) > this.HORIZONTAL_THRESHOLD) {
             const targetNote = this.getNoteFromPosition(this.currentDragPos.x, this.currentDragPos.y)
             if (targetNote && targetNote.note !== this.dragStartNote) {
                 color = this.EXPRESSION_COLORS.trill
                 label = `Trill → ${targetNote.note}`
             }
+        } else if (dy < this.VIBRATO_THRESHOLD) {
+            color = this.EXPRESSION_COLORS.vibrato
+            depth = Math.min(1, Math.abs(dy) / 100)
+            label = `V ${Math.round(depth * 100)}%`
+        } else if (dy > this.TREMOLO_THRESHOLD) {
+            color = this.EXPRESSION_COLORS.tremolo
+            depth = Math.min(1, dy / 100)
+            label = `T ${Math.round(depth * 100)}%`
         }
         
         // Draw feedback line
@@ -772,8 +769,38 @@ class SVGInteractiveExpression {
             ctx.restore()
         }
         
-        // Draw label
-        if (label) {
+        // Draw label on the piano key instead of following mouse
+        if (label && (dy < this.VIBRATO_THRESHOLD || dy > this.TREMOLO_THRESHOLD)) {
+            ctx.font = 'bold 12px sans-serif'
+            ctx.textAlign = 'center'
+            ctx.textBaseline = 'middle'
+            
+            // Calculate position on the key
+            const keyRect = this.dragStartElement.getBoundingClientRect()
+            const keyCenterX = keyRect.left - svgRect.left + keyRect.width / 2 + this.canvasPadding
+            const keyCenterY = keyRect.top - svgRect.top + keyRect.height / 2 + this.canvasPadding
+            
+            // Position label in lower half of key for better visibility
+            const labelY = keyCenterY + keyRect.height / 4
+            
+            // Simple background for contrast
+            const metrics = ctx.measureText(label)
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)'
+            ctx.fillRect(
+                keyCenterX - metrics.width / 2 - 4,
+                labelY - 10,
+                metrics.width + 8,
+                20
+            )
+            
+            // Draw text
+            ctx.fillStyle = 'white'
+            ctx.fillText(label, keyCenterX, labelY)
+            
+            ctx.textAlign = 'left'
+            ctx.textBaseline = 'alphabetic'
+        } else if (label) {
+            // For trill, keep the label following the mouse
             ctx.font = 'bold 14px sans-serif'
             const metrics = ctx.measureText(label)
             const padding = 6
@@ -847,16 +874,51 @@ class SVGInteractiveExpression {
     
     // Clear all expressions
     clearAll() {
+        console.log('SVGInteractiveExpression.clearAll() called')
+        console.log('Instance ID:', this.instanceId || 'default')
+        console.log('Before clear - expressions:', this.expressions.size, 'chordNotes:', this.chordNotes.size)
+        
         this.expressions.clear()
         this.chordNotes.clear()
         this.relatedNotes.clear()
+        
+        console.log('After clear - expressions:', this.expressions.size, 'chordNotes:', this.chordNotes.size)
         
         // Reset all key visuals
         for (const noteData of this.noteMapping) {
             this.updateKeyVisual(noteData.note)
         }
         
-        this.render()
+        // Ensure we have a valid canvas context before clearing
+        if (this.overlay && this.overlayCtx) {
+            // Check if canvas needs repositioning
+            if (this.overlay.width === 0 || this.overlay.height === 0) {
+                this.positionOverlay()
+                this.overlayCtx = this.overlay.getContext('2d')
+            }
+            
+            console.log('Clearing canvas:', this.overlay.width, 'x', this.overlay.height)
+            
+            // Clear the canvas completely
+            this.overlayCtx.clearRect(0, 0, this.overlay.width, this.overlay.height)
+            
+            // Force browser to update the canvas
+            this.overlay.style.display = 'none'
+            this.overlay.offsetHeight // Force reflow
+            this.overlay.style.display = ''
+            
+            // Double check all canvases in the document
+            const allCanvases = document.querySelectorAll('canvas')
+            console.log('Total canvases in document:', allCanvases.length)
+            allCanvases.forEach((canvas, index) => {
+                console.log(`Canvas ${index}:`, canvas.width, 'x', canvas.height, 'parent:', canvas.parentElement?.id || 'no-id')
+            })
+        }
+        
+        // Notify controller that expressions have changed
+        if (this.onExpressionChange) {
+            this.onExpressionChange(null, null)
+        }
     }
     
     // Set multiple expressions at once

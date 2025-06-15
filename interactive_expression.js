@@ -55,7 +55,7 @@ class InteractiveExpression {
         this.canvas.style.top = '0'
         this.canvas.style.left = '0'
         this.canvas.style.pointerEvents = 'none'
-        this.canvas.style.zIndex = '10'
+        this.canvas.style.zIndex = '1000'
         
         // Ensure container has relative positioning
         if (window.getComputedStyle(this.container).position === 'static') {
