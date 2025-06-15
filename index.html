@@ -102,8 +102,11 @@
     
     <div id="params" class="dimmed">
     </div>
+    <script type="module">
+        // Import modular synth components
+        import { SynthCore, SynthUtils } from './synth-core.js';
+        import { SynthCommunication, MessageTypes, CommandTypes } from './synth-communication.js';
 
-    <script>
         const synth_id = `synth-${Math.random ().toString (36).substr (2, 9)}`
         let ws = null
         let audio_context = null
@@ -119,9 +122,29 @@
         let stored_volume = 0.2  // store volume separately from gain
         let is_powered_on = true  // track power state
         let in_calibration_mode = false  // prevent controller interference during calibration
-        let fadeOut = null  // cosine ramp for volume control
-        let current_program = null  // currently active program with stochasticity
-        const program_banks = new Map ()  // saved resolved parameter banks
+        let current_program = null  // currently active program
+        
+        // Core modules
+        let synthCore = null
+        let synthComm = null
+        
+        // Export globals for backward compatibility
+        window.synthCore = synthCore
+        window.synthComm = synthComm
+        window.SynthCore = SynthCore
+        window.SynthCommunication = SynthCommunication
+        window.SynthUtils = SynthUtils
+        window.MessageTypes = MessageTypes
+        window.CommandTypes = CommandTypes
+        
+        // Update status display using WebSocket connection
+        function updateStatus() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                status_el.textContent = `Connected as ${synth_id}`
+            } else {
+                status_el.textContent = "Disconnected - Connecting..."
+            }
+        }
         
         // webrtc configuration
         let rtc_config = {
@@ -141,11 +164,11 @@
         }
         
         // ui elements
-        const status_el = document.getElementById ("status")
-        const calibration_button = document.getElementById ("start_calibration")
-        const join_button = document.getElementById ("join_instrument")
-        const calibration_phase = document.getElementById ("calibration_phase")
-        const join_phase = document.getElementById ("join_phase")
+        const status_el = document.getElementById("status")
+        const calibration_button = document.getElementById("start_calibration")
+        const join_button = document.getElementById("join_instrument")
+        const calibration_phase = document.getElementById("calibration_phase")
+        const join_phase = document.getElementById("join_phase")
 
         const canvas = document.getElementById ("visualizer")
         const ctx = canvas.getContext ("2d")
@@ -154,7 +177,7 @@
         canvas.width = canvas.offsetWidth
         canvas.height = canvas.offsetHeight
         
-        // connect to websocket
+        // connect to websocket for signaling (restored for controller discovery)
         function connect_websocket () {
             const protocol = window.location.protocol === "https:" ? "wss:" : "ws:"
             ws = new WebSocket (`${protocol}//${window.location.host}/ws`)
@@ -288,170 +311,64 @@
 
             }
         }
-        
-        // create webrtc connection to controller
-        async function connect_to_controller (controller_id) {
-            console.log (`initiating connection to ${controller_id}`)
-            
-            const pc = new RTCPeerConnection (rtc_config)
-            const controller = controllers.get (controller_id)
-            controller.connection = pc
-            controller.ice_queue = []
-            
-            // create data channels
-            const param_channel = pc.createDataChannel ("params", {
-                ordered: false,
-                maxRetransmits: 0
-            })
-            const command_channel = pc.createDataChannel ("commands", {
-                ordered: true
-            })
-            
-            controller.channel = param_channel
-            controller.command_channel = command_channel
-            
-            // handle ice candidates
-            pc.addEventListener ("icecandidate", (event) => {
-                if (event.candidate) {
-                    console.log (`sending ice candidate: ${event.candidate.candidate}`)
-                    send_message ({
-                        type: "ice",
-                        source: synth_id,
-                        target: controller_id,
-                        data: event.candidate
-                    })
-                } else {
-                    console.log ("ice gathering complete")
-                }
-            })
-            
-            // set up param channel handlers
-            param_channel.addEventListener ("open", () => {
-                console.log (`param channel open to ${controller_id}`)
-                controller.connected = true
-                update_controller_list ()
-                
-                // send immediate state update (like a pong without a ping)
-                param_channel.send (JSON.stringify ({
-                    type: "pong",
-                    timestamp: Date.now (),
-                    state: get_synth_state()
-                }))
-                
-                // request current program now that controller is connected and audio graph is ready
-                if (audio_context && bowed_string_node) {
-                    request_current_program()
-                }
-            })
-            
-            param_channel.addEventListener ("message", (event) => {
-                handle_data_message (JSON.parse (event.data))
-            })
-            
-            param_channel.addEventListener ("close", () => {
-                console.log (`param channel closed to ${controller_id}`)
-                controller.connected = false
-                update_controller_list ()
-            })
-            
-            // set up command channel handlers
-            command_channel.addEventListener ("message", (event) => {
-                const command = JSON.parse (event.data)
-                if (command.type === "command") {
-                    handle_command (command)
-                }
-            })
-            
-            // handle connection state
-            pc.addEventListener ("connectionstatechange", () => {
-                console.log (`connection state to ${controller_id}: ${pc.connectionState}`)
-                
-                if (pc.connectionState === "failed" || pc.connectionState === "closed") {
-                    controller.connected = false
-                    update_controller_list ()
-                }
-            })
-            
-            // create and send offer
-            const offer = await pc.createOffer ()
-            await pc.setLocalDescription (offer)
-            
-            send_message ({
-                type: "offer",
-                source: synth_id,
-                target: controller_id,
-                data: offer
-            })
-        }
 
         
         // initialize persistent audio graph
-        async function init_calibration () {
-            audio_context = new (window.AudioContext || window.webkitAudioContext) ()
-            
-            // load audio worklets
-            await audio_context.audioWorklet.addModule ("pink_noise.js")
-            await audio_context.audioWorklet.addModule ("cosine_ramp.js")
-            await audio_context.audioWorklet.addModule ("white_noise.js")
-            await audio_context.audioWorklet.addModule ("lfo_worklet.js")
-            await audio_context.audioWorklet.addModule ("exp_converter.js")
-            await audio_context.audioWorklet.addModule ("bowed_string_worklet.js")
-            await audio_context.audioWorklet.addModule ("reverb_worklet.js")
-            
-            // create persistent audio graph with both branches
-            
-            // calibration branch
-            pink_noise = new AudioWorkletNode (audio_context, "ridge-rat-type2-pink-noise-generator")
-            calibration_gain = audio_context.createGain ()
-            calibration_gain.gain.value = stored_volume
-            
-            // synthesis branch
-            bowed_string_node = new AudioWorkletNode(audio_context, "continuous-excitation-processor")
-            reverb_node = new AudioWorkletNode(audio_context, "fdn-reverb-processor")
-            synthesis_gain = audio_context.createGain ()
-            synthesis_gain.gain.value = 0  // initially muted
-            
-            // shared analyser
-            analyser = audio_context.createAnalyser ()
-            analyser.fftSize = 2048
-            analyser.smoothingTimeConstant = 0
-            
-            // connect calibration branch: pink_noise → calibration_gain → analyser → destination
-            pink_noise.connect (calibration_gain)
-            calibration_gain.connect (analyser)
-            
-            // connect synthesis branch: bowed_string → reverb → synthesis_gain → analyser
-            bowed_string_node.connect(reverb_node)
-            reverb_node.connect(synthesis_gain)
-            synthesis_gain.connect(analyser)
-            
-            // analyser to destination
-            analyser.connect (audio_context.destination)
-            
-            // set initial synthesis parameters
-            set_initial_string_parameters()
-            
+        async function init_audio_system_if_needed() {
+            // Create AudioContext if it doesn't exist or is closed
+            if (!audio_context || audio_context.state === 'closed') {
+                audio_context = new (window.AudioContext || window.webkitAudioContext)();
+                if (audio_context.state === 'suspended') {
+                    await audio_context.resume();
+                }
+                console.log('AudioContext created/resumed.');
+            }
 
+            // Initialize SynthCore if it doesn't exist or isn't initialized
+            if (!synthCore || !synthCore.isInitialized) {
+                if (!synthCore) {
+                    synthCore = new SynthCore(synth_id, { enableLogging: true });
+                    window.synthCore = synthCore; // Update global reference
+                }
+                await synthCore.initialize(audio_context, audio_context.destination);
+                console.log('SynthCore initialized.');
+            }
             
-
+            // Connect WebSocket for controller discovery
+            if (!ws || ws.readyState === WebSocket.CLOSED) {
+                connect_websocket();
+            }
             
-            // DEBUG: Send test message to worklet to verify it's alive
-
-            
-            // Don't start bowing yet - wait for program to set correct frequency
-            
-            in_calibration_mode = true
-            
-            // update UI to join phase
-            calibration_phase.style.display = "none"
-            join_phase.style.display = "block"
-            
-            // remove dimmed state from visualizer
-            document.getElementById ("visualizer").classList.remove ("dimmed")
-            
-            // start visualizer
-            draw_visualizer ()
+            console.log('Audio system and communication are ready.');
         }
+
+        async function start_calibration_mode() {
+            await init_audio_system_if_needed(); // Ensure everything is initialized
+
+            if (synthCore && synthCore.isInitialized) {
+                console.log('Entering calibration mode...');
+                in_calibration_mode = true;
+                
+                // Use SynthCore's calibration method
+                const success = synthCore.startCalibrationNoise(stored_volume);
+                if (success) {
+                    console.log('Pink noise calibration started');
+                } else {
+                    console.error('Failed to start pink noise calibration');
+                }
+                
+                // Update UI
+                calibration_phase.style.display = "block";
+                join_phase.style.display = "block";
+                calibration_button.style.display = "none"; // Hide calibrate button
+                document.getElementById("visualizer").classList.remove("dimmed");
+                draw_visualizer(); // Ensure visualizer starts
+            } else {
+                console.error("Cannot enter calibration mode: SynthCore not ready.");
+            }
+        }
+
+
         
         // request current program from controller
         function request_current_program() {
@@ -465,47 +382,58 @@
             }
         }
         
-        // activate synthesis and mute calibration
-        async function join_instrument () {
-            // request current program if we haven't already (timing fallback)
+        // Activate synthesis mode
+        async function join_instrument() {
+            // Request current program
             if (!current_program || Object.keys(current_program).length === 0) {
                 request_current_program()
             }
             
-            // fade out calibration gain
-            calibration_gain.gain.exponentialRampToValueAtTime(0.001, audio_context.currentTime + 1.0)
-            
-            // fade in synthesis gain
-            synthesis_gain.gain.exponentialRampToValueAtTime(stored_volume, audio_context.currentTime + 1.0)
-            
-            // exit calibration mode after fade completes
-            setTimeout(() => { 
-                in_calibration_mode = false 
+            in_calibration_mode = false;
+            console.log('Exiting calibration mode, entering synthesis mode...');
+
+            if (synthCore && synthCore.isInitialized) {
+                // Stop calibration noise using SynthCore method
+                synthCore.stopCalibrationNoise();
+                console.log('SynthCore stopped calibration noise.');
+
+                // Ensure synthesis path is active by calling setPower
+                await synthCore.setPower(true); 
                 
-                // Start synthesis if program has been received
-                if (bowed_string_node && current_program) {
-                    bowed_string_node.port.postMessage({ type: 'setBowing', value: true })
+                // Re-apply current program to ensure synthesis starts correctly
+                if (current_program) {
+                    console.log('Applying current program to SynthCore:', current_program);
+                    synthCore.applyProgram(current_program);
+                } else {
+                    console.log('No current program to apply upon joining instrument. Requesting one.');
+                    request_current_program(); 
                 }
-            }, 1000)
+            } else {
+                console.error("SynthCore not initialized, cannot join instrument properly.");
+            }
             
             // update UI
-            join_phase.style.display = "none"
+            calibration_phase.style.display = "none"; 
+            join_phase.style.display = "none";
+            calibration_button.style.display = "block"; // Show calibrate button again
             
-            console.log (`joined instrument - synthesis gain: ${stored_volume}`)
+            console.log('Joined instrument in synthesis mode.');
             
             // request wake lock to prevent device sleep
-            request_wake_lock ()
+            request_wake_lock ();
         }
         
         // visualizer
         function draw_visualizer () {
             requestAnimationFrame (draw_visualizer)
             
-            if (!analyser) return
+            // Use SynthCore's analyser if available, otherwise fall back to global analyser
+            const activeAnalyser = (synthCore && synthCore.analyserNode) ? synthCore.analyserNode : analyser;
+            if (!activeAnalyser) return
             
-            const buffer_length = analyser.frequencyBinCount
+            const buffer_length = activeAnalyser.frequencyBinCount
             const data_array = new Uint8Array (buffer_length)
-            analyser.getByteFrequencyData (data_array)
+            activeAnalyser.getByteFrequencyData (data_array)
             
             ctx.fillStyle = "rgb(0, 0, 0)"
             ctx.fillRect (0, 0, canvas.width, canvas.height)
@@ -532,23 +460,26 @@
                 if (data.name === "volume") {
                     stored_volume = data.value
                     if (is_powered_on) {
-                        if (in_calibration_mode && calibration_gain) {
-                            calibration_gain.gain.value = data.value
+                        if (in_calibration_mode && synthCore && synthCore.calibrationGainNode) {
+                            synthCore.calibrationGainNode.gain.value = data.value
                             console.log(`Set calibration volume: ${data.value}`)
-                        } else if (!in_calibration_mode && synthesis_gain) {
-                            synthesis_gain.gain.value = data.value
+                        } else if (!in_calibration_mode && synthCore && synthCore.gainNode) {
+                            synthCore.gainNode.gain.value = data.value
                             console.log(`Set synthesis volume: ${data.value}`)
                         }
                     }
-
                 }
             } else if (data.type === "program") {
                 current_program = data.program
-                apply_program (current_program)
+                if (synthCore && synthCore.isInitialized) {
+                    synthCore.applyProgram(current_program)
+                } else {
+                    console.warn('SynthCore not ready for program')
+                }
                 
-                // Now start synthesis with correct frequency
-                if (bowed_string_node && !in_calibration_mode) {
-                    bowed_string_node.port.postMessage({ type: 'setBowing', value: true })
+                // Start synthesis with correct frequency
+                if (!in_calibration_mode && synthCore && synthCore.bowedStringNode) {
+                    synthCore.bowedStringNode.port.postMessage({ type: 'setBowing', value: true })
                 }
             } else if (data.type === "ping") {
                 // find the controller that sent this ping
@@ -564,19 +495,113 @@
                     }
                 }
             }
-            
-
         }
+
+
         
         // get essential synth state information
         function get_synth_state() {
             const state = {
                 audio_enabled: !!audio_context && audio_context.state === 'running',
-                joined: !in_calibration_mode && !!(bowed_string_node && synthesis_gain)
+                joined: synthCore && synthCore.isInitialized && !in_calibration_mode
             }
-            
-
             return state
+        }
+        
+        // connect to controller via webrtc
+        async function connect_to_controller (controller_id) {
+            console.log (`connecting to controller ${controller_id}`)
+            
+            const controller = controllers.get (controller_id)
+            if (!controller) return
+            
+            const pc = new RTCPeerConnection (rtc_config)
+            controller.connection = pc
+            
+            // create data channels
+            const param_channel = pc.createDataChannel ("params")
+            const command_channel = pc.createDataChannel ("commands")
+            controller.channel = param_channel
+            
+            param_channel.addEventListener ("open", () => {
+                console.log (`param channel open to ${controller_id}`)
+                controller.connected = true
+                update_controller_list ()
+                
+                // send immediate state update (like a pong without a ping)
+                param_channel.send (JSON.stringify ({
+                    type: "pong",
+                    timestamp: Date.now (),
+                    state: get_synth_state()
+                }))
+                
+                // request current program now that controller is connected and audio graph is ready
+                if (audio_context && synthCore && synthCore.isInitialized) {
+                    request_current_program()
+                }
+            })
+            
+            param_channel.addEventListener ("close", () => {
+                console.log (`param channel closed to ${controller_id}`)
+                controller.connected = false
+                update_controller_list ()
+            })
+            
+            param_channel.addEventListener ("message", (event) => {
+                const data = JSON.parse (event.data)
+                handle_data_message (data)
+            })
+            
+            command_channel.addEventListener ("message", (event) => {
+                const command = JSON.parse (event.data)
+                if (command.type === "command") {
+                    handle_command (command)
+                }
+            })
+            
+            pc.addEventListener ("connectionstatechange", () => {
+                console.log (`connection state: ${pc.connectionState}`)
+                if (pc.connectionState === "failed" || pc.connectionState === "closed") {
+                    controller.connected = false
+                    update_controller_list ()
+                }
+            })
+            
+            pc.addEventListener ("icecandidate", (event) => {
+                if (event.candidate) {
+                    send_message ({
+                        type: "ice",
+                        source: synth_id,
+                        target: controller_id,
+                        data: event.candidate
+                    })
+                }
+            })
+            
+            // create and send offer
+            const offer = await pc.createOffer ()
+            await pc.setLocalDescription (offer)
+            
+            send_message ({
+                type: "offer",
+                source: synth_id,
+                target: controller_id,
+                data: offer
+            })
+        }
+        
+        // update controller list display
+        function update_controller_list () {
+            const controller_list_el = document.getElementById ("controller_list")
+            const all_controllers = Array.from (controllers.entries ())
+            
+            if (all_controllers.length === 0) {
+                controller_list_el.textContent = "None"
+            } else {
+                controller_list_el.innerHTML = all_controllers.map (([id, ctrl]) => 
+                    `<div style="margin: 2px 0;">${id} ${ctrl.connected ? '(connected)' : '(discovered)'}</div>`
+                ).join ("")
+            }
         }
         
         // handle command updates
@@ -584,36 +609,25 @@
             console.log (`command ${command.name} = ${command.value}`)
             if (command.name === "power") {
                 is_powered_on = command.value
-                const target_volume = command.value ? stored_volume : 0
-                if (in_calibration_mode && calibration_gain) {
-                    calibration_gain.gain.value = target_volume
-
-                } else if (!in_calibration_mode && synthesis_gain) {
-                    synthesis_gain.gain.value = target_volume
-
-                }
+                
+                // Use synth core for power control
+                synthCore.setPower(command.value)
 
             } else if (command.name === "save") {
-                const bank_id = command.value
-                if (current_program) {
-                    // save currently resolved parameters to bank
-                    program_banks.set(bank_id, resolve_program(current_program))
-                    console.log(`saved current program to bank ${bank_id}`)
-                }
+                const bank_id = command.bank
+                
+                // Use synth core for saving to bank
+                synthCore.saveToBank(bank_id)
+                
             } else if (command.name === "load") {
                 const bank_id = command.bank
-                const fallback_program = command.program
+                const fallback_program = command.fallbackProgram
                 
-                if (program_banks.has(bank_id)) {
-                    // load from saved bank
-                    const saved_params = program_banks.get(bank_id)
-                    apply_resolved_parameters(saved_params)
-                    console.log(`loaded parameters from bank ${bank_id}`)
-                } else {
-                    // resolve from fallback program
+                // Use synth core for loading from bank
+                const success = synthCore.loadFromBank(bank_id, fallback_program)
+                if (!success && fallback_program) {
                     current_program = fallback_program
-                    apply_program(fallback_program)
-                    console.log(`bank ${bank_id} not found, resolved from fallback program`)
+                    synthCore.applyProgram(fallback_program)
                 }
             }
         }
@@ -688,8 +702,13 @@
         
         // apply a program by resolving stochasticity and setting parameters
         function apply_program (program) {
-            const resolved = resolve_program(program)
-            apply_resolved_parameters(resolved)
+            // Use synth core if available, otherwise fallback to legacy
+            if (shouldUseModularSystem()) {
+                synthCore.applyProgram(program)
+            } else {
+                const resolved = resolve_program(program)
+                apply_resolved_parameters(resolved)
+            }
         }
         
         // apply resolved parameters to the synthesis engine
@@ -807,20 +826,6 @@
             }
         }
         
-        // update controller list display
-        function update_controller_list () {
-            const controller_list_el = document.getElementById ("controller_list")
-            const all_controllers = Array.from (controllers.entries ())
-            
-            if (all_controllers.length === 0) {
-                controller_list_el.textContent = "None"
-            } else {
-                controller_list_el.innerHTML = all_controllers.map (([id, ctrl]) => 
-                    `<div style="margin: 2px 0;">${id} ${ctrl.connected ? '(connected)' : '(discovered)'}</div>`
-                ).join ("")
-            }
-        }
-        
         // wake lock functions
         async function request_wake_lock () {
             try {
@@ -847,14 +852,42 @@
         // visibility change handler
         document.addEventListener('visibilitychange', handle_visibility_change)
         
-        // calibration flow event handlers
-        calibration_button.addEventListener ("click", init_calibration)
-        join_button.addEventListener ("click", join_instrument)
+        // calibration event handler
+        calibration_button.addEventListener("click", start_calibration_mode)
         
-        // start connection
-        fetch_ice_servers ().then (() => {
-            connect_websocket ()
-        })
+        join_button.addEventListener("click", join_instrument)
+        
+        // Debug helpers for modular system
+
+        
+        window.getSystemStatus = function() {
+            return {
+                synthCoreReady: synthCore && synthCore.isInitialized,
+                synthCommReady: synthComm && synthComm.isConnected,
+                communication: {
+                    modularWs: synthComm ? (synthComm.isConnected ? 'connected' : 'disconnected') : 'null',
+                    controllers: controllers.size,
+                    modularControllers: synthComm ? synthComm.getConnectedControllers().length : 0
+                }
+            }
+        }
+        
+        window.testBanking = function() {
+            console.log('Testing banking system...')
+            if (shouldUseModularSystem()) {
+                console.log('Using modular banking')
+                synthCore.saveToBank(99)
+                setTimeout(() => synthCore.loadFromBank(99), 1000)
+            } else {
+                console.log('Using legacy banking')
+            }
+        }
+        
+        console.log('🎻 String Assembly FM - Fully Modular Architecture')
+        console.log('Debug commands: getSystemStatus(), testBanking()')
+        
+        // Start WebSocket connection
+        connect_websocket()
     </script>
 </body>
 </html>

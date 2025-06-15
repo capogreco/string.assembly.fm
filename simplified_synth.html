@@ -289,7 +289,10 @@
     <script src="simplified_communication.js"></script>
     <script src="standard_parameters.js"></script>
 
-    <script>
+    <script type="module">
+        // Import modular synth components
+        import { SynthCore, SynthUtils } from './synth-core.js';
+        import { SynthCommunication, MessageTypes, CommandTypes } from './synth-communication.js';
         // Global state
         let synthId = `synth-${Math.random().toString(36).substr(2, 9)}`
         let comm = null
@@ -297,8 +300,21 @@
         let bowedStringNode = null
         let calibrationGain = null
         let synthesisGain = null
+        
+        // Core modules
+        let synthCore = null
+        let synthComm = null
         let analyser = null
         let mixer = null
+        
+        // Export globals for backward compatibility
+        window.synthCore = synthCore
+        window.synthComm = synthComm
+        window.SynthCore = SynthCore
+        window.SynthCommunication = SynthCommunication
+        window.SynthUtils = SynthUtils
+        window.MessageTypes = MessageTypes
+        window.CommandTypes = CommandTypes
         
         let isCalibrationMode = false
         let isPoweredOn = false
@@ -348,7 +364,30 @@
                     await audioContext.resume()
                 }
                 
-                // Load audio worklet modules
+                // Initialize synth core
+                synthCore = new SynthCore(synthId, { enableLogging: true })
+                await synthCore.initialize(audioContext, audioContext.destination)
+                
+                // Initialize new communication module
+                synthComm = new SynthCommunication(synthId, { enableLogging: true })
+                
+                // Set up event handlers for new communication module
+                synthComm.on('program', (message, controllerId) => {
+                    handleProgramMessage(message)
+                })
+                
+                synthComm.on('command', (message, controllerId) => {
+                    handleCommandMessage(message)
+                })
+                
+                synthComm.on('ping', (controllerId, message) => {
+                    // Ping is handled automatically by SynthCommunication
+                })
+                
+                // Connect to signaling server
+                await synthComm.connect()
+                
+                // Load audio worklet modules (fallback for legacy compatibility)
                 for (const module of WORKLET_MODULES) {
                     try {
                         await audioContext.audioWorklet.addModule(module)
@@ -358,7 +397,7 @@
                     }
                 }
                 
-                // Create audio graph
+                // Create audio graph (fallback for legacy compatibility)
                 await createAudioGraph()
                 
                 // Enable other controls
@@ -496,8 +535,13 @@
 
         // Handle program updates
         function handleProgramMessage(message) {
-            currentProgram = message.parameters
-            applyProgram(currentProgram)
+            if (synthCore) {
+                synthCore.applyProgram(message.program || message.parameters)
+            } else {
+                // Fallback to legacy handling
+                currentProgram = message.parameters
+                applyProgram(currentProgram)
+            }
             updateParameterDisplay()
         }
 
@@ -535,79 +579,38 @@
 
         // Handle power command
         function handlePowerCommand(powerOn) {
-            isPoweredOn = powerOn
-            
-            const targetVolume = powerOn ? storedVolume : 0
-            
-            if (isCalibrationMode && calibrationGain) {
-                calibrationGain.gain.value = targetVolume
-            } else if (!isCalibrationMode && synthesisGain) {
-                synthesisGain.gain.value = targetVolume
+            if (synthCore) {
+                synthCore.setPower(powerOn)
+            } else {
+                // Legacy handling
+                isPoweredOn = powerOn
+                
+                const targetVolume = powerOn ? storedVolume : 0
+                
+                if (isCalibrationMode && calibrationGain) {
+                    calibrationGain.gain.value = targetVolume
+                } else if (!isCalibrationMode && synthesisGain) {
+                    synthesisGain.gain.value = targetVolume
+                }
             }
             
             updateStatus()
         }
 
-        // Program banking - each synth manages its own resolved parameter state
-        const synthBanks = new Map()
-
-        // Handle save command - store current resolved parameters
+        // Handle save command - delegate to synth core
         function handleSaveCommand(bankId) {
-            if (!currentProgram) {
-                console.warn('No current program to save')
-                return
-            }
-            
-            // Store a deep copy of current resolved parameters
-            const savedProgram = JSON.parse(JSON.stringify(currentProgram))
-            synthBanks.set(bankId, savedProgram)
-            
-            // Also save to localStorage for persistence
-            try {
-                const allBanks = {}
-                synthBanks.forEach((program, id) => {
-                    allBanks[id] = program
-                })
-                localStorage.setItem(`synth-banks-${comm.synth_id}`, JSON.stringify(allBanks))
-                console.log(`✓ Synth saved resolved parameters to bank ${bankId}`)
-            } catch (e) {
-                console.warn('Failed to save banks to localStorage:', e)
+            if (synthCore) {
+                synthCore.saveToBank(bankId)
             }
         }
 
-        // Handle load command - restore saved parameters or use fallback
+        // Handle load command - delegate to synth core
         function handleLoadCommand(bankId, fallbackProgram) {
-            if (synthBanks.has(bankId)) {
-                // This synth has saved state - restore exact values
-                const savedProgram = synthBanks.get(bankId)
-                console.log(`✓ Synth loading saved parameters from bank ${bankId}`)
-                currentProgram = savedProgram
-                applyProgram(currentProgram)
-                updateParameterDisplay()
-            } else if (fallbackProgram) {
-                // New synth - use fallback program from controller
-                console.log(`✓ New synth using fallback program for bank ${bankId}`)
-                currentProgram = fallbackProgram
-                applyProgram(currentProgram)
-                updateParameterDisplay()
-            } else {
-                console.warn(`Bank ${bankId} not found and no fallback program provided`)
-            }
-        }
-
-        // Load saved banks from localStorage on startup
-        function loadSynthBanksFromStorage() {
-            try {
-                const saved = localStorage.getItem(`synth-banks-${comm.synth_id}`)
-                if (saved) {
-                    const banksData = JSON.parse(saved)
-                    Object.entries(banksData).forEach(([bankId, program]) => {
-                        synthBanks.set(parseInt(bankId), program)
-                    })
-                    console.log(`Loaded ${synthBanks.size} saved banks from storage`)
+            if (synthCore) {
+                const success = synthCore.loadFromBank(bankId, fallbackProgram)
+                if (success) {
+                    updateParameterDisplay()
                 }
-            } catch (e) {
-                console.warn('Failed to load banks from storage:', e)
             }
         }
 
@@ -755,10 +758,7 @@
         }
 
         // Start the application
-        document.addEventListener('DOMContentLoaded', () => {
-            init()
-            loadSynthBanksFromStorage()
-        })
+        document.addEventListener('DOMContentLoaded', init)
     </script>
 </body>
 </html>

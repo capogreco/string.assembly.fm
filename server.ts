@@ -143,7 +143,7 @@ async function handle_request (request: Request): Promise<Response> {
             // handle client registration
             if (data.type === "register") {
                 const old_id = client_id
-                client_id = data.client_id
+                client_id = data.synth_id || data.client_id // Handle both synth_id and client_id
                 connections.delete (old_id)
                 connections.set (client_id, { socket, actual_id: client_id } as ConnectionInfo)
                 console.log (`client registered as: ${client_id}`)
