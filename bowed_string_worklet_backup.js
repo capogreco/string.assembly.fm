@@ -47,6 +47,13 @@ class ContinuousExcitationProcessor extends AudioWorkletProcessor {
         maxValue: 1.0,
         automationRate: "k-rate",
       }, // Overall brightness control
+      {
+        name: "stringMaterial",
+        defaultValue: 0,
+        minValue: 0,
+        maxValue: 3,
+        automationRate: "k-rate",
+      }, // 0=steel, 1=gut, 2=nylon, 3=wound
 
       // --- Vibrato parameters ---
       {
@@ -133,10 +140,16 @@ class ContinuousExcitationProcessor extends AudioWorkletProcessor {
         minValue: 0.01,
         maxValue: 0.99,
         automationRate: "k-rate",
-      },
+      }, // 0.01=extreme staccato, 0.99=extreme legato
 
-      // --- Body Resonator Parameters ---
-      // bodyType is now handled via messages
+      // --- Instrument Body ---
+      {
+        name: "bodyType",
+        defaultValue: 0,
+        minValue: 0,
+        maxValue: 4,
+        automationRate: "k-rate",
+      }, // 0=violin, 1=viola, 2=cello, 3=guitar, 4=none
       {
         name: "bodyResonance",
         defaultValue: 0.3,
@@ -174,13 +187,12 @@ class ContinuousExcitationProcessor extends AudioWorkletProcessor {
     this._cachedBowPosition = descriptors.find(
       (p) => p.name === "bowPosition",
     ).defaultValue;
-    this._cachedBodyResonance = descriptors.find(
-      (p) => p.name === "bodyResonance",
+    this._cachedStringMaterial = descriptors.find(
+      (p) => p.name === "stringMaterial",
     ).defaultValue;
-
-    // Initialize cached values for message-controlled discrete parameters
-    this._cachedStringMaterial = 0; // Default to "Steel"
-    this._cachedBodyType = 0; // Default to "Violin"
+    this._cachedBodyType = descriptors.find(
+      (p) => p.name === "bodyType",
+    ).defaultValue;
 
     // --- String Modal Resonator Parameters & State Arrays (Biquad-based) ---
     this.stringMode_b0 = new Float32Array(NUM_STRING_MODES);
@@ -211,95 +223,27 @@ class ContinuousExcitationProcessor extends AudioWorkletProcessor {
     this.bowEnvelopeTarget = 0.0;
     this.bowEnvelopeRate = 0.005; // ~20ms at 48kHz
 
-    // Expression state machine
-    this.expressionState = {
-      current: "NONE",
-      target: "NONE",
-      finalTarget: null, // For two-stage transitions (e.g., VIBRATO → NONE → TREMOLO)
-      phase: "IDLE", // IDLE, STOPPING, WAITING, STARTING
-      stopProgress: 0.0,
-      startProgress: 0.0,
-    };
-
-    // Transition control settings
-    this.transitionSettings = {
-      duration: 1.0, // Base transition time in seconds
-      spread: 0.2, // 20% timing diversity
-      stagger: "sync", // sync, cascade, or random
-      variance: 0.1, // 10% individual variation
-    };
-
-    // Stagger timing tracking
-    this.staggerStartTime = {};
-    this.staggerDelays = {};
-
-    // Natural transition parameters
-    this.transitionParams = {
-      vibrato: {
-        baseStopRate: 0.0015, // Base rate for 1 second duration
-        baseStartRate: 0.002,
-        stopRate: 0.0015, // Will be updated by _updateTransitionRates()
-        startRate: 0.002,
-        canStopAt: () => true, // Vibrato can stop at any phase point
-      },
-      tremolo: {
-        baseStopRate: 0.006,
-        baseStartRate: 0.0015,
-        stopRate: 0.006,
-        startRate: 0.0015,
-        canStopAt: () => {
-          // Tremolo stops at stroke boundaries
-          return (
-            this.tremoloPhase < 0.05 ||
-            this.tremoloPhase > 0.95 ||
-            (this.tremoloPhase > 0.45 && this.tremoloPhase < 0.55)
-          );
-        },
-      },
-      trill: {
-        baseStopRate: 0.009,
-        baseStartRate: 0.0025,
-        stopRate: 0.009,
-        startRate: 0.0025,
-        canStopAt: () => {
-          // Trill stops at note boundaries
-          return (
-            this.trillPhase < 0.05 ||
-            (this.trillPhase > 0.45 && this.trillPhase < 0.55)
-          );
-        },
-      },
-    };
-
-    // Initialize rates based on current duration
-    this._updateTransitionRates();
-
-    // Master progress tracking for each expression
-    this.vibratoMasterProgress = 0.0;
-    this.tremoloMasterProgress = 0.0;
-    this.trillMasterProgress = 0.0;
-
-    // Expression phases (keep for DSP calculations)
+    // Vibrato state
     this.vibratoPhase = 0.0;
-    this.trillPhase = 0.0;
-    this.tremoloPhase = 0.0;
+    this.vibratoActive = false;
+    this.vibratoRampFactor = 0.0; // For smooth enable/disable
 
-    // Keep these for DSP state
+    // Trill state
+    this.trillPhase = 0.0;
+    this.trillActive = false;
+    this.trillRampFactor = 0.0; // For gradual speed changes
     this.trillCurrentSpeed = 3.0; // Start at minimum speed
     this.lastTrillState = 0; // Track if we're on upper or lower note
+
+    // Tremolo state
+    this.tremoloPhase = 0.0;
+    this.tremoloActive = false;
+    this.tremoloRampFactor = 0.0;
     this.tremoloStrokeCount = 0;
     this.lastTremoloState = 0;
     this.tremoloGroupPhase = 0.0; // For natural grouping accents
     this.tremoloScratchiness = 0.0;
     this.tremoloBowSpeed = 1.0;
-
-    // For debugging
-    this.debugCounter = 0;
-    this.currentFrame = 0;
-
-    // Flags for discrete parameter changes needing coefficient updates
-    this._stringCoefficientsNeedRecalculation = false;
-    this._bodyCoefficientsNeedRecalculation = false;
 
     // --- LPF State ---
     this.lpf_b0 = 1;
@@ -382,96 +326,7 @@ class ContinuousExcitationProcessor extends AudioWorkletProcessor {
         this._resetLpfState();
         this._resetBodyModeStates();
       }
-    } else if (data.type === "setExpression") {
-      // New message type for expression changes
-      const validExpressions = ["NONE", "VIBRATO", "TREMOLO", "TRILL"];
-      if (validExpressions.includes(data.expression)) {
-        const newTarget = data.expression;
-        const state = this.expressionState;
-
-        // Hub-and-spoke enforcement
-        if (
-          state.current !== "NONE" &&
-          newTarget !== "NONE" &&
-          state.current !== newTarget
-        ) {
-          // Must go through NONE first
-          state.target = "NONE";
-          state.finalTarget = newTarget;
-        } else {
-          state.target = newTarget;
-          state.finalTarget = null;
-        }
-      } else if (data.type === "setTransitionConfig") {
-        // Update transition configuration
-        if (data.config) {
-          if (data.config.duration !== undefined) {
-            this.transitionSettings.duration = Math.max(
-              0.5,
-              Math.min(5.0, data.config.duration),
-            );
-          }
-          if (data.config.spread !== undefined) {
-            this.transitionSettings.spread = Math.max(
-              0.0,
-              Math.min(1.0, data.config.spread),
-            );
-          }
-          if (
-            data.config.stagger !== undefined &&
-            ["sync", "cascade", "random"].includes(data.config.stagger)
-          ) {
-            this.transitionSettings.stagger = data.config.stagger;
-          }
-          if (data.config.variance !== undefined) {
-            this.transitionSettings.variance = Math.max(
-              0.0,
-              Math.min(1.0, data.config.variance),
-            );
-          }
-          // Update rates after config change
-          this._updateTransitionRates();
-        }
-      }
-    } else if (data.type === "setStringMaterial") {
-      if (
-        data.value !== undefined &&
-        data.value !== this._cachedStringMaterial
-      ) {
-        this._cachedStringMaterial = data.value;
-        this._stringCoefficientsNeedRecalculation = true;
-        // console.log(`[WORKLET] setStringMaterial: ${data.value}, will recalc`);
-      }
-    } else if (data.type === "setBodyType") {
-      if (data.value !== undefined && data.value !== this._cachedBodyType) {
-        this._cachedBodyType = data.value;
-        this._bodyCoefficientsNeedRecalculation = true;
-        // console.log(`[WORKLET] setBodyType: ${data.value}, will recalc`);
-      }
     }
-  }
-
-  _updateTransitionRates() {
-    // Update transition rates based on current duration setting
-    const duration = this.transitionSettings.duration;
-
-    // Update vibrato rates
-    this.transitionParams.vibrato.stopRate =
-      this.transitionParams.vibrato.baseStopRate / duration;
-    this.transitionParams.vibrato.startRate =
-      this.transitionParams.vibrato.baseStartRate / duration;
-
-    // Update tremolo rates
-    this.transitionParams.tremolo.stopRate =
-      this.transitionParams.tremolo.baseStopRate / duration;
-    this.transitionParams.tremolo.startRate =
-      this.transitionParams.tremolo.baseStartRate / duration;
-
-    // Update trill rates
-    this.transitionParams.trill.stopRate =
-      this.transitionParams.trill.baseStopRate / duration;
-    this.transitionParams.trill.startRate =
-      this.transitionParams.trill.baseStartRate / duration;
   }
 
   _resetBodyModeStates() {
@@ -492,224 +347,6 @@ class ContinuousExcitationProcessor extends AudioWorkletProcessor {
       this.stringMode_z1_states[i] = 0.0;
       this.stringMode_z2_states[i] = 0.0;
     }
-  }
-
-  _calculateStaggerDelay(expression) {
-    // Calculate and store stagger delays when transition starts
-    const spread = this.transitionSettings.spread;
-    const duration = this.transitionSettings.duration;
-
-    // Only calculate once per transition
-    if (this.staggerDelays[expression] === undefined) {
-      if (this.transitionSettings.stagger === "cascade") {
-        // Cascade: expressions start in order
-        const order = { VIBRATO: 0, TREMOLO: 1, TRILL: 2 };
-        const orderIndex = order[expression] || 0;
-        this.staggerDelays[expression] = orderIndex * spread * duration * 0.3; // 30% of spread duration
-      } else if (this.transitionSettings.stagger === "random") {
-        // Random: random delay within spread range
-        this.staggerDelays[expression] =
-          Math.random() * spread * duration * 0.5;
-      } else {
-        // sync: no delay
-        this.staggerDelays[expression] = 0;
-      }
-    }
-
-    return this.staggerDelays[expression];
-  }
-
-  _shouldDelayForStagger(expression, progress) {
-    // Check if we should delay based on stagger settings
-    if (this.transitionSettings.stagger === "sync" || progress > 0) {
-      return false;
-    }
-
-    // Initialize start time if needed
-    if (!this.staggerStartTime[expression]) {
-      this.staggerStartTime[expression] = this.currentFrame;
-    }
-
-    const delay = this._calculateStaggerDelay(expression);
-    const elapsedFrames = this.currentFrame - this.staggerStartTime[expression];
-    const delayFrames = delay * this.sampleRate; // Convert seconds to frames
-
-    return elapsedFrames < delayFrames;
-  }
-
-  _clearStaggerState(expression) {
-    // Clear stagger state when transition completes or is interrupted
-    delete this.staggerStartTime[expression];
-    delete this.staggerDelays[expression];
-  }
-
-  _updateExpressionState() {
-    const state = this.expressionState;
-
-    switch (state.phase) {
-      case "IDLE":
-        // Check if we need to start a transition
-        if (state.current !== state.target) {
-          // Enforce hub-and-spoke: must go through NONE
-          if (state.current !== "NONE" && state.target !== "NONE") {
-            // Can't go directly between expressions - must stop current first
-            state.target = "NONE";
-            // Note: finalTarget is set in _handleMessage when this occurs
-          }
-          state.phase = "STOPPING";
-          state.stopProgress = 0.0;
-        }
-        break;
-
-      case "STOPPING":
-        if (state.current === "NONE") {
-          // No expression to stop, go directly to starting
-          state.phase = "STARTING";
-          state.startProgress = 0.0;
-        } else {
-          // Handle interrupted transitions
-          if (state.target === state.current) {
-            // User wants to go back - reverse direction
-            state.phase = "STARTING";
-            state.startProgress = 1.0 - state.stopProgress;
-            break;
-          }
-
-          const params = this.transitionParams[state.current.toLowerCase()];
-
-          // Check if we can stop at this point
-          if (params.canStopAt()) {
-            // Apply stagger and variance to stop progress
-            let effectiveRate = params.stopRate;
-
-            // Apply variance
-            if (this.transitionSettings.variance > 0) {
-              const varianceFactor =
-                1.0 + (Math.random() - 0.5) * this.transitionSettings.variance;
-              effectiveRate *= varianceFactor;
-            }
-
-            state.stopProgress += effectiveRate;
-
-            if (state.stopProgress >= 1.0) {
-              // Fully stopped
-              state.phase = "WAITING";
-            }
-          }
-        }
-        break;
-
-      case "WAITING":
-        // Brief pause between expressions
-        state.current = "NONE";
-
-        // Check if we have a final target to reach
-        if (state.finalTarget && state.finalTarget !== "NONE") {
-          state.target = state.finalTarget;
-          state.finalTarget = null;
-        }
-
-        state.phase = "STARTING";
-        state.startProgress = 0.0;
-        break;
-
-      case "STARTING":
-        if (state.target === "NONE") {
-          // No expression to start
-          state.current = "NONE";
-          state.phase = "IDLE";
-        } else {
-          // Handle interrupted transitions
-          if (state.target === "NONE" && state.current !== "NONE") {
-            // User wants to go back to NONE - reverse
-            state.phase = "STOPPING";
-            state.stopProgress = 1.0 - state.startProgress;
-            break;
-          }
-
-          const params = this.transitionParams[state.target.toLowerCase()];
-
-          // Apply stagger and variance to start progress
-          let effectiveRate = params.startRate;
-
-          // Check stagger delay
-          if (this._shouldDelayForStagger(state.target, state.startProgress)) {
-            return; // Still in delay period
-          }
-
-          // Apply variance
-          if (this.transitionSettings.variance > 0) {
-            const varianceFactor =
-              1.0 + (Math.random() - 0.5) * this.transitionSettings.variance;
-            effectiveRate *= varianceFactor;
-          }
-
-          state.startProgress += effectiveRate;
-
-          if (state.startProgress >= 1.0) {
-            // Fully started
-            state.current = state.target;
-            state.phase = "IDLE";
-            state.startProgress = 1.0;
-            this._clearStaggerState(state.target);
-          }
-        }
-        break;
-    }
-
-    // Update master progress for each expression
-    // Vibrato
-    if (
-      (state.phase === "IDLE" && state.current === "VIBRATO") ||
-      (state.phase === "STARTING" && state.target === "VIBRATO")
-    ) {
-      this.vibratoMasterProgress =
-        state.phase === "IDLE" ? 1.0 : state.startProgress;
-    } else if (state.phase === "STOPPING" && state.current === "VIBRATO") {
-      this.vibratoMasterProgress = 1.0 - state.stopProgress;
-    } else {
-      this.vibratoMasterProgress = 0.0;
-    }
-
-    // Tremolo
-    if (
-      (state.phase === "IDLE" && state.current === "TREMOLO") ||
-      (state.phase === "STARTING" && state.target === "TREMOLO")
-    ) {
-      this.tremoloMasterProgress =
-        state.phase === "IDLE" ? 1.0 : state.startProgress;
-    } else if (state.phase === "STOPPING" && state.current === "TREMOLO") {
-      this.tremoloMasterProgress = 1.0 - state.stopProgress;
-    } else {
-      this.tremoloMasterProgress = 0.0;
-    }
-
-    // Trill
-    if (
-      (state.phase === "IDLE" && state.current === "TRILL") ||
-      (state.phase === "STARTING" && state.target === "TRILL")
-    ) {
-      this.trillMasterProgress =
-        state.phase === "IDLE" ? 1.0 : state.startProgress;
-    } else if (state.phase === "STOPPING" && state.current === "TRILL") {
-      this.trillMasterProgress = 1.0 - state.stopProgress;
-    } else {
-      this.trillMasterProgress = 0.0;
-    }
-
-    // Clamp all progress values
-    this.vibratoMasterProgress = Math.max(
-      0.0,
-      Math.min(1.0, this.vibratoMasterProgress),
-    );
-    this.tremoloMasterProgress = Math.max(
-      0.0,
-      Math.min(1.0, this.tremoloMasterProgress),
-    );
-    this.trillMasterProgress = Math.max(
-      0.0,
-      Math.min(1.0, this.trillMasterProgress),
-    );
   }
 
   _calculateStringModeCoefficients() {
@@ -888,8 +525,12 @@ class ContinuousExcitationProcessor extends AudioWorkletProcessor {
     let needsRecalcBody = false; // Flag for body resonator
     const tolerance = 1e-6;
 
-    // Check AudioParams that affect string modes
-    // Note: _cachedStringMaterial is updated by messages, not read from parameters here
+    // Check stringMaterial
+    const stringMaterialVal = parameters.stringMaterial[0];
+    if (Math.abs(stringMaterialVal - this._cachedStringMaterial) > tolerance) {
+      this._cachedStringMaterial = stringMaterialVal;
+      needsRecalcStringModes = true;
+    }
 
     // Check bowPosition
     const bowPositionVal = parameters.bowPosition[0];
@@ -922,40 +563,26 @@ class ContinuousExcitationProcessor extends AudioWorkletProcessor {
       needsRecalcLpf = true;
     }
 
-    // Check AudioParams that affect body modes
-    const bodyResonanceVal = parameters.bodyResonance[0];
-    if (Math.abs(bodyResonanceVal - this._cachedBodyResonance) > tolerance) {
-      this._cachedBodyResonance = bodyResonanceVal;
-      needsRecalcBody = true;
-    }
-    // Note: _cachedBodyType is updated by messages, not read from parameters here
-
-    // Check flags for message-driven discrete changes (stringMaterial, bodyType)
-    if (this._stringCoefficientsNeedRecalculation) {
-      needsRecalcStringModes = true;
-    }
-    if (this._bodyCoefficientsNeedRecalculation) {
-      needsRecalcBody = true;
-    }
-
-    // Perform recalculations
     if (needsRecalcStringModes) {
-      this._calculateStringModeCoefficients();
-      this._stringCoefficientsNeedRecalculation = false; // Reset flag
+      this._calculateStringModeCoefficients(); // Renamed
     }
     if (needsRecalcLpf) {
       this._calculateLpfCoefficients();
     }
+
+    // Check Body Type
+    const bodyTypeVal = parameters.bodyType[0];
+    if (Math.abs(bodyTypeVal - this._cachedBodyType) > tolerance) {
+      this._cachedBodyType = bodyTypeVal;
+      needsRecalcBody = true;
+    }
+
     if (needsRecalcBody) {
       this._calculateModalBodyCoefficients();
-      this._bodyCoefficientsNeedRecalculation = false; // Reset flag
     }
   }
 
   process(inputs, outputs, parameters) {
-    // Track current frame for stagger timing
-    this.currentFrame++;
-
     // Check for parameter changes
     this._recalculateAllCoefficientsIfNeeded(parameters);
 
@@ -986,12 +613,20 @@ class ContinuousExcitationProcessor extends AudioWorkletProcessor {
     const tremoloDepth = parameters.tremoloDepth[0];
     const tremoloArticulation = parameters.tremoloArticulation[0]; // 0.01=extreme staccato, 0.99=extreme legato
 
-    // Update expression state machine
-    this._updateExpressionState();
+    // Handle vibrato enable/disable
+    if (vibratoEnabled && !trillEnabled && !tremoloEnabled) {
+      this.vibratoActive = true;
+      // Always use full ramp factor when enabled - depth parameter handles the actual ramping
+      this.vibratoRampFactor = 1.0;
+    } else {
+      this.vibratoActive = false;
+      this.vibratoRampFactor = 0.0;
+      this.vibratoPhase = 0.0; // Reset phase immediately when disabled
+    }
 
-    // Initialize modulations
-    let pitchModulation = 1.0;
-    let ampModulation = 1.0;
+    // Update vibrato phase only when active
+    const vibratoIncrement =
+      (this.vibratoActive ? vibratoRate : 0) / this.sampleRate;
 
     // Dynamic bow physics
     // Bow force affects brightness and noise
@@ -1022,265 +657,226 @@ class ContinuousExcitationProcessor extends AudioWorkletProcessor {
         );
       }
 
-      // Reset modulations for this sample
-      pitchModulation = 1.0;
-      ampModulation = 1.0;
+      // Update vibrato
+      this.vibratoPhase += vibratoIncrement;
+      if (this.vibratoPhase >= 1.0) this.vibratoPhase -= 1.0;
+      const vibratoValue = Math.sin(2 * Math.PI * this.vibratoPhase);
 
-      // Process Vibrato
-      if (this.vibratoMasterProgress > 0.001) {
-        const state = this.expressionState;
+      // Calculate vibrato modulations (70% pitch, 30% amplitude for realism)
+      let pitchModulation = 1.0;
+      let ampModulation = 1.0;
 
-        // Rate directly follows master progress
-        const vibratoRateModFactor = this.vibratoMasterProgress;
-        const effectiveVibratoRate = vibratoRate * vibratoRateModFactor;
+      if (this.vibratoActive) {
+        // Apply vibrato - depth parameter already handles ramping externally
+        pitchModulation = 1.0 + vibratoValue * vibratoDepth * 0.06; // ±6% pitch
+        ampModulation = 1.0 + vibratoValue * vibratoDepth * 0.2; // ±20% amplitude
+      }
 
-        // Depth follows different curve
-        let vibratoDepthModFactor = 0.0;
-        if (
-          (state.phase === "IDLE" && state.current === "VIBRATO") ||
-          (state.phase === "STARTING" && state.target === "VIBRATO")
-        ) {
-          // Depth comes in after rate is established
-          vibratoDepthModFactor = Math.pow(this.vibratoMasterProgress, 2.0);
-          if (state.phase === "IDLE" && state.current === "VIBRATO") {
-            vibratoDepthModFactor = 1.0;
-          }
-        } else if (state.phase === "STOPPING" && state.current === "VIBRATO") {
-          // Depth fades early while rate is still slow
-          vibratoDepthModFactor = Math.pow(this.vibratoMasterProgress, 0.2);
+      // Handle trill
+      if (trillEnabled) {
+        // Ramp up trill speed gradually
+        if (this.trillRampFactor < 1.0) {
+          this.trillRampFactor = Math.min(1.0, this.trillRampFactor + 0.002); // ~0.5s ramp
         }
-
-        const effectiveVibratoDepth = vibratoDepth * vibratoDepthModFactor;
-
-        // Always update phase
-        this.vibratoPhase += effectiveVibratoRate / this.sampleRate;
-        if (this.vibratoPhase >= 1.0) this.vibratoPhase -= 1.0;
-
-        if (effectiveVibratoDepth > 0.001) {
-          const vibratoValue = Math.sin(2 * Math.PI * this.vibratoPhase);
-          pitchModulation = 1.0 + vibratoValue * effectiveVibratoDepth * 0.06;
-          ampModulation = 1.0 + vibratoValue * effectiveVibratoDepth * 0.2;
+        this.trillActive = true;
+      } else {
+        // Ramp down when disabling
+        if (this.trillRampFactor > 0.0) {
+          this.trillRampFactor = Math.max(0.0, this.trillRampFactor - 0.004); // Faster ramp down
+        }
+        if (this.trillRampFactor === 0.0) {
+          this.trillActive = false;
+          this.trillPhase = 0.0;
+          this.lastTrillState = 0; // Reset state tracking
         }
       }
 
-      // Process Trill
-      if (this.trillMasterProgress > 0.001) {
-        const state = this.expressionState;
+      if (this.trillActive || this.trillRampFactor > 0) {
+        // Calculate current trill speed with ramping
+        this.trillCurrentSpeed =
+          3.0 + (trillTargetSpeed - 3.0) * this.trillRampFactor;
 
-        // Rate modulation - exponential curve for very slow start
-        let trillRateModFactor = this.trillMasterProgress;
-        if (state.phase === "STARTING" && state.target === "TRILL") {
-          // Exponential curve - stays very slow for first 60% of transition
-          trillRateModFactor =
-            (Math.exp(this.trillMasterProgress * 3) - 1) / (Math.exp(3) - 1);
-        }
-        const effectiveTrillSpeed = trillTargetSpeed * trillRateModFactor;
-
-        // Intensity modulation
-        let trillIntensityModFactor = 0.0;
-        if (
-          (state.phase === "IDLE" && state.current === "TRILL") ||
-          (state.phase === "STARTING" && state.target === "TRILL")
-        ) {
-          // Let individual notes be heard clearly at slow speeds
-          trillIntensityModFactor = Math.pow(this.trillMasterProgress, 3.0);
-          if (state.phase === "IDLE" && state.current === "TRILL") {
-            trillIntensityModFactor = 1.0;
-          }
-        } else if (state.phase === "STOPPING" && state.current === "TRILL") {
-          trillIntensityModFactor = Math.pow(this.trillMasterProgress, 0.25);
-        }
-
-        const effectiveTrillIntensity = trillIntensityModFactor;
-
-        // Update phase
+        // Add slight timing variations for realism (±10%)
         const timingVariation = 1.0 + (Math.random() - 0.5) * 0.1;
         const trillIncrement =
-          (effectiveTrillSpeed * timingVariation) / this.sampleRate;
+          (this.trillCurrentSpeed * timingVariation) / this.sampleRate;
+
         this.trillPhase += trillIncrement;
-        if (this.trillPhase >= 1.0) this.trillPhase -= 1.0;
+        if (this.trillPhase >= 1.0) {
+          this.trillPhase -= 1.0;
+        }
 
-        if (effectiveTrillIntensity > 0.001) {
-          // Determine if we're on upper or lower note with articulation control
-          // For articulation, we adjust how much of each phase is "active"
-          let isActivePhase = false;
-          let currentTrillState;
+        // Determine if we're on upper or lower note with articulation control
+        // For articulation, we adjust how much of each phase is "active"
+        let isActivePhase = false;
+        let currentTrillState;
 
-          if (this.trillPhase < 0.5) {
-            // First half - lower note
-            currentTrillState = 0;
-            isActivePhase = this.trillPhase < 0.5 * trillArticulation;
-          } else {
-            // Second half - upper note
-            currentTrillState = 1;
-            const adjustedPhase = this.trillPhase - 0.5;
-            isActivePhase = adjustedPhase < 0.5 * trillArticulation;
-          }
+        if (this.trillPhase < 0.5) {
+          // First half - lower note
+          currentTrillState = 0;
+          isActivePhase = this.trillPhase < 0.5 * trillArticulation;
+        } else {
+          // Second half - upper note
+          currentTrillState = 1;
+          const adjustedPhase = this.trillPhase - 0.5;
+          isActivePhase = adjustedPhase < 0.5 * trillArticulation;
+        }
 
-          const trillTransition = currentTrillState !== this.lastTrillState;
-          this.lastTrillState = currentTrillState;
+        const trillTransition = currentTrillState !== this.lastTrillState;
+        this.lastTrillState = currentTrillState;
 
-          // Calculate pitch change - base note is the lower pitch
-          if (currentTrillState === 1 && isActivePhase) {
-            // Upper note - trill interval above base
-            pitchModulation = Math.pow(2, trillInterval / 12.0);
-          } else if (currentTrillState === 0 && isActivePhase) {
-            // Lower note (base pitch)
-            pitchModulation = 1.0;
-          } else {
-            // In gap - maintain previous pitch to avoid glitches
-            pitchModulation =
-              currentTrillState === 1 ? Math.pow(2, trillInterval / 12.0) : 1.0;
-          }
-
-          // Amplitude effects for hammer-on/lift-off with articulation
-          if (!isActivePhase) {
-            // In gap between notes
-            ampModulation = 0.1; // Very quiet during gaps
-          } else if (currentTrillState === 1) {
-            // Upper note (hammered on) - much louder to compensate for psychoacoustic effects
-            ampModulation = 1.5;
-          } else {
-            // Lower note - slightly quieter to increase contrast
-            ampModulation = 0.85;
-          }
-
-          // Apply intensity to smooth enable/disable
+        // Calculate pitch change - base note is the lower pitch
+        if (currentTrillState === 1 && isActivePhase) {
+          // Upper note - trill interval above base
+          pitchModulation = Math.pow(2, trillInterval / 12.0);
+        } else if (currentTrillState === 0 && isActivePhase) {
+          // Lower note (base pitch)
+          pitchModulation = 1.0;
+        } else {
+          // In gap - maintain previous pitch to avoid glitches
           pitchModulation =
-            1.0 + (pitchModulation - 1.0) * effectiveTrillIntensity;
-          ampModulation = 1.0 + (ampModulation - 1.0) * effectiveTrillIntensity;
+            currentTrillState === 1 ? Math.pow(2, trillInterval / 12.0) : 1.0;
+        }
+
+        // Amplitude effects for hammer-on/lift-off with articulation
+        if (!isActivePhase) {
+          // In gap between notes
+          ampModulation = 0.1; // Very quiet during gaps
+        } else if (currentTrillState === 1) {
+          // Upper note (hammered on) - much louder to compensate for psychoacoustic effects
+          ampModulation = 1.5;
+        } else {
+          // Lower note - slightly quieter to increase contrast
+          ampModulation = 0.85;
+        }
+
+        // Apply ramp factor to smooth enable/disable
+        pitchModulation = 1.0 + (pitchModulation - 1.0) * this.trillRampFactor;
+        ampModulation = 1.0 + (ampModulation - 1.0) * this.trillRampFactor;
+      }
+
+      // Handle tremolo
+      if (tremoloEnabled) {
+        if (this.tremoloRampFactor < 1.0) {
+          this.tremoloRampFactor = Math.min(
+            1.0,
+            this.tremoloRampFactor + 0.003,
+          ); // ~0.3s ramp
+        }
+        this.tremoloActive = true;
+      } else {
+        if (this.tremoloRampFactor > 0.0) {
+          this.tremoloRampFactor = Math.max(
+            0.0,
+            this.tremoloRampFactor - 0.005,
+          );
+        }
+        if (this.tremoloRampFactor === 0.0) {
+          this.tremoloActive = false;
+          this.tremoloPhase = 0.0;
+          this.tremoloStrokeCount = 0;
+          this.lastTremoloState = 0; // Reset state tracking
+          this.tremoloGroupPhase = 0.0; // Reset grouping phase
         }
       }
 
-      // Process Tremolo
-      if (this.tremoloMasterProgress > 0.001) {
-        const state = this.expressionState;
-
-        // Rate modulation - exponential curve for very slow start
-        let tremoloRateModFactor = this.tremoloMasterProgress;
-        if (state.phase === "STARTING" && state.target === "TREMOLO") {
-          // Exponential curve - crawls for first half of transition
-          tremoloRateModFactor =
-            (Math.exp(this.tremoloMasterProgress * 2.5) - 1) /
-            (Math.exp(2.5) - 1);
-        }
-        const effectiveTremoloSpeed = tremoloSpeed * tremoloRateModFactor;
-
-        // Depth modulation (for amplitude intensity)
-        let tremoloDepthModFactor = 0.0;
-        if (
-          (state.phase === "IDLE" && state.current === "TREMOLO") ||
-          (state.phase === "STARTING" && state.target === "TREMOLO")
-        ) {
-          // Emphasize individual slow strokes at start
-          tremoloDepthModFactor = Math.pow(this.tremoloMasterProgress, 2.5);
-          if (state.phase === "IDLE" && state.current === "TREMOLO") {
-            tremoloDepthModFactor = 1.0;
-          }
-        } else if (state.phase === "STOPPING" && state.current === "TREMOLO") {
-          // Keep some intensity while slowing down
-          tremoloDepthModFactor = Math.pow(this.tremoloMasterProgress, 0.3);
-        }
-
-        const effectiveTremoloDepth = tremoloDepth * tremoloDepthModFactor;
-
-        // Update phase with timing variation
+      if (this.tremoloActive || this.tremoloRampFactor > 0) {
+        // Add slight timing variations for realism
         const timingVariation = 1.0 + (Math.random() - 0.5) * 0.15;
         const tremoloIncrement =
-          (effectiveTremoloSpeed * timingVariation) / this.sampleRate;
+          (tremoloSpeed * timingVariation) / this.sampleRate;
+
         this.tremoloPhase += tremoloIncrement;
         if (this.tremoloPhase >= 1.0) {
           this.tremoloPhase -= 1.0;
-          if (effectiveTremoloSpeed > 0.001) this.tremoloStrokeCount++;
+          this.tremoloStrokeCount++;
         }
 
-        if (effectiveTremoloDepth > 0.001) {
-          // Determine bow direction (up/down)
-          const currentTremoloState = this.tremoloPhase < 0.5 ? 0 : 1;
-          const tremoloTransition =
-            currentTremoloState !== this.lastTremoloState;
-          this.lastTremoloState = currentTremoloState;
+        // Determine bow direction (up/down)
+        const currentTremoloState = this.tremoloPhase < 0.5 ? 0 : 1;
+        const tremoloTransition = currentTremoloState !== this.lastTremoloState;
+        this.lastTremoloState = currentTremoloState;
 
-          // Natural grouping - slight accent every 3-4 strokes
-          const groupSize = 3 + Math.floor(Math.random() * 2); // 3 or 4
-          const isAccented = this.tremoloStrokeCount % groupSize === 0;
+        // Natural grouping - slight accent every 3-4 strokes
+        const groupSize = 3 + Math.floor(Math.random() * 2); // 3 or 4
+        const isAccented = this.tremoloStrokeCount % groupSize === 0;
 
-          // Model bow speed changes through the stroke cycle
-          // Bow slows to zero at turnaround points (0 and 0.5)
-          let bowSpeedFactor = 1.0;
+        // Model bow speed changes through the stroke cycle
+        // Bow slows to zero at turnaround points (0 and 0.5)
+        let bowSpeedFactor = 1.0;
 
-          // Adjust phase mapping based on articulation
-          // For extreme staccato (0.01), stroke takes up only 1% of cycle
-          // For extreme legato (0.99), stroke takes up 99% of cycle
-          let phaseInStroke;
-          if (currentTremoloState === 0) {
-            // First half of cycle
-            if (this.tremoloPhase < tremoloArticulation * 0.5) {
-              // Active stroke portion
-              phaseInStroke = this.tremoloPhase / (tremoloArticulation * 0.5);
-            } else {
-              // Gap portion - bow speed is zero
-              phaseInStroke = 1.0;
-            }
+        // Adjust phase mapping based on articulation
+        // For extreme staccato (0.01), stroke takes up only 1% of cycle
+        // For extreme legato (0.99), stroke takes up 99% of cycle
+        let phaseInStroke;
+        if (currentTremoloState === 0) {
+          // First half of cycle
+          if (this.tremoloPhase < tremoloArticulation * 0.5) {
+            // Active stroke portion
+            phaseInStroke = this.tremoloPhase / (tremoloArticulation * 0.5);
           } else {
-            // Second half of cycle
-            const adjustedPhase = this.tremoloPhase - 0.5;
-            if (adjustedPhase < tremoloArticulation * 0.5) {
-              // Active stroke portion
-              phaseInStroke = adjustedPhase / (tremoloArticulation * 0.5);
-            } else {
-              // Gap portion - bow speed is zero
-              phaseInStroke = 1.0;
-            }
+            // Gap portion - bow speed is zero
+            phaseInStroke = 1.0;
           }
-
-          // Calculate bow speed based on phase
-          if (phaseInStroke < 1.0) {
-            // Active stroke - use raised sine for longer turnarounds
-            bowSpeedFactor = Math.pow(Math.sin(phaseInStroke * Math.PI), 2.5);
+        } else {
+          // Second half of cycle
+          const adjustedPhase = this.tremoloPhase - 0.5;
+          if (adjustedPhase < tremoloArticulation * 0.5) {
+            // Active stroke portion
+            phaseInStroke = adjustedPhase / (tremoloArticulation * 0.5);
           } else {
-            // In gap - minimal bow speed
-            bowSpeedFactor = 0.0;
+            // Gap portion - bow speed is zero
+            phaseInStroke = 1.0;
           }
-
-          // Much more aggressive scratchiness at low speeds
-          const nearTurnaround = bowSpeedFactor < 0.5;
-          let scratchiness = 0.0;
-          if (nearTurnaround) {
-            // Extreme noise and irregularity at low bow speeds
-            scratchiness = Math.pow((0.5 - bowSpeedFactor) * 2.0, 1.5); // 0 to 1.4
-          }
-
-          // Calculate amplitude for tremolo - more extreme dynamics
-          let tremoloAmp = 0.5 + bowSpeedFactor * 0.7; // 0.5 to 1.2
-
-          // Create more pronounced gap at turnaround points and during gaps
-          if (bowSpeedFactor < 0.15) {
-            // Much quieter at direction change
-            tremoloAmp = 0.05 + bowSpeedFactor * 0.5;
-          } else if (phaseInStroke >= 1.0) {
-            // In gap between strokes
-            tremoloAmp = 0.02;
-          }
-
-          // Simulate increased bow pressure during tremolo
-          const tremoloPressureBoost = 1.3;
-
-          // Add accent on grouped notes
-          if (isAccented && bowSpeedFactor > 0.5) {
-            tremoloAmp += 0.2;
-          }
-
-          // Apply depth control
-          tremoloAmp = 1.0 + (tremoloAmp - 1.0) * effectiveTremoloDepth;
-
-          // Apply tremolo amplitude modulation with pressure boost
-          ampModulation *= tremoloAmp * tremoloPressureBoost;
-
-          // Store scratchiness for use in excitation
-          this.tremoloScratchiness = scratchiness * effectiveTremoloDepth;
-          this.tremoloBowSpeed = bowSpeedFactor;
         }
+
+        // Calculate bow speed based on phase
+        if (phaseInStroke < 1.0) {
+          // Active stroke - use raised sine for longer turnarounds
+          bowSpeedFactor = Math.pow(Math.sin(phaseInStroke * Math.PI), 2.5);
+        } else {
+          // In gap - minimal bow speed
+          bowSpeedFactor = 0.0;
+        }
+
+        // Much more aggressive scratchiness at low speeds
+        const nearTurnaround = bowSpeedFactor < 0.5;
+        let scratchiness = 0.0;
+        if (nearTurnaround) {
+          // Extreme noise and irregularity at low bow speeds
+          scratchiness = Math.pow((0.5 - bowSpeedFactor) * 2.0, 1.5); // 0 to 1.4
+        }
+
+        // Calculate amplitude for tremolo - more extreme dynamics
+        let tremoloAmp = 0.5 + bowSpeedFactor * 0.7; // 0.5 to 1.2
+
+        // Create more pronounced gap at turnaround points and during gaps
+        if (bowSpeedFactor < 0.15) {
+          // Much quieter at direction change
+          tremoloAmp = 0.05 + bowSpeedFactor * 0.5;
+        } else if (phaseInStroke >= 1.0) {
+          // In gap between strokes
+          tremoloAmp = 0.02;
+        }
+
+        // Simulate increased bow pressure during tremolo
+        const tremoloPressureBoost = 1.3;
+
+        // Add accent on grouped notes
+        if (isAccented && bowSpeedFactor > 0.5) {
+          tremoloAmp += 0.2;
+        }
+
+        // Apply depth control
+        tremoloAmp = 1.0 + (tremoloAmp - 1.0) * tremoloDepth;
+
+        // Apply tremolo amplitude modulation with pressure boost
+        ampModulation *=
+          tremoloAmp * this.tremoloRampFactor * tremoloPressureBoost;
+
+        // Store scratchiness for use in excitation
+        this.tremoloScratchiness = scratchiness;
+        this.tremoloBowSpeed = bowSpeedFactor;
       }
 
       // Generate continuous bow excitation when bowing
@@ -1441,21 +1037,6 @@ class ContinuousExcitationProcessor extends AudioWorkletProcessor {
       // Soft clipping to prevent harsh distortion
       const finalSample = Math.tanh(gainedOutput * 0.5) * 2.0; // Compensate for tanh compression
       outputChannel[i] = finalSample;
-    }
-
-    // Debug output
-    if (++this.debugCounter % 1000 === 0) {
-      this.port.postMessage({
-        type: "debug",
-        state: this.expressionState,
-        progress: {
-          vibrato: this.vibratoMasterProgress.toFixed(3),
-          tremolo: this.tremoloMasterProgress.toFixed(3),
-          trill: this.trillMasterProgress.toFixed(3),
-        },
-        transitionSettings: this.transitionSettings,
-        staggerDelays: this.staggerDelays,
-      });
     }
 
     return true;

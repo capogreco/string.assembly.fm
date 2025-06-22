@@ -1,253 +1,3 @@
-<!doctype html>
-<html lang="en">
-    <head>
-        <meta charset="UTF-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>String Assembly FM - Multi-Synth Test Client</title>
-        <style>
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
-
-            body {
-                font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
-                background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
-                min-height: 100vh;
-                color: white;
-                padding: 20px;
-            }
-
-            .container {
-                max-width: 1200px;
-                margin: 0 auto;
-            }
-
-            h1 {
-                text-align: center;
-                margin-bottom: 30px;
-                text-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
-            }
-
-            .controls {
-                background: rgba(255, 255, 255, 0.1);
-                border-radius: 12px;
-                padding: 20px;
-                margin-bottom: 30px;
-                backdrop-filter: blur(10px);
-                border: 1px solid rgba(255, 255, 255, 0.2);
-            }
-
-            .control-row {
-                display: flex;
-                gap: 20px;
-                align-items: center;
-                margin-bottom: 15px;
-            }
-
-            button {
-                padding: 10px 20px;
-                border: none;
-                border-radius: 6px;
-                background: #3498db;
-                color: white;
-                font-weight: 500;
-                cursor: pointer;
-                transition: all 0.3s ease;
-            }
-
-            button:hover {
-                background: #2980b9;
-                transform: translateY(-2px);
-            }
-
-            button:disabled {
-                background: #7f8c8d;
-                cursor: not-allowed;
-                transform: none;
-            }
-
-            .synth-grid {
-                display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-                gap: 20px;
-            }
-
-            .synth-unit {
-                background: rgba(255, 255, 255, 0.1);
-                border-radius: 12px;
-                padding: 20px;
-                backdrop-filter: blur(10px);
-                border: 1px solid rgba(255, 255, 255, 0.2);
-                transition: all 0.3s ease;
-            }
-
-            .synth-unit.active {
-                border-color: #3498db;
-                box-shadow: 0 0 20px rgba(52, 152, 219, 0.3);
-            }
-
-            .synth-header {
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                margin-bottom: 15px;
-            }
-
-            .synth-id {
-                font-weight: bold;
-                font-size: 1.1em;
-            }
-
-            .status-dot {
-                width: 12px;
-                height: 12px;
-                border-radius: 50%;
-                background: #e74c3c;
-            }
-
-            .status-dot.connected {
-                background: #2ecc71;
-            }
-
-            .note-display {
-                background: rgba(0, 0, 0, 0.3);
-                border-radius: 6px;
-                padding: 10px;
-                margin-bottom: 10px;
-                font-family: monospace;
-                min-height: 40px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                font-size: 1.2em;
-            }
-
-            .expression-display {
-                font-size: 0.9em;
-                color: rgba(255, 255, 255, 0.8);
-                margin-bottom: 10px;
-            }
-
-            .level-meter {
-                height: 100px;
-                background: rgba(0, 0, 0, 0.3);
-                border-radius: 6px;
-                position: relative;
-                overflow: hidden;
-                margin-bottom: 10px;
-            }
-
-            .level-bar {
-                position: absolute;
-                bottom: 0;
-                left: 0;
-                right: 0;
-                background: linear-gradient(to top, #2ecc71, #f1c40f, #e74c3c);
-                transition: height 0.1s ease;
-            }
-
-            .pan-control {
-                display: flex;
-                align-items: center;
-                gap: 10px;
-                font-size: 0.9em;
-            }
-
-            .pan-slider {
-                flex: 1;
-            }
-
-            .log-area {
-                background: rgba(0, 0, 0, 0.3);
-                border-radius: 6px;
-                padding: 15px;
-                margin-top: 30px;
-                font-family: monospace;
-                font-size: 0.9em;
-                max-height: 200px;
-                overflow-y: auto;
-            }
-
-            .log-entry {
-                margin-bottom: 5px;
-                opacity: 0.8;
-            }
-
-            .log-entry.error {
-                color: #e74c3c;
-            }
-
-            .log-entry.info {
-                color: #3498db;
-            }
-
-            input[type="number"] {
-                width: 60px;
-                padding: 5px;
-                border: 1px solid rgba(255, 255, 255, 0.3);
-                background: rgba(255, 255, 255, 0.1);
-                color: white;
-                border-radius: 4px;
-            }
-
-            input[type="range"] {
-                width: 100%;
-            }
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <h1>🎼 Multi-Synth Test Ensemble</h1>
-
-            <div class="controls">
-                <div class="control-row">
-                    <label>Number of Synths:</label>
-                    <input
-                        type="number"
-                        id="synth-count"
-                        value="6"
-                        min="1"
-                        max="12"
-                    />
-                    <button onclick="initializeEnsemble()">Initialize</button>
-                    <button onclick="connectToController()">
-                        Connect to Controller
-                    </button>
-                    <button id="start-all" onclick="startAllSynths()" disabled>
-                        Start All
-                    </button>
-                    <button id="stop-all" onclick="stopAllSynths()" disabled>
-                        Stop All
-                    </button>
-                </div>
-                <div class="control-row">
-                    <label>Master Volume:</label>
-                    <input
-                        type="range"
-                        id="master-volume"
-                        min="0"
-                        max="1"
-                        step="0.01"
-                        value="0.7"
-                    />
-                    <span id="volume-display">70%</span>
-                </div>
-            </div>
-
-            <div class="synth-grid" id="synth-grid">
-                <!-- Synth units will be generated here -->
-            </div>
-
-            <div class="log-area" id="log-area">
-                <div class="log-entry info">
-                    Multi-synth test client ready. Click Initialize to begin.
-                </div>
-            </div>
-        </div>
-
-        <script>
             // Global state
             let audioContext = null;
             let synths = [];
@@ -758,71 +508,37 @@
                     const unit = document.createElement("div");
                     unit.className = "synth-unit";
 
-                    const header = document.createElement("div");
-                    header.className = "synth-header";
-
-                    const synthId = document.createElement("span");
-                    synthId.className = "synth-id";
-                    synthId.textContent = this.id;
-
-                    const statusDot = document.createElement("div");
-                    statusDot.className = "status-dot connected";
-
-                    header.appendChild(synthId);
-                    header.appendChild(statusDot);
-
-                    const noteDisplay = document.createElement("div");
-                    noteDisplay.className = "note-display";
-                    noteDisplay.textContent = "--";
-
-                    const expressionDisplay = document.createElement("div");
-                    expressionDisplay.className = "expression-display";
-                    expressionDisplay.textContent = "Expression: None";
-
-                    const levelMeter = document.createElement("div");
-                    levelMeter.className = "level-meter";
-                    const levelBar = document.createElement("div");
-                    levelBar.className = "level-bar";
-                    levelMeter.appendChild(levelBar);
-
-                    const panControl = document.createElement("div");
-                    panControl.className = "pan-control";
-
-                    const panLabel = document.createElement("label");
-                    panLabel.textContent = "Pan:";
-
-                    const panSlider = document.createElement("input");
-                    panSlider.type = "range";
-                    panSlider.className = "pan-slider";
-                    panSlider.min = "-1";
-                    panSlider.max = "1";
-                    panSlider.step = "0.1";
-                    panSlider.value = this.panPosition.toString();
-
-                    const panValue = document.createElement("span");
-                    panValue.className = "pan-value";
-                    panValue.textContent = this.panPosition.toFixed(1);
-
-                    panControl.appendChild(panLabel);
-                    panControl.appendChild(panSlider);
-                    panControl.appendChild(panValue);
-
-                    unit.appendChild(header);
-                    unit.appendChild(noteDisplay);
-                    unit.appendChild(expressionDisplay);
-                    unit.appendChild(levelMeter);
-                    unit.appendChild(panControl);
+                    unit.innerHTML = `
+                    <div class="synth-header">
+                        <span class="synth-id">${this.id}</span>
+                        <div class="status-dot connected"></div>
+                    </div>
+                    <div class="note-display">--</div>
+                    <div class="expression-display">Expression: None</div>
+                    <div class="level-meter">
+                        <div class="level-bar"></div>
+                    </div>
+                    <div class="pan-control">
+                        <label>Pan:</label>
+                        <input type="range" class="pan-slider" min="-1" max="1" step="0.1" value="${this.panPosition}">
+                        <span class="pan-value">${this.panPosition.toFixed(1)}</span>
+                    </div>
+                `;
 
                     this.element = unit;
-                    this.noteDisplay = noteDisplay;
-                    this.expressionDisplay = expressionDisplay;
-                    this.levelMeter = levelBar;
-                    this.panControl = panSlider;
+                    this.noteDisplay = unit.querySelector(".note-display");
+                    this.expressionDisplay = unit.querySelector(
+                        ".expression-display",
+                    );
+                    this.levelMeter = unit.querySelector(".level-bar");
+                    this.panControl = unit.querySelector(".pan-slider");
 
-                    panSlider.addEventListener("input", (e) => {
+                    // Pan control
+                    this.panControl.addEventListener("input", (e) => {
                         const value = parseFloat(e.target.value);
                         this.panner.pan.value = value;
-                        panValue.textContent = value.toFixed(1);
+                        unit.querySelector(".pan-value").textContent =
+                            value.toFixed(1);
                     });
 
                     return unit;
@@ -906,95 +622,6 @@
                     return;
                 }
                 log("Connect to controller function called", "info");
-
-                // Set up WebSocket connections for each synth
-                for (const synth of synths) {
-                    if (!synth.ws) {
-                        const protocol =
-                            window.location.protocol === "https:"
-                                ? "wss:"
-                                : "ws:";
-                        synth.ws = new WebSocket(
-                            `${protocol}//${window.location.host}/ws`,
-                        );
-
-                        synth.ws.addEventListener("open", () => {
-                            log(`[${synth.id}] WebSocket connected`, "info");
-
-                            // Register with server
-                            synth.ws.send(
-                                JSON.stringify({
-                                    type: "register",
-                                    client_id: synth.id,
-                                }),
-                            );
-
-                            // Request list of active controllers
-                            synth.ws.send(
-                                JSON.stringify({
-                                    type: "request-controllers",
-                                    source: synth.id,
-                                }),
-                            );
-                        });
-
-                        synth.ws.addEventListener("message", async (event) => {
-                            const message = JSON.parse(event.data);
-                            await handleSynthMessage(synth, message);
-                        });
-
-                        synth.ws.addEventListener("close", () => {
-                            log(`[${synth.id}] WebSocket disconnected`, "info");
-                            synth.ws = null;
-                        });
-
-                        synth.ws.addEventListener("error", (error) => {
-                            log(
-                                `[${synth.id}] WebSocket error: ${error}`,
-                                "error",
-                            );
-                        });
-                    }
-                }
-            }
-
-            async function handleSynthMessage(synth, message) {
-                switch (message.type) {
-                    case "controllers-list":
-                        // Available controllers list received
-                        log(
-                            `[${synth.id}] Received controllers list: ${message.controllers.join(", ")}`,
-                            "info",
-                        );
-                        for (const controllerId of message.controllers) {
-                            if (!synth.controllers.has(controllerId)) {
-                                log(
-                                    `[${synth.id}] Discovered controller: ${controllerId}`,
-                                    "info",
-                                );
-                                synth.controllers.set(controllerId, {
-                                    connected: false,
-                                    connection: null,
-                                    channel: null,
-                                    command_channel: null,
-                                    ice_queue: [],
-                                });
-                                // Auto-connect to controllers
-                                connectSynthToController(synth, controllerId);
-                            }
-                        }
-                        break;
-                    case "answer":
-                        await handleControllerAnswer(synth, message);
-                        break;
-                    case "ice":
-                        await handleIceCandidate(synth, message);
-                        break;
-                    default:
-                        console.log(
-                            `[${synth.id}] Unknown message type: ${message.type}`,
-                        );
-                }
             }
 
             async function connectSynthToController(synth, controllerId) {
@@ -1198,6 +825,3 @@
                     document.getElementById("volume-display").textContent =
                         `${Math.round(value * 100)}%`;
                 });
-        </script>
-    </body>
-</html>

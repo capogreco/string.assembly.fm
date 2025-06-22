@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Expression Transition Test</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 30px;
+        }
+        .controls {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        .control-group {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            border: 1px solid #e9ecef;
+        }
+        .control-group h3 {
+            margin-top: 0;
+            color: #495057;
+            font-size: 1.1em;
+        }
+        button {
+            display: block;
+            width: 100%;
+            padding: 12px;
+            margin: 8px 0;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .expression-btn {
+            background: #007bff;
+            color: white;
+        }
+        .expression-btn:hover {
+            background: #0056b3;
+        }
+        .expression-btn.active {
+            background: #28a745;
+        }
+        .test-btn {
+            background: #6c757d;
+            color: white;
+        }
+        .test-btn:hover {
+            background: #545b62;
+        }
+        .none-btn {
+            background: #dc3545;
+            color: white;
+        }
+        .none-btn:hover {
+            background: #c82333;
+        }
+        .param-control {
+            margin: 15px 0;
+        }
+        .param-control label {
+            display: block;
+            margin-bottom: 5px;
+            font-size: 14px;
+            color: #6c757d;
+        }
+        .param-control input {
+            width: 100%;
+        }
+        .status {
+            background: #e9ecef;
+            padding: 15px;
+            border-radius: 6px;
+            margin-top: 20px;
+            font-family: monospace;
+            font-size: 14px;
+        }
+        .status-item {
+            margin: 5px 0;
+        }
+        .debug-log {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            padding: 15px;
+            margin-top: 20px;
+            height: 200px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .log-entry {
+            margin: 2px 0;
+            padding: 2px 0;
+            border-bottom: 1px solid #e9ecef;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Expression Transition Test</h1>
+
+        <div class="controls">
+            <div class="control-group">
+                <h3>Expression Control</h3>
+                <button class="expression-btn" onclick="transitionTo('VIBRATO')">Vibrato</button>
+                <button class="expression-btn" onclick="transitionTo('TREMOLO')">Tremolo</button>
+                <button class="expression-btn" onclick="transitionTo('TRILL')">Trill</button>
+                <button class="none-btn" onclick="transitionTo('NONE')">None (Stop Expression)</button>
+            </div>
+
+            <div class="control-group">
+                <h3>Test Sequences</h3>
+                <button class="test-btn" onclick="testBasicTransitions()">Test Basic Transitions</button>
+                <button class="test-btn" onclick="testHubAndSpoke()">Test Hub-and-Spoke</button>
+                <button class="test-btn" onclick="testInterruptions()">Test Interruptions</button>
+                <button class="test-btn" onclick="testRapidChanges()">Test Rapid Changes</button>
+            </div>
+        </div>
+
+        <div class="control-group">
+            <h3>Expression Parameters</h3>
+            <div class="param-control">
+                <label>Vibrato Rate: <span id="vibratoRateValue">5.0</span></label>
+                <input type="range" id="vibratoRate" min="0.1" max="15" step="0.1" value="5"
+                       oninput="updateParam('vibratoRate', this.value)">
+            </div>
+            <div class="param-control">
+                <label>Vibrato Depth: <span id="vibratoDepthValue">0.5</span></label>
+                <input type="range" id="vibratoDepth" min="0" max="1" step="0.01" value="0.5"
+                       oninput="updateParam('vibratoDepth', this.value)">
+            </div>
+            <div class="param-control">
+                <label>Tremolo Speed: <span id="tremoloSpeedValue">10</span></label>
+                <input type="range" id="tremoloSpeed" min="2" max="30" step="0.5" value="10"
+                       oninput="updateParam('tremoloSpeed', this.value)">
+            </div>
+            <div class="param-control">
+                <label>Tremolo Depth: <span id="tremoloDepthValue">0.5</span></label>
+                <input type="range" id="tremoloDepth" min="0" max="1" step="0.01" value="0.5"
+                       oninput="updateParam('tremoloDepth', this.value)">
+            </div>
+            <div class="param-control">
+                <label>Trill Speed: <span id="trillSpeedValue">6</span></label>
+                <input type="range" id="trillSpeed" min="3" max="15" step="0.5" value="6"
+                       oninput="updateParam('trillSpeed', this.value)">
+            </div>
+            <div class="param-control">
+                <label>Trill Interval: <span id="trillIntervalValue">2</span></label>
+                <input type="range" id="trillInterval" min="1" max="12" step="1" value="2"
+                       oninput="updateParam('trillInterval', this.value)">
+            </div>
+        </div>
+
+        <div class="status">
+            <h3>Current Status</h3>
+            <div class="status-item">Current Expression: <span id="currentExpression">NONE</span></div>
+            <div class="status-item">Target Expression: <span id="targetExpression">NONE</span></div>
+            <div class="status-item">Transition Phase: <span id="transitionPhase">IDLE</span></div>
+            <div class="status-item">Vibrato Progress: <span id="vibratoProgress">0.000</span></div>
+            <div class="status-item">Tremolo Progress: <span id="tremoloProgress">0.000</span></div>
+            <div class="status-item">Trill Progress: <span id="trillProgress">0.000</span></div>
+        </div>
+
+        <div class="debug-log" id="debugLog">
+            <div style="color: #6c757d;">Debug log will appear here...</div>
+        </div>
+    </div>
+
+    <script>
+        let audioContext;
+        let synth;
+        let isPlaying = false;
+        let debugInterval;
+
+        // Initialize on first user interaction
+        async function initAudio() {
+            if (audioContext) return;
+
+            audioContext = new AudioContext();
+            // Initialize your synth here
+            // synth = new BowedStringSynth(audioContext);
+            // await synth.init();
+
+            addLog('Audio initialized');
+
+            // Start debug monitoring
+            if (synth && synth.audioWorkletNode) {
+                synth.audioWorkletNode.port.onmessage = (event) => {
+                    if (event.data.type === 'debug') {
+                        updateStatus(event.data);
+                    }
+                };
+            }
+        }
+
+        function addLog(message) {
+            const log = document.getElementById('debugLog');
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            entry.textContent = `${new Date().toLocaleTimeString()}: ${message}`;
+            log.appendChild(entry);
+            log.scrollTop = log.scrollHeight;
+        }
+
+        function updateStatus(data) {
+            if (data.state) {
+                document.getElementById('currentExpression').textContent = data.state.current;
+                document.getElementById('targetExpression').textContent = data.state.target;
+                document.getElementById('transitionPhase').textContent = data.state.phase;
+            }
+            if (data.progress) {
+                document.getElementById('vibratoProgress').textContent = data.progress.vibrato;
+                document.getElementById('tremoloProgress').textContent = data.progress.tremolo;
+                document.getElementById('trillProgress').textContent = data.progress.trill;
+            }
+        }
+
+        async function transitionTo(expression) {
+            await initAudio();
+
+            if (!synth) {
+                addLog('ERROR: Synth not initialized. Implement BowedStringSynth initialization.');
+                return;
+            }
+
+            addLog(`Transitioning to ${expression}`);
+
+            // Update button states
+            document.querySelectorAll('.expression-btn, .none-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            event.target.classList.add('active');
+
+            // Send transition command
+            await synth.setExpression(expression);
+
+            // Start playing if not already
+            if (!isPlaying) {
+                await synth.startBowing();
+                isPlaying = true;
+            }
+        }
+
+        function updateParam(param, value) {
+            document.getElementById(param + 'Value').textContent = value;
+
+            if (synth) {
+                synth.setParameter(param, parseFloat(value));
+                addLog(`Set ${param} to ${value}`);
+            }
+        }
+
+        async function testBasicTransitions() {
+            addLog('=== Starting Basic Transitions Test ===');
+
+            await transitionTo('NONE');
+            await delay(1000);
+
+            addLog('Testing NONE → VIBRATO');
+            await transitionTo('VIBRATO');
+            await delay(3000);
+
+            addLog('Testing VIBRATO → NONE');
+            await transitionTo('NONE');
+            await delay(2000);
+
+            addLog('Testing NONE → TREMOLO');
+            await transitionTo('TREMOLO');
+            await delay(3000);
+
+            addLog('Testing TREMOLO → NONE');
+            await transitionTo('NONE');
+            await delay(2000);
+
+            addLog('Testing NONE → TRILL');
+            await transitionTo('TRILL');
+            await delay(3000);
+
+            addLog('Testing TRILL → NONE');
+            await transitionTo('NONE');
+            await delay(2000);
+
+            addLog('=== Basic Transitions Test Complete ===');
+        }
+
+        async function testHubAndSpoke() {
+            addLog('=== Starting Hub-and-Spoke Test ===');
+
+            addLog('Testing VIBRATO → TREMOLO (should go through NONE)');
+            await transitionTo('VIBRATO');
+            await delay(2000);
+            await transitionTo('TREMOLO');
+            await delay(4000);
+
+            addLog('Testing TREMOLO → TRILL (should go through NONE)');
+            await transitionTo('TRILL');
+            await delay(4000);
+
+            addLog('Testing TRILL → VIBRATO (should go through NONE)');
+            await transitionTo('VIBRATO');
+            await delay(4000);
+
+            await transitionTo('NONE');
+            addLog('=== Hub-and-Spoke Test Complete ===');
+        }
+
+        async function testInterruptions() {
+            addLog('=== Starting Interruption Test ===');
+
+            addLog('Start VIBRATO → interrupt with NONE → back to VIBRATO');
+            await transitionTo('VIBRATO');
+            await delay(500);
+            await transitionTo('NONE');
+            await delay(500);
+            await transitionTo('VIBRATO');
+            await delay(2000);
+
+            addLog('Start TREMOLO → interrupt with different expression');
+            await transitionTo('TREMOLO');
+            await delay(500);
+            await transitionTo('TRILL');
+            await delay(3000);
+
+            await transitionTo('NONE');
+            addLog('=== Interruption Test Complete ===');
+        }
+
+        async function testRapidChanges() {
+            addLog('=== Starting Rapid Changes Test ===');
+
+            const expressions = ['VIBRATO', 'TREMOLO', 'TRILL', 'NONE'];
+
+            for (let i = 0; i < 10; i++) {
+                const expr = expressions[Math.floor(Math.random() * expressions.length)];
+                addLog(`Quick change to ${expr}`);
+                await transitionTo(expr);
+                await delay(300);
+            }
+
+            await transitionTo('NONE');
+            addLog('=== Rapid Changes Test Complete ===');
+        }
+
+        function delay(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
+        }
+
+        // Add click handler to initialize audio on first interaction
+        document.addEventListener('click', initAudio, { once: true });
+    </script>
+</body>
+</html>

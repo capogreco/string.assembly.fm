@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Expression Transition Controls Test</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 30px;
+        }
+        .main-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+        .control-section {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            border: 1px solid #e9ecef;
+        }
+        .control-section h3 {
+            margin-top: 0;
+            color: #495057;
+            font-size: 1.1em;
+            margin-bottom: 20px;
+        }
+        .slider-group {
+            margin-bottom: 20px;
+        }
+        .slider-group label {
+            display: block;
+            margin-bottom: 5px;
+            color: #495057;
+            font-size: 14px;
+            font-weight: 500;
+        }
+        .slider-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        input[type="range"] {
+            flex: 1;
+            height: 6px;
+            background: #ddd;
+            outline: none;
+            border-radius: 3px;
+            -webkit-appearance: none;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 18px;
+            height: 18px;
+            background: #007bff;
+            border-radius: 50%;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        input[type="range"]::-webkit-slider-thumb:hover {
+            background: #0056b3;
+        }
+        .slider-value {
+            min-width: 60px;
+            text-align: right;
+            font-family: monospace;
+            font-size: 14px;
+            color: #495057;
+        }
+        .radio-group {
+            margin-bottom: 15px;
+        }
+        .radio-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: #495057;
+            font-size: 14px;
+            font-weight: 500;
+        }
+        .radio-options {
+            display: flex;
+            gap: 15px;
+        }
+        .radio-option {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .radio-option input[type="radio"] {
+            margin: 0;
+        }
+        .radio-option label {
+            margin: 0;
+            font-weight: normal;
+            cursor: pointer;
+        }
+        button {
+            display: block;
+            width: 100%;
+            padding: 12px;
+            margin: 8px 0;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .expression-btn {
+            background: #007bff;
+            color: white;
+        }
+        .expression-btn:hover {
+            background: #0056b3;
+        }
+        .expression-btn.active {
+            background: #28a745;
+        }
+        .preset-btn {
+            background: #6c757d;
+            color: white;
+        }
+        .preset-btn:hover {
+            background: #545b62;
+        }
+        .none-btn {
+            background: #dc3545;
+            color: white;
+        }
+        .none-btn:hover {
+            background: #c82333;
+        }
+        .status {
+            background: #e9ecef;
+            padding: 15px;
+            border-radius: 6px;
+            margin-top: 20px;
+            font-family: monospace;
+            font-size: 14px;
+        }
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+        }
+        .status-item {
+            margin: 5px 0;
+        }
+        .debug-log {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            padding: 15px;
+            margin-top: 20px;
+            height: 250px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .log-entry {
+            margin: 2px 0;
+            padding: 2px 0;
+            border-bottom: 1px solid #e9ecef;
+        }
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background: #e9ecef;
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 5px 0;
+        }
+        .progress-fill {
+            height: 100%;
+            background: #007bff;
+            transition: width 0.1s ease-out;
+        }
+        .expression-progress {
+            margin-top: 20px;
+        }
+        .expression-progress h4 {
+            margin: 10px 0 5px 0;
+            color: #495057;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Expression Transition Controls Test</h1>
+
+        <div class="main-grid">
+            <div>
+                <div class="control-section">
+                    <h3>Transition Parameters</h3>
+
+                    <div class="slider-group">
+                        <label for="duration">Duration (seconds)</label>
+                        <div class="slider-container">
+                            <input type="range" id="duration" min="0.5" max="5" step="0.1" value="1">
+                            <span class="slider-value" id="durationValue">1.0s</span>
+                        </div>
+                    </div>
+
+                    <div class="slider-group">
+                        <label for="spread">Spread (%)</label>
+                        <div class="slider-container">
+                            <input type="range" id="spread" min="0" max="100" step="5" value="20">
+                            <span class="slider-value" id="spreadValue">20%</span>
+                        </div>
+                    </div>
+
+                    <div class="radio-group">
+                        <label>Stagger Type</label>
+                        <div class="radio-options">
+                            <div class="radio-option">
+                                <input type="radio" id="staggerSync" name="stagger" value="sync" checked>
+                                <label for="staggerSync">Sync</label>
+                            </div>
+                            <div class="radio-option">
+                                <input type="radio" id="staggerCascade" name="stagger" value="cascade">
+                                <label for="staggerCascade">Cascade</label>
+                            </div>
+                            <div class="radio-option">
+                                <input type="radio" id="staggerRandom" name="stagger" value="random">
+                                <label for="staggerRandom">Random</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="slider-group">
+                        <label for="variance">Variance (%)</label>
+                        <div class="slider-container">
+                            <input type="range" id="variance" min="0" max="100" step="5" value="10">
+                            <span class="slider-value" id="varianceValue">10%</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="control-section" style="margin-top: 20px;">
+                    <h3>Presets</h3>
+                    <button class="preset-btn" onclick="applyPreset('subtle')">Subtle (1s, 20%, sync, 10%)</button>
+                    <button class="preset-btn" onclick="applyPreset('expressive')">Expressive (2s, 50%, cascade, 30%)</button>
+                    <button class="preset-btn" onclick="applyPreset('dramatic')">Dramatic (3s, 80%, cascade, 40%)</button>
+                    <button class="preset-btn" onclick="applyPreset('robotic')">Robotic (0.5s, 0%, sync, 0%)</button>
+                    <button class="preset-btn" onclick="applyPreset('organic')">Organic (1.5s, 60%, random, 50%)</button>
+                </div>
+            </div>
+
+            <div>
+                <div class="control-section">
+                    <h3>Expression Control</h3>
+                    <button class="expression-btn" onclick="transitionTo('VIBRATO')">Vibrato</button>
+                    <button class="expression-btn" onclick="transitionTo('TREMOLO')">Tremolo</button>
+                    <button class="expression-btn" onclick="transitionTo('TRILL')">Trill</button>
+                    <button class="none-btn" onclick="transitionTo('NONE')">None (Stop Expression)</button>
+                </div>
+
+                <div class="control-section" style="margin-top: 20px;">
+                    <h3>Test Sequences</h3>
+                    <button class="preset-btn" onclick="testSequence('basic')">Test Basic Transitions</button>
+                    <button class="preset-btn" onclick="testSequence('hubspoke')">Test Hub-and-Spoke</button>
+                    <button class="preset-btn" onclick="testSequence('interruptions')">Test Interruptions</button>
+                    <button class="preset-btn" onclick="testSequence('presets')">Test All Presets</button>
+                    <button class="preset-btn" onclick="toggleBowing()">Toggle Bowing</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="expression-progress">
+            <h4>Vibrato Progress</h4>
+            <div class="progress-bar">
+                <div class="progress-fill" id="vibratoProgressBar" style="width: 0%"></div>
+            </div>
+
+            <h4>Tremolo Progress</h4>
+            <div class="progress-bar">
+                <div class="progress-fill" id="tremoloProgressBar" style="width: 0%"></div>
+            </div>
+
+            <h4>Trill Progress</h4>
+            <div class="progress-bar">
+                <div class="progress-fill" id="trillProgressBar" style="width: 0%"></div>
+            </div>
+        </div>
+
+        <div class="status">
+            <h3>Current Status</h3>
+            <div class="status-grid">
+                <div class="status-item">Bowing: <span id="bowingStatus">OFF</span></div>
+                <div class="status-item">Current Expression: <span id="currentExpression">NONE</span></div>
+                <div class="status-item">Target Expression: <span id="targetExpression">NONE</span></div>
+                <div class="status-item">Transition Phase: <span id="transitionPhase">IDLE</span></div>
+                <div class="status-item">Current Preset: <span id="currentPreset">custom</span></div>
+                <div class="status-item">Final Target: <span id="finalTarget">-</span></div>
+            </div>
+        </div>
+
+        <div class="debug-log" id="debugLog">
+            <div style="color: #6c757d;">Debug log will appear here...</div>
+        </div>
+    </div>
+
+    <script>
+        let audioContext;
+        let audioWorkletNode;
+        let gainNode;
+        let isPlaying = false;
+        let isBowing = false;
+        let currentPreset = 'custom';
+
+        // Preset definitions
+        const presets = {
+            subtle: { duration: 1.0, spread: 0.2, stagger: 'sync', variance: 0.1 },
+            expressive: { duration: 2.0, spread: 0.5, stagger: 'cascade', variance: 0.3 },
+            dramatic: { duration: 3.0, spread: 0.8, stagger: 'cascade', variance: 0.4 },
+            robotic: { duration: 0.5, spread: 0.0, stagger: 'sync', variance: 0.0 },
+            organic: { duration: 1.5, spread: 0.6, stagger: 'random', variance: 0.5 }
+        };
+
+        // Initialize on first user interaction
+        async function initAudio() {
+            if (audioContext) return;
+
+            try {
+                audioContext = new AudioContext();
+
+                // Register the worklet
+                await audioContext.audioWorklet.addModule('bowed_string_worklet.js');
+
+                // Create the worklet node
+                audioWorkletNode = new AudioWorkletNode(
+                    audioContext,
+                    'continuous-excitation-processor'
+                );
+
+                // Create gain node for safety
+                gainNode = audioContext.createGain();
+                gainNode.gain.value = 0.5;
+
+                // Connect the graph
+                audioWorkletNode.connect(gainNode);
+                gainNode.connect(audioContext.destination);
+
+                // Set up message handling
+                audioWorkletNode.port.onmessage = (event) => {
+                    if (event.data.type === 'debug') {
+                        updateStatus(event.data);
+                    }
+                };
+
+                // Set initial parameters
+                audioWorkletNode.parameters.get('fundamentalFrequency').value = 440;
+                audioWorkletNode.parameters.get('bowForce').value = 0.5;
+                audioWorkletNode.parameters.get('bowSpeed').value = 0.5;
+                audioWorkletNode.parameters.get('bowPosition').value = 0.12;
+                audioWorkletNode.parameters.get('stringDamping').value = 0.5;
+                audioWorkletNode.parameters.get('brightness').value = 0.5;
+                audioWorkletNode.parameters.get('masterGain').value = 0.5;
+
+                // Set expression parameters
+                audioWorkletNode.parameters.get('vibratoRate').value = 5.0;
+                audioWorkletNode.parameters.get('vibratoDepth').value = 0.5;
+                audioWorkletNode.parameters.get('tremoloSpeed').value = 10.0;
+                audioWorkletNode.parameters.get('tremoloDepth').value = 0.5;
+                audioWorkletNode.parameters.get('trillSpeed').value = 6.0;
+                audioWorkletNode.parameters.get('trillInterval').value = 2;
+                audioWorkletNode.parameters.get('trillArticulation').value = 0.7;
+                audioWorkletNode.parameters.get('tremoloArticulation').value = 0.5;
+
+                // Send initial transition config
+                updateTransitionConfig();
+
+                addLog('Audio initialized successfully');
+                isPlaying = true;
+            } catch (error) {
+                addLog('ERROR: ' + error.message);
+                console.error(error);
+            }
+        }
+
+        function addLog(message) {
+            const log = document.getElementById('debugLog');
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            entry.textContent = `${new Date().toLocaleTimeString()}: ${message}`;
+            log.appendChild(entry);
+            log.scrollTop = log.scrollHeight;
+        }
+
+        function updateStatus(data) {
+            if (data.state) {
+                document.getElementById('currentExpression').textContent = data.state.current;
+                document.getElementById('targetExpression').textContent = data.state.target;
+                document.getElementById('transitionPhase').textContent = data.state.phase;
+                document.getElementById('finalTarget').textContent = data.state.finalTarget || '-';
+            }
+            if (data.progress) {
+                const vibratoProgress = parseFloat(data.progress.vibrato);
+                const tremoloProgress = parseFloat(data.progress.tremolo);
+                const trillProgress = parseFloat(data.progress.trill);
+
+                document.getElementById('vibratoProgressBar').style.width = (vibratoProgress * 100) + '%';
+                document.getElementById('tremoloProgressBar').style.width = (tremoloProgress * 100) + '%';
+                document.getElementById('trillProgressBar').style.width = (trillProgress * 100) + '%';
+            }
+        }
+
+        function updateTransitionConfig() {
+            if (!audioWorkletNode) return;
+
+            const config = {
+                duration: parseFloat(document.getElementById('duration').value),
+                spread: parseFloat(document.getElementById('spread').value) / 100,
+                stagger: document.querySelector('input[name="stagger"]:checked').value,
+                variance: parseFloat(document.getElementById('variance').value) / 100
+            };
+
+            audioWorkletNode.port.postMessage({
+                type: 'setTransitionConfig',
+                config: config
+            });
+
+            addLog(`Config updated: ${JSON.stringify(config)}`);
+        }
+
+        async function toggleBowing() {
+            await initAudio();
+
+            isBowing = !isBowing;
+            document.getElementById('bowingStatus').textContent = isBowing ? 'ON' : 'OFF';
+
+            audioWorkletNode.port.postMessage({
+                type: 'setBowing',
+                value: isBowing
+            });
+
+            addLog(`Bowing ${isBowing ? 'started' : 'stopped'}`);
+        }
+
+        async function transitionTo(expression) {
+            await initAudio();
+
+            if (!isBowing) {
+                await toggleBowing();
+            }
+
+            addLog(`Transitioning to ${expression} with preset: ${currentPreset}`);
+
+            // Update button states
+            document.querySelectorAll('.expression-btn, .none-btn').forEach(btn => {
+                btn.classList.remove('active');
+                if (btn.textContent.toUpperCase().includes(expression)) {
+                    btn.classList.add('active');
+                }
+            });
+
+            // Send transition command
+            audioWorkletNode.port.postMessage({
+                type: 'setExpression',
+                expression: expression
+            });
+        }
+
+        function applyPreset(presetName) {
+            const preset = presets[presetName];
+            if (!preset) return;
+
+            // Update UI
+            document.getElementById('duration').value = preset.duration;
+            document.getElementById('durationValue').textContent = preset.duration.toFixed(1) + 's';
+
+            document.getElementById('spread').value = preset.spread * 100;
+            document.getElementById('spreadValue').textContent = Math.round(preset.spread * 100) + '%';
+
+            document.querySelector(`input[name="stagger"][value="${preset.stagger}"]`).checked = true;
+
+            document.getElementById('variance').value = preset.variance * 100;
+            document.getElementById('varianceValue').textContent = Math.round(preset.variance * 100) + '%';
+
+            currentPreset = presetName;
+            document.getElementById('currentPreset').textContent = presetName;
+
+            // Update the worklet
+            updateTransitionConfig();
+
+            addLog(`Applied preset: ${presetName}`);
+        }
+
+        async function delay(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
+        }
+
+        async function testSequence(type) {
+            switch (type) {
+                case 'basic':
+                    await testBasicTransitions();
+                    break;
+                case 'hubspoke':
+                    await testHubAndSpoke();
+                    break;
+                case 'interruptions':
+                    await testInterruptions();
+                    break;
+                case 'presets':
+                    await testAllPresets();
+                    break;
+            }
+        }
+
+        async function testBasicTransitions() {
+            addLog('=== Starting Basic Transitions Test ===');
+
+            await transitionTo('NONE');
+            await delay(1000);
+
+            addLog('Testing NONE → VIBRATO');
+            await transitionTo('VIBRATO');
+            await delay(3000);
+
+            addLog('Testing VIBRATO → NONE');
+            await transitionTo('NONE');
+            await delay(2000);
+
+            addLog('Testing NONE → TREMOLO');
+            await transitionTo('TREMOLO');
+            await delay(3000);
+
+            addLog('Testing TREMOLO → NONE');
+            await transitionTo('NONE');
+            await delay(2000);
+
+            addLog('Testing NONE → TRILL');
+            await transitionTo('TRILL');
+            await delay(3000);
+
+            addLog('Testing TRILL → NONE');
+            await transitionTo('NONE');
+            await delay(2000);
+
+            addLog('=== Basic Transitions Test Complete ===');
+        }
+
+        async function testHubAndSpoke() {
+            addLog('=== Starting Hub-and-Spoke Test ===');
+
+            addLog('Testing VIBRATO → TREMOLO (should go through NONE)');
+            await transitionTo('VIBRATO');
+            await delay(2000);
+            await transitionTo('TREMOLO');
+            await delay(4000);
+
+            addLog('Testing TREMOLO → TRILL (should go through NONE)');
+            await transitionTo('TRILL');
+            await delay(4000);
+
+            addLog('Testing TRILL → VIBRATO (should go through NONE)');
+            await transitionTo('VIBRATO');
+            await delay(4000);
+
+            await transitionTo('NONE');
+            addLog('=== Hub-and-Spoke Test Complete ===');
+        }
+
+        async function testInterruptions() {
+            addLog('=== Starting Interruption Test ===');
+
+            addLog('Start VIBRATO → interrupt with NONE → back to VIBRATO');
+            await transitionTo('VIBRATO');
+            await delay(500);
+            await transitionTo('NONE');
+            await delay(500);
+            await transitionTo('VIBRATO');
+            await delay(2000);
+
+            addLog('Start TREMOLO → interrupt with different expression');
+            await transitionTo('TREMOLO');
+            await delay(500);
+            await transitionTo('TRILL');
+            await delay(3000);
+
+            await transitionTo('NONE');
+            addLog('=== Interruption Test Complete ===');
+        }
+
+        async function testAllPresets() {
+            addLog('=== Starting All Presets Test ===');
+
+            for (const presetName of Object.keys(presets)) {
+                addLog(`Testing preset: ${presetName}`);
+                applyPreset(presetName);
+                await delay(500);
+
+                await transitionTo('VIBRATO');
+                await delay(2000);
+                await transitionTo('TREMOLO');
+                await delay(3000);
+                await transitionTo('NONE');
+                await delay(1000);
+            }
+
+            addLog('=== All Presets Test Complete ===');
+        }
+
+        // Set up slider listeners
+        document.getElementById('duration').addEventListener('input', (e) => {
+            document.getElementById('durationValue').textContent = parseFloat(e.target.value).toFixed(1) + 's';
+            currentPreset = 'custom';
+            document.getElementById('currentPreset').textContent = 'custom';
+            updateTransitionConfig();
+        });
+
+        document.getElementById('spread').addEventListener('input', (e) => {
+            document.getElementById('spreadValue').textContent = e.target.value + '%';
+            currentPreset = 'custom';
+            document.getElementById('currentPreset').textContent = 'custom';
+            updateTransitionConfig();
+        });
+
+        document.getElementById('variance').addEventListener('input', (e) => {
+            document.getElementById('varianceValue').textContent = e.target.value + '%';
+            currentPreset = 'custom';
+            document.getElementById('currentPreset').textContent = 'custom';
+            updateTransitionConfig();
+        });
+
+        document.querySelectorAll('input[name="stagger"]').forEach(radio => {
+            radio.addEventListener('change', () => {
+                currentPreset = 'custom';
+                document.getElementById('currentPreset').textContent = 'custom';
+                updateTransitionConfig();
+            });
+        });
+
+        // Add click handler to initialize audio on first interaction
+        document.addEventListener('click', initAudio, { once: true });
+    </script>
+</body>
+</html>
