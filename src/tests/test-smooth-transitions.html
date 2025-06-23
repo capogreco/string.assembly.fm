@@ -1,0 +1,414 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Smooth Expression Transitions Test</title>
+        <style>
+            body {
+                font-family:
+                    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                    sans-serif;
+                max-width: 800px;
+                margin: 0 auto;
+                padding: 20px;
+                background: #f5f5f5;
+            }
+            .container {
+                background: white;
+                padding: 30px;
+                border-radius: 10px;
+                box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            }
+            h1 {
+                color: #333;
+                margin-bottom: 30px;
+            }
+            .controls {
+                display: grid;
+                grid-template-columns: repeat(2, 1fr);
+                gap: 20px;
+                margin-bottom: 30px;
+            }
+            .control-group {
+                background: #f8f9fa;
+                padding: 20px;
+                border-radius: 8px;
+                border: 1px solid #e9ecef;
+            }
+            .control-group h3 {
+                margin-top: 0;
+                color: #495057;
+                font-size: 1.1em;
+            }
+            button {
+                display: block;
+                width: 100%;
+                padding: 12px;
+                margin: 8px 0;
+                border: none;
+                border-radius: 6px;
+                font-size: 16px;
+                cursor: pointer;
+                transition: all 0.2s;
+            }
+            .expression-btn {
+                background: #007bff;
+                color: white;
+            }
+            .expression-btn:hover {
+                background: #0056b3;
+            }
+            .expression-btn.active {
+                background: #28a745;
+            }
+            .test-btn {
+                background: #6c757d;
+                color: white;
+            }
+            .test-btn:hover {
+                background: #545b62;
+            }
+            .none-btn {
+                background: #dc3545;
+                color: white;
+            }
+            .none-btn:hover {
+                background: #c82333;
+            }
+            .status {
+                background: #e9ecef;
+                padding: 15px;
+                border-radius: 6px;
+                margin-top: 20px;
+                font-family: monospace;
+                font-size: 14px;
+            }
+            .status-item {
+                margin: 5px 0;
+            }
+            .debug-log {
+                background: #f8f9fa;
+                border: 1px solid #dee2e6;
+                border-radius: 6px;
+                padding: 15px;
+                margin-top: 20px;
+                height: 200px;
+                overflow-y: auto;
+                font-family: monospace;
+                font-size: 12px;
+            }
+            .log-entry {
+                margin: 2px 0;
+                padding: 2px 0;
+                border-bottom: 1px solid #e9ecef;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>Smooth Expression Transitions Test</h1>
+
+            <div class="controls">
+                <div class="control-group">
+                    <h3>Expression Control</h3>
+                    <button
+                        class="expression-btn"
+                        onclick="transitionTo('VIBRATO')"
+                    >
+                        Vibrato
+                    </button>
+                    <button
+                        class="expression-btn"
+                        onclick="transitionTo('TREMOLO')"
+                    >
+                        Tremolo
+                    </button>
+                    <button
+                        class="expression-btn"
+                        onclick="transitionTo('TRILL')"
+                    >
+                        Trill
+                    </button>
+                    <button class="none-btn" onclick="transitionTo('NONE')">
+                        None (Stop Expression)
+                    </button>
+                </div>
+
+                <div class="control-group">
+                    <h3>Test Sequences</h3>
+                    <button class="test-btn" onclick="testBasicTransitions()">
+                        Test Basic Transitions
+                    </button>
+                    <button class="test-btn" onclick="testHubAndSpoke()">
+                        Test Hub-and-Spoke
+                    </button>
+                    <button class="test-btn" onclick="testInterruptions()">
+                        Test Interruptions
+                    </button>
+                    <button class="test-btn" onclick="toggleBowing()">
+                        Toggle Bowing
+                    </button>
+                </div>
+            </div>
+
+            <div class="status">
+                <h3>Current Status</h3>
+                <div class="status-item">
+                    Bowing: <span id="bowingStatus">OFF</span>
+                </div>
+                <div class="status-item">
+                    Current Expression: <span id="currentExpression">NONE</span>
+                </div>
+                <div class="status-item">
+                    Target Expression: <span id="targetExpression">NONE</span>
+                </div>
+                <div class="status-item">
+                    Transition Phase: <span id="transitionPhase">IDLE</span>
+                </div>
+                <div class="status-item">
+                    Vibrato Progress: <span id="vibratoProgress">0.000</span>
+                </div>
+                <div class="status-item">
+                    Tremolo Progress: <span id="tremoloProgress">0.000</span>
+                </div>
+                <div class="status-item">
+                    Trill Progress: <span id="trillProgress">0.000</span>
+                </div>
+            </div>
+
+            <div class="debug-log" id="debugLog">
+                <div style="color: #6c757d">Debug log will appear here...</div>
+            </div>
+        </div>
+
+        <script>
+            let audioContext;
+            let audioWorkletNode;
+            let gainNode;
+            let isPlaying = false;
+            let isBowing = false;
+
+            // Initialize on first user interaction
+            async function initAudio() {
+                if (audioContext) return;
+
+                try {
+                    audioContext = new AudioContext();
+
+                    // Register the worklet
+                    await audioContext.audioWorklet.addModule(
+                        "../worklets/bowed_string_worklet.js",
+                    );
+
+                    // Create the worklet node
+                    audioWorkletNode = new AudioWorkletNode(
+                        audioContext,
+                        "continuous-excitation-processor",
+                    );
+
+                    // Create gain node for safety
+                    gainNode = audioContext.createGain();
+                    gainNode.gain.value = 0.5;
+
+                    // Connect the graph
+                    audioWorkletNode.connect(gainNode);
+                    gainNode.connect(audioContext.destination);
+
+                    // Set up message handling
+                    audioWorkletNode.port.onmessage = (event) => {
+                        if (event.data.type === "debug") {
+                            updateStatus(event.data);
+                        }
+                    };
+
+                    // Set initial parameters
+                    audioWorkletNode.parameters.get(
+                        "fundamentalFrequency",
+                    ).value = 440;
+                    audioWorkletNode.parameters.get("bowForce").value = 0.5;
+                    audioWorkletNode.parameters.get("bowSpeed").value = 0.5;
+                    audioWorkletNode.parameters.get("bowPosition").value = 0.12;
+                    audioWorkletNode.parameters.get("stringDamping").value =
+                        0.5;
+                    audioWorkletNode.parameters.get("brightness").value = 0.5;
+                    audioWorkletNode.parameters.get("masterGain").value = 0.5;
+
+                    // Set expression parameters
+                    audioWorkletNode.parameters.get("vibratoRate").value = 5.0;
+                    audioWorkletNode.parameters.get("vibratoDepth").value = 0.5;
+                    audioWorkletNode.parameters.get("tremoloSpeed").value =
+                        10.0;
+                    audioWorkletNode.parameters.get("tremoloDepth").value = 0.5;
+                    audioWorkletNode.parameters.get("trillSpeed").value = 6.0;
+                    audioWorkletNode.parameters.get("trillInterval").value = 2;
+                    audioWorkletNode.parameters.get("trillArticulation").value =
+                        0.7;
+                    audioWorkletNode.parameters.get(
+                        "tremoloArticulation",
+                    ).value = 0.5;
+
+                    addLog("Audio initialized successfully");
+                    isPlaying = true;
+                } catch (error) {
+                    addLog("ERROR: " + error.message);
+                    console.error(error);
+                }
+            }
+
+            function addLog(message) {
+                const log = document.getElementById("debugLog");
+                const entry = document.createElement("div");
+                entry.className = "log-entry";
+                entry.textContent = `${new Date().toLocaleTimeString()}: ${message}`;
+                log.appendChild(entry);
+                log.scrollTop = log.scrollHeight;
+            }
+
+            function updateStatus(data) {
+                if (data.state) {
+                    document.getElementById("currentExpression").textContent =
+                        data.state.current;
+                    document.getElementById("targetExpression").textContent =
+                        data.state.target;
+                    document.getElementById("transitionPhase").textContent =
+                        data.state.phase;
+                }
+                if (data.progress) {
+                    document.getElementById("vibratoProgress").textContent =
+                        data.progress.vibrato;
+                    document.getElementById("tremoloProgress").textContent =
+                        data.progress.tremolo;
+                    document.getElementById("trillProgress").textContent =
+                        data.progress.trill;
+                }
+            }
+
+            async function toggleBowing() {
+                await initAudio();
+
+                isBowing = !isBowing;
+                document.getElementById("bowingStatus").textContent = isBowing
+                    ? "ON"
+                    : "OFF";
+
+                audioWorkletNode.port.postMessage({
+                    type: "setBowing",
+                    value: isBowing,
+                });
+
+                addLog(`Bowing ${isBowing ? "started" : "stopped"}`);
+            }
+
+            async function transitionTo(expression) {
+                await initAudio();
+
+                if (!isBowing) {
+                    await toggleBowing();
+                }
+
+                addLog(`Transitioning to ${expression}`);
+
+                // Update button states
+                document
+                    .querySelectorAll(".expression-btn, .none-btn")
+                    .forEach((btn) => {
+                        btn.classList.remove("active");
+                        if (
+                            btn.textContent.toUpperCase().includes(expression)
+                        ) {
+                            btn.classList.add("active");
+                        }
+                    });
+
+                // Send transition command
+                audioWorkletNode.port.postMessage({
+                    type: "setExpression",
+                    expression: expression,
+                });
+            }
+
+            async function delay(ms) {
+                return new Promise((resolve) => setTimeout(resolve, ms));
+            }
+
+            async function testBasicTransitions() {
+                addLog("=== Starting Basic Transitions Test ===");
+
+                await transitionTo("NONE");
+                await delay(1000);
+
+                addLog("Testing NONE → VIBRATO");
+                await transitionTo("VIBRATO");
+                await delay(3000);
+
+                addLog("Testing VIBRATO → NONE");
+                await transitionTo("NONE");
+                await delay(2000);
+
+                addLog("Testing NONE → TREMOLO");
+                await transitionTo("TREMOLO");
+                await delay(3000);
+
+                addLog("Testing TREMOLO → NONE");
+                await transitionTo("NONE");
+                await delay(2000);
+
+                addLog("Testing NONE → TRILL");
+                await transitionTo("TRILL");
+                await delay(3000);
+
+                addLog("Testing TRILL → NONE");
+                await transitionTo("NONE");
+                await delay(2000);
+
+                addLog("=== Basic Transitions Test Complete ===");
+            }
+
+            async function testHubAndSpoke() {
+                addLog("=== Starting Hub-and-Spoke Test ===");
+
+                addLog("Testing VIBRATO → TREMOLO (should go through NONE)");
+                await transitionTo("VIBRATO");
+                await delay(2000);
+                await transitionTo("TREMOLO");
+                await delay(4000);
+
+                addLog("Testing TREMOLO → TRILL (should go through NONE)");
+                await transitionTo("TRILL");
+                await delay(4000);
+
+                addLog("Testing TRILL → VIBRATO (should go through NONE)");
+                await transitionTo("VIBRATO");
+                await delay(4000);
+
+                await transitionTo("NONE");
+                addLog("=== Hub-and-Spoke Test Complete ===");
+            }
+
+            async function testInterruptions() {
+                addLog("=== Starting Interruption Test ===");
+
+                addLog("Start VIBRATO → interrupt with NONE → back to VIBRATO");
+                await transitionTo("VIBRATO");
+                await delay(500);
+                await transitionTo("NONE");
+                await delay(500);
+                await transitionTo("VIBRATO");
+                await delay(2000);
+
+                addLog("Start TREMOLO → interrupt with different expression");
+                await transitionTo("TREMOLO");
+                await delay(500);
+                await transitionTo("TRILL");
+                await delay(3000);
+
+                await transitionTo("NONE");
+                addLog("=== Interruption Test Complete ===");
+            }
+
+            // Add click handler to initialize audio on first interaction
+            document.addEventListener("click", initAudio, { once: true });
+        </script>
+    </body>
+</html>

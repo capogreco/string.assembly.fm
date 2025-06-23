@@ -1,0 +1,1711 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>String Assembly FM - Controller</title>
+        <style>
+            body {
+                font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                margin: 0;
+                padding: 20px;
+                min-height: 100vh;
+                color: #333;
+            }
+
+            h1 {
+                text-align: center;
+                color: #2c3e50;
+                margin-bottom: 30px;
+                text-shadow: none;
+            }
+
+            .container {
+                max-width: 800px;
+                margin: 0 auto;
+                background: white;
+                border-radius: 12px;
+                padding: 30px;
+                box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            }
+
+            .section {
+                margin-bottom: 25px;
+                padding: 20px;
+                background: #f8f9fa;
+                border-radius: 8px;
+                border-left: 4px solid #667eea;
+            }
+
+            .section-title {
+                font-size: 1.2em;
+                font-weight: bold;
+                margin-bottom: 15px;
+                color: #2c3e50;
+                border-bottom: 2px solid #ecf0f1;
+                padding-bottom: 8px;
+            }
+
+            .controls {
+                display: flex;
+                flex-direction: column;
+                gap: 15px;
+            }
+
+            .control-group {
+                display: grid;
+                grid-template-columns: 1fr 2fr 80px;
+                gap: 15px;
+                align-items: center;
+            }
+
+            label {
+                font-weight: 500;
+                color: #34495e;
+            }
+
+            input[type="range"] {
+                width: 100%;
+                height: 6px;
+                border-radius: 3px;
+                background: #ddd;
+                outline: none;
+                transition: background 0.3s;
+            }
+
+            input[type="range"]::-webkit-slider-thumb {
+                appearance: none;
+                width: 18px;
+                height: 18px;
+                border-radius: 50%;
+                background: #667eea;
+                cursor: pointer;
+                box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+            }
+
+            select {
+                width: 100%;
+                padding: 8px 12px;
+                border: 1px solid #ddd;
+                border-radius: 4px;
+                font-size: 0.9em;
+                background: white;
+            }
+
+            .value-display {
+                font-family: monospace;
+                font-size: 0.9em;
+                color: #666;
+                text-align: right;
+                min-width: 60px;
+            }
+
+            button {
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                color: white;
+                border: none;
+                padding: 12px 24px;
+                border-radius: 6px;
+                font-size: 1em;
+                font-weight: 500;
+                cursor: pointer;
+                transition: all 0.3s;
+                box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+            }
+
+            button:hover:not(:disabled) {
+                transform: translateY(-2px);
+                box-shadow: 0 6px 16px rgba(102, 126, 234, 0.4);
+            }
+
+            button:active:not(:disabled) {
+                transform: translateY(0);
+            }
+
+            button:disabled {
+                background: #bdc3c7;
+                cursor: not-allowed;
+                transform: none;
+                box-shadow: none;
+            }
+
+            #status {
+                text-align: center;
+                padding: 12px;
+                border-radius: 6px;
+                margin-bottom: 20px;
+                font-weight: 500;
+                background: #e74c3c;
+                color: white;
+            }
+
+            #status.connected {
+                background: #27ae60;
+            }
+
+            #stats {
+                display: flex;
+                justify-content: space-around;
+                margin-bottom: 20px;
+                padding: 15px;
+                background: #ecf0f1;
+                border-radius: 6px;
+            }
+
+            .stat {
+                text-align: center;
+            }
+
+            .stat strong {
+                display: block;
+                font-size: 1.2em;
+                color: #2c3e50;
+            }
+
+            hr.separator {
+                border: none;
+                height: 2px;
+                background: linear-gradient(
+                    to right,
+                    transparent,
+                    #667eea,
+                    transparent
+                );
+                margin: 25px 0;
+            }
+
+            .expression-group {
+                margin-top: 15px;
+                padding: 15px;
+                background: #f8f9fa;
+                border-radius: 8px;
+                border-left: 4px solid #3498db;
+                display: none;
+            }
+
+            .expression-group.active {
+                display: block;
+            }
+
+            .expression-group.vibrato {
+                border-left: 4px solid #e74c3c;
+            }
+
+            .expression-group.trill {
+                border-left: 4px solid #3498db;
+            }
+
+            .expression-group.tremolo {
+                border-left: 4px solid #f39c12;
+            }
+
+            .expression-group-title {
+                font-weight: bold;
+                margin-bottom: 10px;
+                color: #2c3e50;
+            }
+
+            .expression-group.vibrato .expression-group-title {
+                color: #e74c3c;
+            }
+
+            .expression-group.trill .expression-group-title {
+                color: #3498db;
+            }
+
+            .expression-group.tremolo .expression-group-title {
+                color: #f39c12;
+            }
+
+            .program-controls {
+                display: flex;
+                gap: 10px;
+                margin-bottom: 20px;
+            }
+
+            .program-controls button {
+                flex: 1;
+                padding: 10px 16px;
+                font-size: 0.9em;
+            }
+
+            .banking-controls {
+                display: flex;
+                align-items: center;
+                gap: 10px;
+            }
+
+            .banking-controls select {
+                flex: 1;
+            }
+
+            .banking-controls button {
+                padding: 8px 16px;
+                font-size: 0.9em;
+                transition: all 0.2s ease;
+            }
+
+            .banking-controls button.success {
+                background: #28a745;
+                color: white;
+                animation: flash-success 0.8s ease-out;
+            }
+
+            .banking-controls button.error {
+                background: #dc3545;
+                color: white;
+                animation: flash-error 0.8s ease-out;
+            }
+
+            @keyframes flash-success {
+                0% {
+                    background: #28a745;
+                    transform: scale(1);
+                }
+                50% {
+                    background: #34ce57;
+                    transform: scale(1.05);
+                }
+                100% {
+                    background: #28a745;
+                    transform: scale(1);
+                }
+            }
+
+            @keyframes flash-error {
+                0% {
+                    background: #dc3545;
+                    transform: scale(1);
+                }
+                50% {
+                    background: #e94560;
+                    transform: scale(1.05);
+                }
+                100% {
+                    background: #dc3545;
+                    transform: scale(1);
+                }
+            }
+
+            #synths {
+                background: #f8f9fa;
+                border-radius: 6px;
+                padding: 15px;
+                margin-top: 20px;
+            }
+
+            #synths h3 {
+                margin-top: 0;
+                color: #2c3e50;
+            }
+
+            .synth {
+                padding: 8px 12px;
+                margin: 5px 0;
+                background: white;
+                border-radius: 4px;
+                border-left: 4px solid #27ae60;
+            }
+
+            .synth.connecting {
+                border-left-color: #f39c12;
+            }
+
+            .synth.disconnected {
+                border-left-color: #e74c3c;
+            }
+
+            .latency {
+                float: right;
+                font-size: 0.8em;
+                color: #666;
+            }
+
+            .synth-header {
+                font-weight: bold;
+                margin-bottom: 4px;
+            }
+
+            .synth-details {
+                font-size: 0.85em;
+                color: #555;
+                display: flex;
+                flex-wrap: wrap;
+                gap: 8px;
+                margin-top: 4px;
+            }
+
+            .synth-details span {
+                padding: 2px 6px;
+                border-radius: 3px;
+                background: #f8f9fa;
+                border: 1px solid #dee2e6;
+            }
+
+            .audio-state {
+                border-color: #28a745 !important;
+                background: #d4edda !important;
+            }
+
+            .synthesis-state {
+                border-color: #17a2b8 !important;
+                background: #d1ecf1 !important;
+            }
+
+            .audio-off {
+                color: #e74c3c;
+                font-size: 0.8em;
+            }
+
+            .warning {
+                background: #ff9800;
+                color: white;
+                padding: 12px;
+                border-radius: 6px;
+                margin-bottom: 15px;
+                display: none;
+            }
+
+            .warning.show {
+                display: block;
+            }
+
+            /* Parameter change indicators */
+            .control-group.changed {
+                position: relative;
+            }
+
+            .control-group.changed::before {
+                content: "";
+                position: absolute;
+                top: -2px;
+                left: -2px;
+                right: -2px;
+                bottom: -2px;
+                border: 2px solid #ff9800;
+                border-radius: 6px;
+                pointer-events: none;
+                animation: pulse-orange 2s infinite;
+            }
+
+            .control-group.sent {
+                position: relative;
+            }
+
+            .control-group.sent::before {
+                content: "";
+                position: absolute;
+                top: -2px;
+                left: -2px;
+                right: -2px;
+                bottom: -2px;
+                border: 2px solid #4caf50;
+                border-radius: 6px;
+                pointer-events: none;
+                animation: fade-green 1s ease-out forwards;
+            }
+
+            @keyframes pulse-orange {
+                0%,
+                100% {
+                    opacity: 0.6;
+                }
+                50% {
+                    opacity: 1;
+                }
+            }
+
+            @keyframes fade-green {
+                0% {
+                    opacity: 1;
+                }
+                100% {
+                    opacity: 0;
+                }
+            }
+
+            /* Status indicator */
+            .status-badge {
+                display: inline-block;
+                padding: 4px 8px;
+                border-radius: 12px;
+                font-size: 0.8em;
+                font-weight: bold;
+                margin-left: 10px;
+            }
+
+            .status-badge.synced {
+                background: #4caf50;
+                color: white;
+            }
+
+            .status-badge.pending {
+                background: #ff9800;
+                color: white;
+                animation: pulse-orange 2s infinite;
+            }
+
+            .status-badge.sending {
+                background: #2196f3;
+                color: white;
+            }
+
+            /* Chord and Expression Control Styles */
+            .chord-control {
+                margin-bottom: 20px;
+                padding: 15px;
+                background: #f8f9fa;
+                border-radius: 8px;
+                position: relative;
+            }
+
+            .chord-control.changed::before {
+                content: "*";
+                position: absolute;
+                left: -10px;
+                top: 15px;
+                color: #f39c12;
+                font-size: 20px;
+                font-weight: bold;
+            }
+
+            .chord-control.sent::before {
+                content: "✓";
+                position: absolute;
+                left: -10px;
+                top: 15px;
+                color: #4caf50;
+                font-size: 16px;
+                font-weight: bold;
+                animation: fadeOut 1s ease-in-out;
+            }
+
+            .expression-display {
+                margin-top: 15px;
+                padding: 15px;
+                background: #f0f0f0;
+                border-radius: 8px;
+                font-size: 0.9em;
+            }
+
+            .note-expression {
+                display: inline-block;
+                margin: 5px;
+                padding: 8px 12px;
+                border-radius: 6px;
+                font-size: 0.9em;
+                font-weight: 500;
+                line-height: 1.4;
+            }
+
+            .note-expression.vibrato {
+                background: #f8d7da;
+                color: #842029;
+                border: 1px solid #f5c2c7;
+            }
+
+            .note-expression.tremolo {
+                background: #fff3cd;
+                color: #664d03;
+                border: 1px solid #ffecb5;
+            }
+
+            .note-expression.trill {
+                background: #cfe2ff;
+                color: #0842a0;
+                border: 1px solid #b6d4fe;
+            }
+
+            .note-expression.none {
+                background: #e8daef;
+                color: #6c3483;
+                border: 1px solid #d2b4de;
+            }
+
+            /* Harmonic Ratio Selector Styles */
+            .harmonic-selector {
+                margin: 5px 0;
+            }
+
+            .harmonic-row {
+                display: flex;
+                gap: 4px;
+                margin-bottom: 2px;
+            }
+
+            .harmonic-number {
+                width: 28px;
+                height: 28px;
+                text-align: center;
+                line-height: 28px;
+                border: 1px solid #ddd;
+                border-radius: 4px;
+                background: white;
+                cursor: pointer;
+                font-size: 0.9em;
+                user-select: none;
+                transition: all 0.2s ease;
+            }
+
+            .harmonic-number:hover {
+                border-color: #667eea;
+                background: #f0f4ff;
+            }
+
+            .harmonic-number.selected {
+                background: #667eea;
+                color: white;
+                border-color: #667eea;
+            }
+
+            .harmonic-number.selecting {
+                background: #b3c6f7;
+                border-color: #667eea;
+            }
+
+            /* Piano keyboard wrapper for interactive expressions */
+            .piano-keyboard {
+                position: relative;
+                display: inline-block;
+            }
+
+            .piano-keyboard canvas {
+                position: absolute;
+                top: 0;
+                left: 0;
+                pointer-events: none;
+                z-index: 10;
+            }
+
+            /* Gesture hint styles */
+            .gesture-hint {
+                position: absolute;
+                background: rgba(0, 0, 0, 0.8);
+                color: white;
+                padding: 4px 8px;
+                border-radius: 4px;
+                font-size: 12px;
+                pointer-events: none;
+                z-index: 100;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>String Assembly FM - Controller</h1>
+
+            <div id="status">Disconnected</div>
+
+            <div id="stats">
+                <div class="stat">
+                    <strong id="connected_count">0</strong>
+                    <span>Connected</span>
+                </div>
+                <div class="stat">
+                    <strong id="avg_latency">-</strong>
+                    <span>Avg Latency</span>
+                </div>
+            </div>
+
+            <div id="controller_warning" class="warning">
+                ⚠️ Controller conflict detected - multiple controllers detected!
+                <div
+                    id="other_controllers"
+                    style="font-size: 0.9em; margin-top: 5px"
+                ></div>
+                <button
+                    id="kick_others"
+                    style="
+                        margin-top: 10px;
+                        padding: 5px 15px;
+                        background: #d32f2f;
+                        color: white;
+                        border: none;
+                        border-radius: 3px;
+                        cursor: pointer;
+                    "
+                >
+                    Kick Other Controllers
+                </button>
+            </div>
+
+            <div class="program-controls">
+                <button id="send_current_program">Send Current Program</button>
+                <span id="status_badge" class="status-badge synced"
+                    >✓ Synced</span
+                >
+            </div>
+
+            <div class="section">
+                <div class="section-title">Chord & Expression Control</div>
+
+                <div
+                    class="chord-control"
+                    style="
+                        margin-bottom: 15px;
+                        padding: 10px;
+                        background: #f8f9fa;
+                        border-radius: 8px;
+                    "
+                >
+                    <strong>Current Chord: </strong
+                    ><span id="chord-display" style="color: #667eea">None</span>
+                    <button
+                        id="clear-chord"
+                        style="
+                            float: right;
+                            padding: 5px 15px;
+                            background: #dc3545;
+                            color: white;
+                            border: none;
+                            border-radius: 4px;
+                            cursor: pointer;
+                            font-size: 14px;
+                        "
+                    >
+                        Clear
+                    </button>
+                </div>
+
+                <div
+                    id="expression-display"
+                    style="
+                        margin-top: 15px;
+                        padding: 15px;
+                        background: #f8f9fa;
+                        border-radius: 8px;
+                        border: 1px solid #dee2e6;
+                    "
+                >
+                    <strong>Expression Display:</strong>
+                    <div
+                        style="
+                            margin-top: 10px;
+                            color: #666;
+                            font-style: italic;
+                        "
+                    >
+                        Click piano keys to add notes to chord
+                    </div>
+                </div>
+
+                <div id="piano-container" style="margin: 10px 0">
+                    <svg
+                        id="piano"
+                        width="100%"
+                        height="80"
+                        style="background: #fafafa"
+                        xmlns="http://www.w3.org/2000/svg"
+                    >
+                        <!-- Piano keys will be generated by JavaScript -->
+                    </svg>
+                </div>
+
+                <div class="expression-group vibrato">
+                    <div class="expression-group-title">Vibrato Parameters</div>
+                    <div class="control-group">
+                        <label for="vibratoRate">Base Rate</label>
+                        <input
+                            type="range"
+                            id="vibratoRate"
+                            value="5.0"
+                            min="0.0"
+                            max="10.0"
+                            step="0.1"
+                        />
+                        <span id="vibratoRateValue" class="value-display"
+                            >5.0</span
+                        >
+                    </div>
+                    <div class="control-group" style="margin-top: 15px">
+                        <label>Vibrato Harmonic Ratios</label>
+                        <div
+                            class="harmonic-selector"
+                            data-expression="vibrato"
+                        >
+                            <div class="harmonic-row" data-type="numerator">
+                                <span class="harmonic-number" data-value="1"
+                                    >1</span
+                                >
+                                <span class="harmonic-number" data-value="2"
+                                    >2</span
+                                >
+                                <span class="harmonic-number" data-value="3"
+                                    >3</span
+                                >
+                                <span class="harmonic-number" data-value="4"
+                                    >4</span
+                                >
+                                <span class="harmonic-number" data-value="5"
+                                    >5</span
+                                >
+                                <span class="harmonic-number" data-value="6"
+                                    >6</span
+                                >
+                                <span class="harmonic-number" data-value="7"
+                                    >7</span
+                                >
+                                <span class="harmonic-number" data-value="8"
+                                    >8</span
+                                >
+                                <span class="harmonic-number" data-value="9"
+                                    >9</span
+                                >
+                                <span class="harmonic-number" data-value="10"
+                                    >10</span
+                                >
+                                <span class="harmonic-number" data-value="11"
+                                    >11</span
+                                >
+                                <span class="harmonic-number" data-value="12"
+                                    >12</span
+                                >
+                            </div>
+                            <div class="harmonic-row" data-type="denominator">
+                                <span class="harmonic-number" data-value="1"
+                                    >1</span
+                                >
+                                <span class="harmonic-number" data-value="2"
+                                    >2</span
+                                >
+                                <span class="harmonic-number" data-value="3"
+                                    >3</span
+                                >
+                                <span class="harmonic-number" data-value="4"
+                                    >4</span
+                                >
+                                <span class="harmonic-number" data-value="5"
+                                    >5</span
+                                >
+                                <span class="harmonic-number" data-value="6"
+                                    >6</span
+                                >
+                                <span class="harmonic-number" data-value="7"
+                                    >7</span
+                                >
+                                <span class="harmonic-number" data-value="8"
+                                    >8</span
+                                >
+                                <span class="harmonic-number" data-value="9"
+                                    >9</span
+                                >
+                                <span class="harmonic-number" data-value="10"
+                                    >10</span
+                                >
+                                <span class="harmonic-number" data-value="11"
+                                    >11</span
+                                >
+                                <span class="harmonic-number" data-value="12"
+                                    >12</span
+                                >
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="expression-group trill">
+                    <div class="expression-group-title">Trill Parameters</div>
+
+                    <div class="control-group">
+                        <label for="trillArticulation">Articulation</label>
+                        <input
+                            type="range"
+                            id="trillArticulation"
+                            value="0.7"
+                            min="0.1"
+                            max="0.95"
+                            step="0.01"
+                        />
+                        <span id="trillArticulationValue" class="value-display"
+                            >0.70</span
+                        >
+                    </div>
+                    <div class="control-group">
+                        <label for="trillSpeed">Speed</label>
+                        <input
+                            type="range"
+                            id="trillSpeed"
+                            value="5.0"
+                            min="3.0"
+                            max="12.0"
+                            step="0.1"
+                        />
+                        <span id="trillSpeedValue" class="value-display"
+                            >5.0</span
+                        >
+                    </div>
+                    <div class="control-group" style="margin-top: 15px">
+                        <label>Trill Harmonic Ratios</label>
+                        <div class="harmonic-selector" data-expression="trill">
+                            <div class="harmonic-row" data-type="numerator">
+                                <span class="harmonic-number" data-value="1"
+                                    >1</span
+                                >
+                                <span class="harmonic-number" data-value="2"
+                                    >2</span
+                                >
+                                <span class="harmonic-number" data-value="3"
+                                    >3</span
+                                >
+                                <span class="harmonic-number" data-value="4"
+                                    >4</span
+                                >
+                                <span class="harmonic-number" data-value="5"
+                                    >5</span
+                                >
+                                <span class="harmonic-number" data-value="6"
+                                    >6</span
+                                >
+                                <span class="harmonic-number" data-value="7"
+                                    >7</span
+                                >
+                                <span class="harmonic-number" data-value="8"
+                                    >8</span
+                                >
+                                <span class="harmonic-number" data-value="9"
+                                    >9</span
+                                >
+                                <span class="harmonic-number" data-value="10"
+                                    >10</span
+                                >
+                                <span class="harmonic-number" data-value="11"
+                                    >11</span
+                                >
+                                <span class="harmonic-number" data-value="12"
+                                    >12</span
+                                >
+                            </div>
+                            <div class="harmonic-row" data-type="denominator">
+                                <span class="harmonic-number" data-value="1"
+                                    >1</span
+                                >
+                                <span class="harmonic-number" data-value="2"
+                                    >2</span
+                                >
+                                <span class="harmonic-number" data-value="3"
+                                    >3</span
+                                >
+                                <span class="harmonic-number" data-value="4"
+                                    >4</span
+                                >
+                                <span class="harmonic-number" data-value="5"
+                                    >5</span
+                                >
+                                <span class="harmonic-number" data-value="6"
+                                    >6</span
+                                >
+                                <span class="harmonic-number" data-value="7"
+                                    >7</span
+                                >
+                                <span class="harmonic-number" data-value="8"
+                                    >8</span
+                                >
+                                <span class="harmonic-number" data-value="9"
+                                    >9</span
+                                >
+                                <span class="harmonic-number" data-value="10"
+                                    >10</span
+                                >
+                                <span class="harmonic-number" data-value="11"
+                                    >11</span
+                                >
+                                <span class="harmonic-number" data-value="12"
+                                    >12</span
+                                >
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="expression-group tremolo">
+                    <div class="expression-group-title">Tremolo Parameters</div>
+                    <div class="control-group">
+                        <label for="tremoloArticulation">Articulation</label>
+                        <input
+                            type="range"
+                            id="tremoloArticulation"
+                            value="0.8"
+                            min="0.1"
+                            max="0.95"
+                            step="0.01"
+                        />
+                        <span
+                            id="tremoloArticulationValue"
+                            class="value-display"
+                            >0.80</span
+                        >
+                    </div>
+
+                    <div class="control-group">
+                        <label for="tremoloSpeed">Speed</label>
+                        <input
+                            type="range"
+                            id="tremoloSpeed"
+                            value="4.0"
+                            min="1.0"
+                            max="12.0"
+                            step="0.1"
+                        />
+                        <span id="tremoloSpeedValue" class="value-display"
+                            >4.0</span
+                        >
+                    </div>
+                    <div class="control-group" style="margin-top: 15px">
+                        <label>Tremolo Harmonic Ratios</label>
+                        <div
+                            class="harmonic-selector"
+                            data-expression="tremolo"
+                        >
+                            <div class="harmonic-row" data-type="numerator">
+                                <span class="harmonic-number" data-value="1"
+                                    >1</span
+                                >
+                                <span class="harmonic-number" data-value="2"
+                                    >2</span
+                                >
+                                <span class="harmonic-number" data-value="3"
+                                    >3</span
+                                >
+                                <span class="harmonic-number" data-value="4"
+                                    >4</span
+                                >
+                                <span class="harmonic-number" data-value="5"
+                                    >5</span
+                                >
+                                <span class="harmonic-number" data-value="6"
+                                    >6</span
+                                >
+                                <span class="harmonic-number" data-value="7"
+                                    >7</span
+                                >
+                                <span class="harmonic-number" data-value="8"
+                                    >8</span
+                                >
+                                <span class="harmonic-number" data-value="9"
+                                    >9</span
+                                >
+                                <span class="harmonic-number" data-value="10"
+                                    >10</span
+                                >
+                                <span class="harmonic-number" data-value="11"
+                                    >11</span
+                                >
+                                <span class="harmonic-number" data-value="12"
+                                    >12</span
+                                >
+                            </div>
+                            <div class="harmonic-row" data-type="denominator">
+                                <span class="harmonic-number" data-value="1"
+                                    >1</span
+                                >
+                                <span class="harmonic-number" data-value="2"
+                                    >2</span
+                                >
+                                <span class="harmonic-number" data-value="3"
+                                    >3</span
+                                >
+                                <span class="harmonic-number" data-value="4"
+                                    >4</span
+                                >
+                                <span class="harmonic-number" data-value="5"
+                                    >5</span
+                                >
+                                <span class="harmonic-number" data-value="6"
+                                    >6</span
+                                >
+                                <span class="harmonic-number" data-value="7"
+                                    >7</span
+                                >
+                                <span class="harmonic-number" data-value="8"
+                                    >8</span
+                                >
+                                <span class="harmonic-number" data-value="9"
+                                    >9</span
+                                >
+                                <span class="harmonic-number" data-value="10"
+                                    >10</span
+                                >
+                                <span class="harmonic-number" data-value="11"
+                                    >11</span
+                                >
+                                <span class="harmonic-number" data-value="12"
+                                    >12</span
+                                >
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section">
+                <div class="section-title">Expression Transition Control</div>
+                <div class="controls">
+                    <div class="control-group">
+                        <label for="transitionDuration">Duration</label>
+                        <input
+                            type="range"
+                            id="transitionDuration"
+                            value="1.0"
+                            min="0.5"
+                            max="5.0"
+                            step="0.1"
+                        />
+                        <span id="transitionDurationValue" class="value-display"
+                            >1.0s</span
+                        >
+                    </div>
+                    <div class="control-group">
+                        <label for="transitionSpread">Spread</label>
+                        <input
+                            type="range"
+                            id="transitionSpread"
+                            value="20"
+                            min="0"
+                            max="100"
+                            step="5"
+                        />
+                        <span id="transitionSpreadValue" class="value-display"
+                            >20%</span
+                        >
+                    </div>
+                    <div class="control-group">
+                        <label for="transitionStagger">Stagger</label>
+                        <select id="transitionStagger">
+                            <option value="sync">Sync</option>
+                            <option value="cascade">Cascade</option>
+                            <option value="random">Random</option>
+                        </select>
+                    </div>
+                    <div class="control-group">
+                        <label for="transitionVariance">Variance</label>
+                        <input
+                            type="range"
+                            id="transitionVariance"
+                            value="10"
+                            min="0"
+                            max="100"
+                            step="5"
+                        />
+                        <span id="transitionVarianceValue" class="value-display"
+                            >10%</span
+                        >
+                    </div>
+                </div>
+            </div>
+
+            <div class="section">
+                <div class="section-title">Instrument</div>
+                <div class="controls">
+                    <div class="control-group">
+                        <label for="bodyType">Body Type</label>
+                        <select id="bodyType">
+                            <option value="0">Violin</option>
+                            <option value="1">Viola</option>
+                            <option value="2">Cello</option>
+                            <option value="3">Guitar</option>
+                            <option value="4">None</option>
+                        </select>
+                    </div>
+                    <div class="control-group">
+                        <label for="stringMaterial">Material</label>
+                        <select id="stringMaterial">
+                            <option value="0">Steel</option>
+                            <option value="1">Gut</option>
+                            <option value="2">Nylon</option>
+                            <option value="3">Wound</option>
+                        </select>
+                    </div>
+                    <div class="control-group">
+                        <label for="stringDamping">Damping</label>
+                        <input
+                            type="range"
+                            id="stringDamping"
+                            value="0.5"
+                            min="0.01"
+                            max="0.99"
+                            step="0.01"
+                        />
+                        <span id="stringDampingValue" class="value-display"
+                            >0.50</span
+                        >
+                    </div>
+                    <div class="control-group">
+                        <label for="brightness">Brightness</label>
+                        <input
+                            type="range"
+                            id="brightness"
+                            value="0.5"
+                            min="0.0"
+                            max="1.0"
+                            step="0.01"
+                        />
+                        <span id="brightnessValue" class="value-display"
+                            >0.50</span
+                        >
+                    </div>
+                    <div class="control-group">
+                        <label for="bodyResonance">Body Resonance</label>
+                        <input
+                            type="range"
+                            id="bodyResonance"
+                            value="0.3"
+                            min="0.0"
+                            max="1.0"
+                            step="0.01"
+                        />
+                        <span id="bodyResonanceValue" class="value-display"
+                            >0.30</span
+                        >
+                    </div>
+                </div>
+            </div>
+
+            <div class="section">
+                <div class="section-title">Bow Control</div>
+                <div class="controls">
+                    <div class="control-group">
+                        <label for="bowForce">Force</label>
+                        <input
+                            type="range"
+                            id="bowForce"
+                            value="0.5"
+                            min="0.0"
+                            max="1.0"
+                            step="0.01"
+                        />
+                        <span id="bowForceValue" class="value-display"
+                            >0.50</span
+                        >
+                    </div>
+                    <div class="control-group">
+                        <label for="bowPosition">Position</label>
+                        <input
+                            type="range"
+                            id="bowPosition"
+                            value="0.12"
+                            min="0.02"
+                            max="0.5"
+                            step="0.01"
+                        />
+                        <span id="bowPositionValue" class="value-display"
+                            >0.12</span
+                        >
+                    </div>
+                    <div class="control-group">
+                        <label for="bowSpeed">Speed</label>
+                        <input
+                            type="range"
+                            id="bowSpeed"
+                            value="0.5"
+                            min="0.0"
+                            max="1.0"
+                            step="0.01"
+                        />
+                        <span id="bowSpeedValue" class="value-display"
+                            >0.50</span
+                        >
+                    </div>
+                </div>
+            </div>
+
+            <hr class="separator" />
+
+            <div class="section">
+                <div class="section-title">Master Output</div>
+                <div class="controls">
+                    <div class="control-group">
+                        <label for="masterGain">Volume</label>
+                        <input
+                            type="range"
+                            id="masterGain"
+                            value="0.5"
+                            min="0.0"
+                            max="1.0"
+                            step="0.01"
+                        />
+                        <span id="masterGainValue" class="value-display"
+                            >0.50</span
+                        >
+                    </div>
+                    <div class="control-group">
+                        <label>
+                            <input type="checkbox" id="power" checked /> Power
+                            On/Off
+                        </label>
+                        <span></span>
+                        <span></span>
+                    </div>
+                </div>
+            </div>
+
+            <hr class="separator" />
+
+            <div class="section">
+                <div class="section-title">Program Banking</div>
+                <div class="banking-controls">
+                    <label for="bank_selector">Bank:</label>
+                    <select id="bank_selector">
+                        <option value="1">Bank 1 ⚪</option>
+                        <option value="2">Bank 2 ⚪</option>
+                        <option value="3">Bank 3 ⚪</option>
+                        <option value="4">Bank 4 ⚪</option>
+                        <option value="5">Bank 5 ⚪</option>
+                    </select>
+                    <button id="save_bank">Save</button>
+                    <button id="load_bank">Load</button>
+                </div>
+                <div style="font-size: 0.8em; color: #666; margin-top: 5px">
+                    Banks store: Parameters + Harmonic Ratios + Chord +
+                    Expressions
+                </div>
+            </div>
+
+            <div id="synths">
+                <h3>Connected Synths</h3>
+                <div id="synth_list">None connected</div>
+            </div>
+        </div>
+
+        <!-- SDP Logger for debugging WebRTC connections -->
+        <script src="./js/modules/debug/SDPLogger.js"></script>
+        <script src="./js/sdp-logging-init.js"></script>
+
+        <!-- Load the module loader (handles modular vs legacy) -->
+        <script src="./js/module-loader.js"></script>
+
+        <!-- Include interactive expression and stochastic chord modules -->
+        <script src="../src/dsp/svg_interactive_expression.js"></script>
+        <script src="../src/common/stochastic_chords.js"></script>
+        <script src="../src/common/standard_parameters.js"></script>
+
+        <script>
+            // Initialize chord and expression system
+            // Declarations for svgExpression and currentChord were moved to the earlier main script block.
+            // chordDistributor was also declared; initialize it now.
+
+            if (typeof StochasticChordDistributor !== "undefined") {
+                window.chordDistributor = new StochasticChordDistributor();
+            } else {
+                console.error(
+                    "StochasticChordDistributor class is not defined. Ensure stochastic_chords.js is loaded before this block.",
+                );
+            }
+
+            // currentChord is already declared and initialized to [].
+            // svgExpression is already declared as null.
+
+            // Initialize SVG interactive expression when piano is ready
+            function initializeSVGExpression() {
+                // Prevent multiple initializations
+                if (window.svgExpression) {
+                    console.log(
+                        "SVG Interactive expression already initialized",
+                    );
+                    return true;
+                }
+
+                const piano = document.getElementById("piano");
+                if (piano && piano.querySelectorAll("rect").length > 0) {
+                    window.svgExpression = new SVGInteractiveExpression(piano);
+                    window.svgExpression.onExpressionChange =
+                        handleExpressionChange;
+                    // SVG Interactive expression system initialized
+
+                    // If chord already exists, update the expression system
+                    if (window.currentChord && window.currentChord.length > 0) {
+                        window.svgExpression.setChordNotes(window.currentChord);
+                    }
+
+                    // Check for pending chord update
+                    if (window.pendingChordUpdate) {
+                        window.svgExpression.setChordNotes(
+                            window.pendingChordUpdate,
+                        );
+                        delete window.pendingChordUpdate;
+                    }
+                    return true;
+                }
+                return false;
+            }
+
+            // Try to initialize immediately, then retry if needed
+            if (!initializeSVGExpression()) {
+                const initInterval = setInterval(() => {
+                    if (initializeSVGExpression()) {
+                        clearInterval(initInterval);
+                    }
+                }, 100);
+            }
+
+            function handleExpressionChange(note, expression) {
+                console.log("Expression changed:", note, expression);
+
+                // Update current chord if needed
+                if (window.svgExpression) {
+                    const chordNotes = window.svgExpression.getChordNotes();
+                    window.currentChord = chordNotes.sort((a, b) => {
+                        const freqA = note_to_frequency(
+                            a.slice(0, -1),
+                            parseInt(a.slice(-1)),
+                        );
+                        const freqB = note_to_frequency(
+                            b.slice(0, -1),
+                            parseInt(b.slice(-1)),
+                        );
+                        return freqA - freqB;
+                    });
+                    console.log(
+                        "Updated chord from expression system:",
+                        window.currentChord,
+                    );
+
+                    // Update chord display immediately
+                    const chordDisplay =
+                        document.getElementById("chord-display");
+                    if (chordDisplay) {
+                        if (window.currentChord.length > 0) {
+                            const expressions =
+                                window.svgExpression.getAllExpressions();
+                            const chordParts = [];
+
+                            // Filter out notes that are only trill targets
+                            const actualChordNotes = window.currentChord.filter(
+                                (note) => {
+                                    const expr = expressions[note];
+                                    if (!expr || expr.type === "none") {
+                                        // Check if this note is a trill target
+                                        for (const [
+                                            otherNote,
+                                            otherExpr,
+                                        ] of Object.entries(expressions)) {
+                                            if (
+                                                otherExpr.type === "trill" &&
+                                                otherExpr.targetNote === note
+                                            ) {
+                                                return false;
+                                            }
+                                        }
+                                    }
+                                    return true;
+                                },
+                            );
+
+                            actualChordNotes.forEach((note) => {
+                                const expr = expressions[note];
+                                if (
+                                    expr &&
+                                    expr.type === "trill" &&
+                                    expr.targetNote
+                                ) {
+                                    // Show trill with target in brackets
+                                    chordParts.push(
+                                        `${note} (→${expr.targetNote})`,
+                                    );
+                                } else {
+                                    chordParts.push(note);
+                                }
+                            });
+
+                            chordDisplay.textContent = chordParts.join(", ");
+                        } else {
+                            chordDisplay.textContent = "None";
+                        }
+                    }
+                }
+
+                updateExpressionDisplay();
+                updateExpressionGroups();
+
+                // Mark chord as changed
+                mark_parameter_changed("chord");
+                check_overall_status();
+            }
+
+            function updateExpressionDisplay() {
+                const content = document.getElementById("expression-content");
+                const chordDisplay = document.getElementById("chord-display");
+                if (!content) return;
+
+                // Update chord display with trill targets in brackets
+                if (chordDisplay) {
+                    if (window.currentChord && window.currentChord.length > 0) {
+                        const expressions = window.svgExpression
+                            ? window.svgExpression.getAllExpressions()
+                            : {};
+                        const chordParts = [];
+
+                        // Filter out notes that are only trill targets
+                        const actualChordNotes = window.currentChord.filter(
+                            (note) => {
+                                const expr = expressions[note];
+                                if (!expr || expr.type === "none") {
+                                    // Check if this note is a trill target
+                                    for (const [
+                                        otherNote,
+                                        otherExpr,
+                                    ] of Object.entries(expressions)) {
+                                        if (
+                                            otherExpr.type === "trill" &&
+                                            otherExpr.targetNote === note
+                                        ) {
+                                            return false;
+                                        }
+                                    }
+                                }
+                                return true;
+                            },
+                        );
+
+                        actualChordNotes.forEach((note) => {
+                            const expr = expressions[note];
+                            if (
+                                expr &&
+                                expr.type === "trill" &&
+                                expr.targetNote
+                            ) {
+                                // Show trill with target in brackets
+                                chordParts.push(
+                                    `${note} (→${expr.targetNote})`,
+                                );
+                            } else {
+                                chordParts.push(note);
+                            }
+                        });
+
+                        chordDisplay.textContent = chordParts.join(" ");
+                    } else {
+                        chordDisplay.textContent = "None";
+                    }
+                }
+
+                if (!window.svgExpression) {
+                    content.innerHTML =
+                        '<div style="color: #666; font-style: italic;">Loading expression system...</div>';
+                    return;
+                }
+
+                const expressions = window.svgExpression.getAllExpressions();
+                const activeExpressions = Object.entries(expressions);
+
+                if (activeExpressions.length === 0) {
+                    content.innerHTML =
+                        '<div style="color: #666; font-style: italic;">Click piano keys to add notes to chord</div>';
+                    return;
+                }
+
+                // Group notes by trill relationships
+                const processedNotes = new Set();
+                const displayItems = [];
+
+                activeExpressions.forEach(([note, expression]) => {
+                    if (processedNotes.has(note)) return;
+
+                    let exprText = "";
+                    let className = "note-expression";
+
+                    switch (expression.type) {
+                        case "vibrato":
+                            exprText = `${note}: Vibrato (depth: ${(expression.depth * 100).toFixed(0)}%)`;
+                            className += " vibrato";
+                            break;
+                        case "tremolo":
+                            exprText = `${note}: Tremolo (depth: ${(expression.depth * 100).toFixed(0)}%)`;
+                            className += " tremolo";
+                            break;
+                        case "trill":
+                            exprText = `${note}: Trill`;
+                            className += " trill";
+                            // Add trill target in brackets with styled arrow
+                            if (expression.targetNote) {
+                                exprText += ` <span style="opacity: 0.7; font-size: 0.9em;">(→ ${expression.targetNote})</span>`;
+                                processedNotes.add(expression.targetNote);
+                            }
+                            break;
+                        default:
+                            // Check if this note is a trill target for another note
+                            let isTrillTarget = false;
+                            for (const [
+                                otherNote,
+                                otherExpr,
+                            ] of activeExpressions) {
+                                if (
+                                    otherExpr.type === "trill" &&
+                                    otherExpr.targetNote === note
+                                ) {
+                                    isTrillTarget = true;
+                                    break;
+                                }
+                            }
+                            if (!isTrillTarget) {
+                                exprText = `${note}`;
+                                className += " none";
+                            }
+                            break;
+                    }
+
+                    if (exprText) {
+                        displayItems.push(
+                            `<div class="${className}">${exprText}</div>`,
+                        );
+                    }
+                    processedNotes.add(note);
+                });
+
+                content.innerHTML = displayItems.join("");
+            }
+
+            // Update expression group visibility based on what's in use
+            function updateExpressionGroups() {
+                if (!window.svgExpression) return;
+
+                const expressions = window.svgExpression.getAllExpressions();
+                const activeTypes = new Set();
+
+                // Find which expression types are in use
+                Object.values(expressions).forEach((expr) => {
+                    if (expr.type !== "none") {
+                        activeTypes.add(expr.type);
+                    }
+                });
+
+                // Show/hide expression groups
+                const vibratoGroup = document.querySelector(
+                    ".expression-group.vibrato",
+                );
+                const trillGroup = document.querySelector(
+                    ".expression-group.trill",
+                );
+                const tremoloGroup = document.querySelector(
+                    ".expression-group.tremolo",
+                );
+
+                if (vibratoGroup) {
+                    vibratoGroup.classList.toggle(
+                        "active",
+                        activeTypes.has("vibrato"),
+                    );
+                }
+                if (trillGroup) {
+                    trillGroup.classList.toggle(
+                        "active",
+                        activeTypes.has("trill"),
+                    );
+                }
+                if (tremoloGroup) {
+                    tremoloGroup.classList.toggle(
+                        "active",
+                        activeTypes.has("tremolo"),
+                    );
+                }
+            }
+        </script>
+
+        <!-- Debug Logging Panel -->
+        <div
+            id="debug-panel"
+            style="
+                position: fixed;
+                bottom: 10px;
+                right: 10px;
+                background: rgba(240, 240, 240, 0.95);
+                padding: 12px;
+                border-radius: 6px;
+                font-size: 11px;
+                box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+                min-width: 160px;
+                z-index: 1000;
+            "
+        >
+            <h4 style="margin: 0 0 8px 0; font-size: 12px; color: #333">
+                Debug Logging
+            </h4>
+            <label style="display: block; margin: 4px 0"
+                ><input
+                    type="checkbox"
+                    data-debug="connections"
+                    style="margin-right: 6px"
+                />
+                Connections</label
+            >
+            <label style="display: block; margin: 4px 0"
+                ><input
+                    type="checkbox"
+                    data-debug="messages"
+                    style="margin-right: 6px"
+                />
+                Messages</label
+            >
+            <label style="display: block; margin: 4px 0"
+                ><input
+                    type="checkbox"
+                    data-debug="parameters"
+                    style="margin-right: 6px"
+                />
+                Parameters</label
+            >
+            <label style="display: block; margin: 4px 0"
+                ><input
+                    type="checkbox"
+                    data-debug="expressions"
+                    style="margin-right: 6px"
+                />
+                Expressions</label
+            >
+            <label style="display: block; margin: 4px 0"
+                ><input
+                    type="checkbox"
+                    data-debug="performance"
+                    style="margin-right: 6px"
+                />
+                Performance</label
+            >
+            <label style="display: block; margin: 4px 0"
+                ><input
+                    type="checkbox"
+                    data-debug="lifecycle"
+                    style="margin-right: 6px"
+                />
+                Lifecycle</label
+            >
+        </div>
+
+        <script>
+            // Initialize debug logging controls
+            document.addEventListener("DOMContentLoaded", () => {
+                // Load saved debug config
+                const savedConfig = localStorage.getItem("debug-config");
+                if (savedConfig) {
+                    try {
+                        const config = JSON.parse(savedConfig);
+                        window.DEBUG_CONFIG = {
+                            ...window.DEBUG_CONFIG,
+                            ...config,
+                        };
+                    } catch (e) {
+                        console.warn("Failed to load debug config:", e);
+                    }
+                }
+
+                // Set up debug panel controls
+                document
+                    .querySelectorAll("[data-debug]")
+                    .forEach((checkbox) => {
+                        const category = checkbox.dataset.debug;
+                        checkbox.checked = window.DEBUG_CONFIG[category];
+                        checkbox.addEventListener("change", (e) => {
+                            window.DEBUG_CONFIG[category] = e.target.checked;
+                            localStorage.setItem(
+                                "debug-config",
+                                JSON.stringify(window.DEBUG_CONFIG),
+                            );
+                            log(
+                                `Debug logging ${e.target.checked ? "enabled" : "disabled"} for: ${category}`,
+                                "lifecycle",
+                            );
+                        });
+                    });
+            });
+        </script>
+    </body>
+</html>

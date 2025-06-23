@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Minimal WebRTC Data Channel Test</title>
+    <style>
+        body {
+            font-family: monospace;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #1a1a1a;
+            color: #0ff;
+        }
+        .container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        .panel {
+            border: 1px solid #0ff;
+            padding: 15px;
+            background: #0a0a0a;
+        }
+        h2 {
+            margin-top: 0;
+            color: #ff0;
+        }
+        button {
+            background: #0ff;
+            color: #000;
+            border: none;
+            padding: 10px 20px;
+            margin: 5px;
+            cursor: pointer;
+            font-family: monospace;
+            font-weight: bold;
+        }
+        button:hover {
+            background: #ff0;
+        }
+        button:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+        .log {
+            background: #000;
+            border: 1px solid #333;
+            padding: 10px;
+            height: 300px;
+            overflow-y: auto;
+            font-size: 12px;
+            white-space: pre-wrap;
+        }
+        .status {
+            margin: 10px 0;
+            padding: 10px;
+            background: #111;
+            border: 1px solid #333;
+        }
+        .error {
+            color: #f00;
+        }
+        .success {
+            color: #0f0;
+        }
+        .info {
+            color: #09f;
+        }
+        .sdp-display {
+            background: #000;
+            border: 1px solid #333;
+            padding: 10px;
+            margin: 10px 0;
+            max-height: 200px;
+            overflow-y: auto;
+            font-size: 11px;
+            display: none;
+        }
+        .sdp-display.show {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <h1>Minimal WebRTC Data Channel Test</h1>
+    <p>This page tests basic WebRTC data channel establishment between two peers on the same page.</p>
+
+    <div class="container">
+        <div class="panel">
+            <h2>Peer A (Offerer)</h2>
+            <div class="status" id="statusA">Ready</div>
+            <button id="createOfferBtn">1. Create Offer</button>
+            <button id="setAnswerBtn" disabled>3. Set Answer</button>
+            <button id="sendMessageABtn" disabled>Send Message</button>
+            <div class="sdp-display" id="offerDisplay"></div>
+            <div class="sdp-display" id="answerDisplayA"></div>
+            <div class="log" id="logA"></div>
+        </div>
+
+        <div class="panel">
+            <h2>Peer B (Answerer)</h2>
+            <div class="status" id="statusB">Ready</div>
+            <button id="setOfferBtn" disabled>2. Set Offer & Create Answer</button>
+            <button id="sendMessageBBtn" disabled>Send Message</button>
+            <div class="sdp-display" id="offerDisplayB"></div>
+            <div class="sdp-display" id="answerDisplay"></div>
+            <div class="log" id="logB"></div>
+        </div>
+    </div>
+
+    <div style="margin-top: 20px;">
+        <button id="resetBtn">Reset Everything</button>
+        <button id="toggleSdpBtn">Toggle SDP Display</button>
+        <button id="analyzeSdpBtn">Analyze SDPs</button>
+    </div>
+
+    <script>
+        // Globals
+        let peerA, peerB;
+        let dataChannelA, dataChannelB;
+        let offerSDP, answerSDP;
+
+        // Logging helpers
+        function logA(msg, type = 'info') {
+            const log = document.getElementById('logA');
+            const timestamp = new Date().toISOString().substr(11, 12);
+            const className = type;
+            log.innerHTML += `<span class="${className}">[${timestamp}] ${msg}</span>\n`;
+            log.scrollTop = log.scrollHeight;
+            console.log(`[A] ${msg}`);
+        }
+
+        function logB(msg, type = 'info') {
+            const log = document.getElementById('logB');
+            const timestamp = new Date().toISOString().substr(11, 12);
+            const className = type;
+            log.innerHTML += `<span class="${className}">[${timestamp}] ${msg}</span>\n`;
+            log.scrollTop = log.scrollHeight;
+            console.log(`[B] ${msg}`);
+        }
+
+        function updateStatus(peer, status, type = 'info') {
+            const statusEl = document.getElementById(`status${peer}`);
+            statusEl.textContent = status;
+            statusEl.className = `status ${type}`;
+        }
+
+        // Initialize peers
+        function initializePeers() {
+            // Configuration
+            const config = {
+                iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+            };
+
+            // Create Peer A
+            peerA = new RTCPeerConnection(config);
+            logA('Created RTCPeerConnection');
+
+            // Create data channel from Peer A
+            dataChannelA = peerA.createDataChannel('testChannel', {
+                ordered: true,
+                negotiated: false
+            });
+            logA('Created data channel "testChannel"');
+
+            // Set up Peer A event handlers
+            peerA.onicecandidate = (event) => {
+                if (event.candidate) {
+                    logA(`ICE candidate: ${event.candidate.candidate.substr(0, 50)}...`);
+                    // In real scenario, this would be sent to Peer B
+                    if (peerB && peerB.remoteDescription) {
+                        peerB.addIceCandidate(event.candidate).catch(e => {
+                            logB(`Failed to add ICE candidate: ${e}`, 'error');
+                        });
+                    }
+                } else {
+                    logA('ICE gathering complete');
+                }
+            };
+
+            peerA.oniceconnectionstatechange = () => {
+                logA(`ICE connection state: ${peerA.iceConnectionState}`);
+                updateStatus('A', `ICE: ${peerA.iceConnectionState}`,
+                    peerA.iceConnectionState === 'connected' ? 'success' : 'info');
+            };
+
+            peerA.onconnectionstatechange = () => {
+                logA(`Connection state: ${peerA.connectionState}`);
+            };
+
+            dataChannelA.onopen = () => {
+                logA('Data channel opened!', 'success');
+                document.getElementById('sendMessageABtn').disabled = false;
+            };
+
+            dataChannelA.onclose = () => {
+                logA('Data channel closed', 'error');
+                document.getElementById('sendMessageABtn').disabled = true;
+            };
+
+            dataChannelA.onmessage = (event) => {
+                logA(`Received message: "${event.data}"`, 'success');
+            };
+
+            dataChannelA.onerror = (error) => {
+                logA(`Data channel error: ${error}`, 'error');
+            };
+
+            // Create Peer B
+            peerB = new RTCPeerConnection(config);
+            logB('Created RTCPeerConnection');
+
+            // Set up Peer B event handlers
+            peerB.onicecandidate = (event) => {
+                if (event.candidate) {
+                    logB(`ICE candidate: ${event.candidate.candidate.substr(0, 50)}...`);
+                    // In real scenario, this would be sent to Peer A
+                    if (peerA && peerA.remoteDescription) {
+                        peerA.addIceCandidate(event.candidate).catch(e => {
+                            logA(`Failed to add ICE candidate: ${e}`, 'error');
+                        });
+                    }
+                } else {
+                    logB('ICE gathering complete');
+                }
+            };
+
+            peerB.oniceconnectionstatechange = () => {
+                logB(`ICE connection state: ${peerB.iceConnectionState}`);
+                updateStatus('B', `ICE: ${peerB.iceConnectionState}`,
+                    peerB.iceConnectionState === 'connected' ? 'success' : 'info');
+            };
+
+            peerB.onconnectionstatechange = () => {
+                logB(`Connection state: ${peerB.connectionState}`);
+            };
+
+            // CRITICAL: Data channel event handler
+            peerB.ondatachannel = (event) => {
+                logB('📍 DATACHANNEL EVENT FIRED!', 'success');
+                logB(`Channel label: "${event.channel.label}"`, 'success');
+                dataChannelB = event.channel;
+
+                dataChannelB.onopen = () => {
+                    logB('Data channel opened!', 'success');
+                    document.getElementById('sendMessageBBtn').disabled = false;
+                };
+
+                dataChannelB.onclose = () => {
+                    logB('Data channel closed', 'error');
+                    document.getElementById('sendMessageBBtn').disabled = true;
+                };
+
+                dataChannelB.onmessage = (event) => {
+                    logB(`Received message: "${event.data}"`, 'success');
+                };
+
+                dataChannelB.onerror = (error) => {
+                    logB(`Data channel error: ${error}`, 'error');
+                };
+            };
+        }
+
+        // Button handlers
+        document.getElementById('createOfferBtn').addEventListener('click', async () => {
+            try {
+                logA('Creating offer...');
+                const offer = await peerA.createOffer();
+                logA('Setting local description...');
+                await peerA.setLocalDescription(offer);
+                offerSDP = offer.sdp;
+
+                // Display offer
+                document.getElementById('offerDisplay').textContent = 'OFFER:\n' + offer.sdp;
+                document.getElementById('offerDisplay').classList.add('show');
+
+                logA('Offer created successfully', 'success');
+
+                // Enable next step
+                document.getElementById('setOfferBtn').disabled = false;
+                document.getElementById('createOfferBtn').disabled = true;
+            } catch (e) {
+                logA(`Error creating offer: ${e}`, 'error');
+            }
+        });
+
+        document.getElementById('setOfferBtn').addEventListener('click', async () => {
+            try {
+                logB('Setting remote description (offer)...');
+                await peerB.setRemoteDescription({ type: 'offer', sdp: offerSDP });
+
+                // Display offer on B side
+                document.getElementById('offerDisplayB').textContent = 'RECEIVED OFFER:\n' + offerSDP;
+                document.getElementById('offerDisplayB').classList.add('show');
+
+                logB('Creating answer...');
+                const answer = await peerB.createAnswer();
+                logB('Setting local description...');
+                await peerB.setLocalDescription(answer);
+                answerSDP = answer.sdp;
+
+                // Display answer
+                document.getElementById('answerDisplay').textContent = 'ANSWER:\n' + answer.sdp;
+                document.getElementById('answerDisplay').classList.add('show');
+
+                logB('Answer created successfully', 'success');
+
+                // Enable next step
+                document.getElementById('setAnswerBtn').disabled = false;
+                document.getElementById('setOfferBtn').disabled = true;
+            } catch (e) {
+                logB(`Error handling offer: ${e}`, 'error');
+            }
+        });
+
+        document.getElementById('setAnswerBtn').addEventListener('click', async () => {
+            try {
+                logA('Setting remote description (answer)...');
+                await peerA.setRemoteDescription({ type: 'answer', sdp: answerSDP });
+
+                // Display answer on A side
+                document.getElementById('answerDisplayA').textContent = 'RECEIVED ANSWER:\n' + answerSDP;
+                document.getElementById('answerDisplayA').classList.add('show');
+
+                logA('Answer set successfully', 'success');
+                document.getElementById('setAnswerBtn').disabled = true;
+            } catch (e) {
+                logA(`Error setting answer: ${e}`, 'error');
+            }
+        });
+
+        document.getElementById('sendMessageABtn').addEventListener('click', () => {
+            const msg = `Hello from A at ${new Date().toISOString()}`;
+            dataChannelA.send(msg);
+            logA(`Sent: "${msg}"`);
+        });
+
+        document.getElementById('sendMessageBBtn').addEventListener('click', () => {
+            const msg = `Hello from B at ${new Date().toISOString()}`;
+            dataChannelB.send(msg);
+            logB(`Sent: "${msg}"`);
+        });
+
+        document.getElementById('resetBtn').addEventListener('click', () => {
+            location.reload();
+        });
+
+        document.getElementById('toggleSdpBtn').addEventListener('click', () => {
+            document.querySelectorAll('.sdp-display').forEach(el => {
+                el.classList.toggle('show');
+            });
+        });
+
+        document.getElementById('analyzeSdpBtn').addEventListener('click', () => {
+            if (!offerSDP || !answerSDP) {
+                alert('Complete the offer/answer exchange first!');
+                return;
+            }
+
+            function analyzeSDP(sdp, label) {
+                const lines = sdp.split('\n');
+                const mApp = lines.find(l => l.startsWith('m=application'));
+                const sctpPort = lines.find(l => l.includes('a=sctp-port'));
+                const sctpmap = lines.find(l => l.includes('a=sctpmap'));
+                const fingerprint = lines.find(l => l.includes('a=fingerprint'));
+                const setup = lines.find(l => l.includes('a=setup'));
+
+                console.log(`\n=== ${label} Analysis ===`);
+                console.log('m=application:', mApp || 'NOT FOUND');
+                console.log('SCTP port:', sctpPort || 'NOT FOUND');
+                console.log('SCTP map:', sctpmap || 'NOT FOUND');
+                console.log('DTLS fingerprint:', fingerprint || 'NOT FOUND');
+                console.log('DTLS setup:', setup || 'NOT FOUND');
+
+                if (mApp) {
+                    const port = mApp.split(' ')[1];
+                    console.log('Port value:', port, port === '0' ? '❌ REJECTED' : '✅ ACCEPTED');
+                }
+
+                return {
+                    hasDataChannel: !!mApp && mApp.split(' ')[1] !== '0',
+                    sctpPort: sctpPort,
+                    setup: setup
+                };
+            }
+
+            console.log('\n🔍 SDP ANALYSIS 🔍');
+            const offerAnalysis = analyzeSDP(offerSDP, 'OFFER');
+            const answerAnalysis = analyzeSDP(answerSDP, 'ANSWER');
+
+            console.log('\n=== Summary ===');
+            console.log('Offer has data channel:', offerAnalysis.hasDataChannel ? '✅' : '❌');
+            console.log('Answer has data channel:', answerAnalysis.hasDataChannel ? '✅' : '❌');
+
+            alert('Check browser console for detailed SDP analysis');
+        });
+
+        // Initialize on load
+        initializePeers();
+        logA('Ready to create offer');
+        logB('Waiting for offer');
+    </script>
+</body>
+</html>

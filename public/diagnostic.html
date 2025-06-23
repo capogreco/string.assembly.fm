@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>String Assembly FM - Module Loading Diagnostic</title>
+    <style>
+        body {
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            background: #1a1a1a;
+            color: #00ff00;
+            margin: 0;
+            padding: 20px;
+            line-height: 1.4;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            color: #00ff00;
+            text-align: center;
+            margin-bottom: 30px;
+            text-shadow: 0 0 10px #00ff00;
+        }
+
+        .section {
+            background: rgba(0, 255, 0, 0.1);
+            border: 1px solid #00ff00;
+            margin: 20px 0;
+            padding: 20px;
+            border-radius: 8px;
+        }
+
+        .section h3 {
+            margin-top: 0;
+            color: #00ffff;
+        }
+
+        .status {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 3px;
+            font-weight: bold;
+            margin-left: 10px;
+            min-width: 60px;
+            text-align: center;
+        }
+
+        .pass {
+            background: #004400;
+            color: #00ff00;
+        }
+
+        .fail {
+            background: #440000;
+            color: #ff4444;
+        }
+
+        .pending {
+            background: #444400;
+            color: #ffff00;
+        }
+
+        .log {
+            background: #000;
+            border: 1px solid #333;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 4px;
+            max-height: 300px;
+            overflow-y: auto;
+            font-size: 12px;
+        }
+
+        button {
+            background: #003300;
+            color: #00ff00;
+            border: 1px solid #00ff00;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+            font-family: inherit;
+        }
+
+        button:hover {
+            background: #004400;
+        }
+
+        .error {
+            color: #ff4444;
+        }
+
+        .warn {
+            color: #ffaa00;
+        }
+
+        .info {
+            color: #4444ff;
+        }
+
+        .success {
+            color: #44ff44;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Module Loading Diagnostic</h1>
+
+        <div class="section">
+            <h3>Browser Capabilities</h3>
+            <div id="browser-checks">
+                <div>ES6 Modules: <span id="es6-modules" class="status pending">CHECKING</span></div>
+                <div>Map/Set Support: <span id="map-set" class="status pending">CHECKING</span></div>
+                <div>Promise Support: <span id="promises" class="status pending">CHECKING</span></div>
+                <div>Class Support: <span id="classes" class="status pending">CHECKING</span></div>
+                <div>Async/Await: <span id="async-await" class="status pending">CHECKING</span></div>
+                <div>Module Script Support: <span id="module-script" class="status pending">CHECKING</span></div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h3>Module Loading Tests</h3>
+            <div>
+                <button onclick="testModuleLoading()">Test Module Loading</button>
+                <button onclick="testLegacyLoading()">Test Legacy Loading</button>
+                <button onclick="clearLog()">Clear Log</button>
+            </div>
+            <div id="module-status">
+                <div>Logger Module: <span id="logger-status" class="status pending">PENDING</span></div>
+                <div>Config Module: <span id="config-status" class="status pending">PENDING</span></div>
+                <div>EventBus Module: <span id="eventbus-status" class="status pending">PENDING</span></div>
+                <div>AppState Module: <span id="appstate-status" class="status pending">PENDING</span></div>
+                <div>App Module: <span id="app-status" class="status pending">PENDING</span></div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h3>Console Log</h3>
+            <div id="console-log" class="log">
+                Console output will appear here...
+            </div>
+        </div>
+
+        <div class="section">
+            <h3>Error Log</h3>
+            <div id="error-log" class="log">
+                Errors will appear here...
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Override console methods to capture output
+        const originalLog = console.log;
+        const originalError = console.error;
+        const originalWarn = console.warn;
+
+        const consoleDiv = document.getElementById('console-log');
+        const errorDiv = document.getElementById('error-log');
+
+        function appendToLog(div, message, className = '') {
+            const timestamp = new Date().toLocaleTimeString();
+            const line = document.createElement('div');
+            if (className) line.className = className;
+            line.textContent = `[${timestamp}] ${message}`;
+            div.appendChild(line);
+            div.scrollTop = div.scrollHeight;
+        }
+
+        console.log = function(...args) {
+            originalLog.apply(console, args);
+            appendToLog(consoleDiv, args.join(' '), 'info');
+        };
+
+        console.error = function(...args) {
+            originalError.apply(console, args);
+            appendToLog(errorDiv, args.join(' '), 'error');
+            appendToLog(consoleDiv, '[ERROR] ' + args.join(' '), 'error');
+        };
+
+        console.warn = function(...args) {
+            originalWarn.apply(console, args);
+            appendToLog(consoleDiv, '[WARN] ' + args.join(' '), 'warn');
+        };
+
+        // Browser capability checks
+        function checkBrowserCapabilities() {
+            console.log('=== Browser Capability Check ===');
+
+            // ES6 Modules
+            let supportsES6Modules = false;
+            try {
+                new Function('import("")');
+                supportsES6Modules = true;
+            } catch (e) {
+                supportsES6Modules = false;
+            }
+            updateStatus('es6-modules', supportsES6Modules);
+            console.log('ES6 Modules:', supportsES6Modules ? 'SUPPORTED' : 'NOT SUPPORTED');
+
+            // Map/Set
+            const supportsMapSet = typeof Map !== 'undefined' && typeof Set !== 'undefined';
+            updateStatus('map-set', supportsMapSet);
+            console.log('Map/Set:', supportsMapSet ? 'SUPPORTED' : 'NOT SUPPORTED');
+
+            // Promises
+            const supportsPromises = typeof Promise !== 'undefined';
+            updateStatus('promises', supportsPromises);
+            console.log('Promises:', supportsPromises ? 'SUPPORTED' : 'NOT SUPPORTED');
+
+            // Classes
+            let supportsClasses = false;
+            try {
+                new Function('class Test {}');
+                supportsClasses = true;
+            } catch (e) {
+                supportsClasses = false;
+            }
+            updateStatus('classes', supportsClasses);
+            console.log('Classes:', supportsClasses ? 'SUPPORTED' : 'NOT SUPPORTED');
+
+            // Async/Await
+            let supportsAsyncAwait = false;
+            try {
+                new Function('async function test() { await Promise.resolve(); }');
+                supportsAsyncAwait = true;
+            } catch (e) {
+                supportsAsyncAwait = false;
+            }
+            updateStatus('async-await', supportsAsyncAwait);
+            console.log('Async/Await:', supportsAsyncAwait ? 'SUPPORTED' : 'NOT SUPPORTED');
+
+            // Module script support
+            const supportsModuleScript = 'noModule' in HTMLScriptElement.prototype;
+            updateStatus('module-script', supportsModuleScript);
+            console.log('Module Script:', supportsModuleScript ? 'SUPPORTED' : 'NOT SUPPORTED');
+
+            console.log('=== End Browser Check ===');
+        }
+
+        function updateStatus(elementId, passed) {
+            const element = document.getElementById(elementId);
+            if (element) {
+                element.textContent = passed ? 'PASS' : 'FAIL';
+                element.className = 'status ' + (passed ? 'pass' : 'fail');
+            }
+        }
+
+        function testModuleLoading() {
+            console.log('=== Testing Module Loading ===');
+
+            // Reset status
+            ['logger', 'config', 'eventbus', 'appstate', 'app'].forEach(module => {
+                updateStatus(module + '-status', false);
+                document.getElementById(module + '-status').textContent = 'LOADING';
+                document.getElementById(module + '-status').className = 'status pending';
+            });
+
+            // Try to load modules
+            const script = document.createElement('script');
+            script.type = 'module';
+            script.textContent = `
+                try {
+                    console.log('Loading Logger...');
+                    const { Logger } = await import('./js/modules/core/Logger.js');
+                    window.TestLogger = Logger;
+                    document.getElementById('logger-status').textContent = 'PASS';
+                    document.getElementById('logger-status').className = 'status pass';
+                    console.log('Logger loaded successfully');
+                } catch (error) {
+                    console.error('Failed to load Logger:', error);
+                    document.getElementById('logger-status').textContent = 'FAIL';
+                    document.getElementById('logger-status').className = 'status fail';
+                }
+
+                try {
+                    console.log('Loading Config...');
+                    const { Config } = await import('./js/modules/core/Config.js');
+                    window.TestConfig = Config;
+                    document.getElementById('config-status').textContent = 'PASS';
+                    document.getElementById('config-status').className = 'status pass';
+                    console.log('Config loaded successfully');
+                } catch (error) {
+                    console.error('Failed to load Config:', error);
+                    document.getElementById('config-status').textContent = 'FAIL';
+                    document.getElementById('config-status').className = 'status fail';
+                }
+
+                try {
+                    console.log('Loading EventBus...');
+                    const { eventBus } = await import('./js/modules/core/EventBus.js');
+                    window.TestEventBus = eventBus;
+                    document.getElementById('eventbus-status').textContent = 'PASS';
+                    document.getElementById('eventbus-status').className = 'status pass';
+                    console.log('EventBus loaded successfully');
+                } catch (error) {
+                    console.error('Failed to load EventBus:', error);
+                    document.getElementById('eventbus-status').textContent = 'FAIL';
+                    document.getElementById('eventbus-status').className = 'status fail';
+                }
+
+                try {
+                    console.log('Loading AppState...');
+                    const { appState } = await import('./js/modules/state/AppState.js');
+                    window.TestAppState = appState;
+                    document.getElementById('appstate-status').textContent = 'PASS';
+                    document.getElementById('appstate-status').className = 'status pass';
+                    console.log('AppState loaded successfully');
+                } catch (error) {
+                    console.error('Failed to load AppState:', error);
+                    document.getElementById('appstate-status').textContent = 'FAIL';
+                    document.getElementById('appstate-status').className = 'status fail';
+                }
+
+                console.log('=== Module Loading Test Complete ===');
+            `;
+
+            script.onerror = function(error) {
+                console.error('Script error:', error);
+            };
+
+            document.head.appendChild(script);
+        }
+
+        function testLegacyLoading() {
+            console.log('=== Testing Legacy Loading ===');
+
+            const script = document.createElement('script');
+            script.src = './js/ctrl-main-logic.js';
+
+            script.onload = function() {
+                console.log('Legacy system loaded successfully');
+                document.getElementById('app-status').textContent = 'LEGACY OK';
+                document.getElementById('app-status').className = 'status pass';
+            };
+
+            script.onerror = function() {
+                console.error('Failed to load legacy system');
+                document.getElementById('app-status').textContent = 'LEGACY FAIL';
+                document.getElementById('app-status').className = 'status fail';
+            };
+
+            document.head.appendChild(script);
+        }
+
+        function clearLog() {
+            consoleDiv.innerHTML = 'Console output will appear here...';
+            errorDiv.innerHTML = 'Errors will appear here...';
+        }
+
+        // Global error handling
+        window.addEventListener('error', function(event) {
+            console.error('Global error:', event.error);
+            console.error('Stack:', event.error?.stack);
+        });
+
+        window.addEventListener('unhandledrejection', function(event) {
+            console.error('Unhandled promise rejection:', event.reason);
+        });
+
+        // Auto-check capabilities on load
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('Diagnostic page loaded');
+            checkBrowserCapabilities();
+        });
+
+        if (document.readyState !== 'loading') {
+            console.log('Diagnostic page loaded (already ready)');
+            checkBrowserCapabilities();
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,58 @@
+SDP Log - CONTROLLER
+Generated: 2025-06-23T04:57:58.469Z
+================================================================================
+
+Entry #1
+Time: 2025-06-23T04:57:58.469Z
+Role: controller
+Type: OFFER
+Direction: REMOTE
+Peer ID: synth-otw035lt6
+----------------------------------------
+v=0
+o=- 944311278279370957 2 IN IP4 127.0.0.1
+s=-
+t=0 0
+a=group:BUNDLE 0
+a=extmap-allow-mixed
+a=msid-semantic: WMS
+m=application 9 UDP/DTLS/SCTP webrtc-datachannel
+c=IN IP4 0.0.0.0
+a=ice-ufrag:aqhf
+a=ice-pwd:Agipe3Ku8AH7Hot5dNKzNPae
+a=ice-options:trickle
+a=fingerprint:sha-256 B4:9C:1B:76:4A:99:25:37:6D:D8:8C:E6:0D:C6:A1:9E:67:3C:98:EF:ED:9C:61:1E:B2:B7:A2:E6:F2:FF:2C:6F
+a=setup:actpass
+a=mid:0
+a=sctp-port:5000
+a=max-message-size:262144
+
+================================================================================
+
+Entry #2
+Time: 2025-06-23T04:57:58.469Z
+Role: controller
+Type: ANSWER
+Direction: LOCAL
+Peer ID: synth-otw035lt6
+----------------------------------------
+v=0
+o=mozilla...THIS_IS_SDPARTA-99.0 2002945990397143457 0 IN IP4 0.0.0.0
+s=-
+t=0 0
+a=fingerprint:sha-256 09:44:D4:A8:F5:FF:D1:77:89:78:B4:ED:FA:47:FF:01:88:18:1D:27:33:C0:DA:96:F2:17:38:C3:54:9F:4A:1A
+a=group:BUNDLE 0
+a=ice-options:trickle
+a=msid-semantic:WMS *
+m=application 9 UDP/DTLS/SCTP webrtc-datachannel
+c=IN IP4 0.0.0.0
+a=sendrecv
+a=ice-pwd:89a5441f627a8b303534466e1aed1708
+a=ice-ufrag:e619686e
+a=mid:0
+a=setup:active
+a=sctp-port:5000
+a=max-message-size:1073741823
+
+================================================================================
+

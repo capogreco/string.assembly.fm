@@ -1,0 +1,897 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>String Assembly FM - Modular Test</title>
+        <style>
+            body {
+                font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                margin: 0;
+                padding: 20px;
+                min-height: 100vh;
+                color: white;
+            }
+
+            .container {
+                max-width: 1200px;
+                margin: 0 auto;
+                background: rgba(255, 255, 255, 0.1);
+                padding: 30px;
+                border-radius: 15px;
+                backdrop-filter: blur(10px);
+            }
+
+            h1 {
+                text-align: center;
+                margin-bottom: 30px;
+                color: white;
+                text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+            }
+
+            .test-section {
+                background: rgba(255, 255, 255, 0.1);
+                margin: 20px 0;
+                padding: 20px;
+                border-radius: 10px;
+                border: 1px solid rgba(255, 255, 255, 0.2);
+            }
+
+            .test-section h3 {
+                margin-top: 0;
+                color: #fff;
+            }
+
+            .status {
+                display: inline-block;
+                padding: 5px 10px;
+                border-radius: 5px;
+                font-weight: bold;
+                margin-left: 10px;
+            }
+
+            .status.pass {
+                background: #4caf50;
+                color: white;
+            }
+
+            .status.fail {
+                background: #f44336;
+                color: white;
+            }
+
+            .status.pending {
+                background: #ff9800;
+                color: white;
+            }
+
+            button {
+                background: #667eea;
+                color: white;
+                border: none;
+                padding: 10px 20px;
+                border-radius: 5px;
+                cursor: pointer;
+                margin: 5px;
+                font-size: 14px;
+            }
+
+            button:hover {
+                background: #5a6fd8;
+            }
+
+            .log-output {
+                background: #000;
+                color: #0f0;
+                font-family: "Courier New", monospace;
+                padding: 15px;
+                border-radius: 5px;
+                max-height: 300px;
+                overflow-y: auto;
+                margin-top: 10px;
+                font-size: 12px;
+            }
+
+            .controls {
+                margin: 20px 0;
+                text-align: center;
+            }
+
+            .debug-panel {
+                position: fixed;
+                bottom: 10px;
+                right: 10px;
+                background: rgba(240, 240, 240, 0.95);
+                padding: 12px;
+                border-radius: 6px;
+                font-size: 11px;
+                box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+                min-width: 160px;
+                z-index: 1000;
+                color: #333;
+            }
+
+            .debug-panel h4 {
+                margin: 0 0 8px 0;
+                font-size: 12px;
+                color: #333;
+            }
+
+            .debug-panel label {
+                display: block;
+                margin: 4px 0;
+            }
+
+            .debug-panel input {
+                margin-right: 6px;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>String Assembly FM - Modular Architecture Test</h1>
+
+            <div class="test-section">
+                <h3>Module Loading Tests</h3>
+                <div id="module-tests">
+                    <div>
+                        Logger Module:
+                        <span id="logger-status" class="status pending"
+                            >PENDING</span
+                        >
+                    </div>
+                    <div>
+                        Config Module:
+                        <span id="config-status" class="status pending"
+                            >PENDING</span
+                        >
+                    </div>
+                    <div>
+                        EventBus Module:
+                        <span id="eventbus-status" class="status pending"
+                            >PENDING</span
+                        >
+                    </div>
+                    <div>
+                        AppState Module:
+                        <span id="appstate-status" class="status pending"
+                            >PENDING</span
+                        >
+                    </div>
+                    <div>
+                        ProgramManager Module:
+                        <span id="programmanager-status" class="status pending"
+                            >PENDING</span
+                        >
+                    </div>
+                    <div>
+                        WebSocketManager Module:
+                        <span id="websocket-status" class="status pending"
+                            >PENDING</span
+                        >
+                    </div>
+                    <div>
+                        WebRTCManager Module:
+                        <span id="webrtc-status" class="status pending"
+                            >PENDING</span
+                        >
+                    </div>
+                    <div>
+                        NetworkCoordinator Module:
+                        <span id="network-status" class="status pending"
+                            >PENDING</span
+                        >
+                    </div>
+                    <div>
+                        UIManager Module:
+                        <span id="uimanager-status" class="status pending"
+                            >PENDING</span
+                        >
+                    </div>
+                    <div>
+                        ParameterControls Module:
+                        <span
+                            id="parametercontrols-status"
+                            class="status pending"
+                            >PENDING</span
+                        >
+                    </div>
+                    <div>
+                        PianoKeyboard Module:
+                        <span id="pianokeyboard-status" class="status pending"
+                            >PENDING</span
+                        >
+                    </div>
+                    <div>
+                        ExpressionManager Module:
+                        <span
+                            id="expressionmanager-status"
+                            class="status pending"
+                            >PENDING</span
+                        >
+                    </div>
+                    <div>
+                        ChordManager Module:
+                        <span id="chordmanager-status" class="status pending"
+                            >PENDING</span
+                        >
+                    </div>
+                    <div>
+                        AudioUtilities Module:
+                        <span id="audioutilities-status" class="status pending"
+                            >PENDING</span
+                        >
+                    </div>
+                    <div>
+                        Main App:
+                        <span id="app-status" class="status pending"
+                            >PENDING</span
+                        >
+                    </div>
+                </div>
+            </div>
+
+            <div class="test-section">
+                <h3>Functionality Tests</h3>
+                <div class="controls">
+                    <button onclick="testLogging()">Test Logging</button>
+                    <button onclick="testEventBus()">Test EventBus</button>
+                    <button onclick="testAppState()">Test AppState</button>
+                    <button onclick="testConfig()">Test Config</button>
+                    <button onclick="testProgramManager()">
+                        Test ProgramManager
+                    </button>
+                    <button onclick="testNetwork()">Test Network</button>
+                    <button onclick="testUI()">Test UI Components</button>
+                    <button onclick="testAudio()">Test Audio System</button>
+                    <button onclick="runAllTests()">Run All Tests</button>
+                    <button onclick="clearLog()">Clear Log</button>
+                </div>
+                <div id="test-output" class="log-output">
+                    Console output will appear here...
+                </div>
+            </div>
+
+            <div class="test-section">
+                <h3>Compatibility Tests</h3>
+                <div>
+                    <button onclick="testLegacyCompat()">
+                        Test Legacy Compatibility
+                    </button>
+                    <button onclick="testGlobalExports()">
+                        Test Global Exports
+                    </button>
+                </div>
+                <div id="compat-results">Results will appear here...</div>
+            </div>
+
+            <div class="test-section">
+                <h3>Performance Tests</h3>
+                <div>
+                    <button onclick="testPerformance()">
+                        Run Performance Tests
+                    </button>
+                </div>
+                <div id="perf-results">
+                    Performance results will appear here...
+                </div>
+            </div>
+        </div>
+
+        <!-- Debug Logging Panel -->
+        <div class="debug-panel">
+            <h4>Debug Logging</h4>
+            <label
+                ><input type="checkbox" data-debug="connections" />
+                Connections</label
+            >
+            <label
+                ><input type="checkbox" data-debug="messages" /> Messages</label
+            >
+            <label
+                ><input type="checkbox" data-debug="parameters" />
+                Parameters</label
+            >
+            <label
+                ><input type="checkbox" data-debug="expressions" />
+                Expressions</label
+            >
+            <label
+                ><input type="checkbox" data-debug="performance" />
+                Performance</label
+            >
+            <label
+                ><input type="checkbox" data-debug="lifecycle" />
+                Lifecycle</label
+            >
+        </div>
+
+        <!-- Load the modular app -->
+        <script type="module" src="./js/app.js"></script>
+
+        <script>
+            // Override console.log to capture output
+            const originalLog = console.log;
+            const originalError = console.error;
+            const logOutput = document.getElementById("test-output");
+
+            function appendToLog(message, type = "log") {
+                const timestamp = new Date().toLocaleTimeString();
+                const line = document.createElement("div");
+                line.style.color = type === "error" ? "#f44" : "#0f0";
+                line.textContent = `[${timestamp}] ${message}`;
+                logOutput.appendChild(line);
+                logOutput.scrollTop = logOutput.scrollHeight;
+            }
+
+            console.log = function (...args) {
+                originalLog.apply(console, args);
+                appendToLog(args.join(" "), "log");
+            };
+
+            console.error = function (...args) {
+                originalError.apply(console, args);
+                appendToLog(args.join(" "), "error");
+            };
+
+            // Test functions
+            function testLogging() {
+                if (window.Logger) {
+                    window.Logger.log("Testing lifecycle logging", "lifecycle");
+                    window.Logger.log(
+                        "Testing connection logging",
+                        "connections",
+                    );
+                    window.Logger.log("Testing error logging", "error");
+                    appendToLog("✓ Logging test completed", "log");
+                } else {
+                    appendToLog("✗ Logger not available", "error");
+                }
+            }
+
+            function testEventBus() {
+                if (window.eventBus) {
+                    // Test event subscription and emission
+                    const unsubscribe = window.eventBus.on(
+                        "test:event",
+                        (data) => {
+                            appendToLog(
+                                `✓ Received test event: ${JSON.stringify(data)}`,
+                                "log",
+                            );
+                        },
+                    );
+
+                    window.eventBus.emit("test:event", {
+                        message: "Hello from EventBus!",
+                    });
+                    unsubscribe();
+
+                    appendToLog("✓ EventBus test completed", "log");
+                } else {
+                    appendToLog("✗ EventBus not available", "error");
+                }
+            }
+
+            function testAppState() {
+                if (window.appState) {
+                    // Test state setting and getting
+                    window.appState.set("testValue", "Hello State!");
+                    const value = window.appState.get("testValue");
+
+                    if (value === "Hello State!") {
+                        appendToLog("✓ AppState get/set working", "log");
+                    } else {
+                        appendToLog("✗ AppState get/set failed", "error");
+                    }
+
+                    // Test subscription
+                    const unsub = window.appState.subscribe(
+                        "testValue",
+                        (newVal) => {
+                            appendToLog(
+                                `✓ State change detected: ${newVal}`,
+                                "log",
+                            );
+                        },
+                    );
+
+                    window.appState.set("testValue", "Updated value!");
+                    unsub();
+
+                    appendToLog("✓ AppState test completed", "log");
+                } else {
+                    appendToLog("✗ AppState not available", "error");
+                }
+            }
+
+            function testConfig() {
+                if (window.Config) {
+                    appendToLog(
+                        `✓ Config loaded with ${Object.keys(window.Config).length} properties`,
+                        "log",
+                    );
+                    appendToLog(
+                        `✓ WebSocket URL: ${window.Config.WS_URL}`,
+                        "log",
+                    );
+                    appendToLog(
+                        `✓ ICE servers: ${window.Config.RTC_CONFIG.iceServers.length}`,
+                        "log",
+                    );
+                } else {
+                    appendToLog("✗ Config not available", "error");
+                }
+            }
+
+            function testProgramManager() {
+                if (window.programManager) {
+                    // Test creating example program
+                    const exampleProgram =
+                        window.programManager.createExampleProgram();
+                    if (
+                        exampleProgram &&
+                        exampleProgram.stringMaterial !== undefined
+                    ) {
+                        appendToLog(
+                            "✓ ProgramManager can create example programs",
+                            "log",
+                        );
+                    } else {
+                        appendToLog(
+                            "✗ ProgramManager failed to create example program",
+                            "error",
+                        );
+                    }
+
+                    // Test bank operations
+                    const testBankId = 99; // Use bank 99 for testing
+                    const saveResult = window.programManager.saveToBank(
+                        testBankId,
+                        exampleProgram,
+                    );
+                    if (saveResult) {
+                        appendToLog("✓ ProgramManager can save to bank", "log");
+                    } else {
+                        appendToLog(
+                            "✗ ProgramManager failed to save to bank",
+                            "error",
+                        );
+                    }
+
+                    const loadResult =
+                        window.programManager.loadFromBank(testBankId);
+                    if (loadResult) {
+                        appendToLog(
+                            "✓ ProgramManager can load from bank",
+                            "log",
+                        );
+                    } else {
+                        appendToLog(
+                            "✗ ProgramManager failed to load from bank",
+                            "error",
+                        );
+                    }
+
+                    appendToLog("✓ ProgramManager test completed", "log");
+                } else {
+                    appendToLog("✗ ProgramManager not available", "error");
+                }
+            }
+
+            function testNetwork() {
+                if (window.networkCoordinator) {
+                    // Test network status
+                    const status = window.networkCoordinator.getNetworkStatus();
+                    appendToLog(
+                        `✓ Network status: ${status.overall.status}`,
+                        "log",
+                    );
+                    appendToLog(
+                        `✓ Controller ID: ${status.overall.controllerId}`,
+                        "log",
+                    );
+                    appendToLog(
+                        `✓ WebSocket URL: ${status.websocket.url}`,
+                        "log",
+                    );
+                    appendToLog(
+                        `✓ Connected peers: ${status.webrtc.connectedPeers}`,
+                        "log",
+                    );
+
+                    appendToLog("✓ Network test completed", "log");
+                } else {
+                    appendToLog("✗ NetworkCoordinator not available", "error");
+                }
+
+                if (window.webSocketManager) {
+                    const wsStatus = window.webSocketManager.getStatus();
+                    appendToLog(
+                        `✓ WebSocket status: ${wsStatus.connected ? "connected" : "disconnected"}`,
+                        "log",
+                    );
+                } else {
+                    appendToLog("✗ WebSocketManager not available", "error");
+                }
+
+                if (window.webRTCManager) {
+                    const peers = window.webRTCManager.getAllPeers();
+                    appendToLog(`✓ WebRTC peers: ${peers.length}`, "log");
+                } else {
+                    appendToLog("✗ WebRTCManager not available", "error");
+                }
+            }
+
+            function testLegacyCompat() {
+                const results = document.getElementById("compat-results");
+                let html = "<h4>Legacy Compatibility Results:</h4><ul>";
+
+                // Test global exports
+                const globalTests = [
+                    "window.log",
+                    "window.Logger",
+                    "window.Config",
+                    "window.eventBus",
+                    "window.appState",
+                    "window.programManager",
+                    "window.networkCoordinator",
+                    "window.webSocketManager",
+                    "window.webRTCManager",
+                    "window.uiManager",
+                    "window.parameterControls",
+                    "window.pianoKeyboard",
+                    "window.expressionManager",
+                    "window.chordManager",
+                    "window.AudioUtilities",
+                    "window.DEBUG_CONFIG",
+                ];
+
+                globalTests.forEach((test) => {
+                    const exists = eval(test) !== undefined;
+                    html += `<li>${test}: ${exists ? "✓ PASS" : "✗ FAIL"}</li>`;
+                });
+
+                html += "</ul>";
+                results.innerHTML = html;
+            }
+
+            function testGlobalExports() {
+                appendToLog("Testing global exports...", "log");
+
+                if (typeof window.log === "function") {
+                    window.log("Testing global log function", "lifecycle");
+                    appendToLog("✓ Global log function working", "log");
+                } else {
+                    appendToLog("✗ Global log function not found", "error");
+                }
+
+                if (window.modular && window.modular.initialized) {
+                    appendToLog("✓ Modular namespace available", "log");
+                } else {
+                    appendToLog("✗ Modular namespace not found", "error");
+                }
+            }
+
+            function testPerformance() {
+                const results = document.getElementById("perf-results");
+                const tests = [];
+
+                // Test state operations
+                const stateStart = performance.now();
+                for (let i = 0; i < 1000; i++) {
+                    window.appState.set(`test${i}`, i);
+                }
+                const stateTime = performance.now() - stateStart;
+                tests.push(
+                    `State operations (1000): ${stateTime.toFixed(2)}ms`,
+                );
+
+                // Test event emissions
+                const eventStart = performance.now();
+                for (let i = 0; i < 1000; i++) {
+                    window.eventBus.emit("perf:test", { value: i });
+                }
+                const eventTime = performance.now() - eventStart;
+                tests.push(`Event emissions (1000): ${eventTime.toFixed(2)}ms`);
+
+                // Test logging (disabled)
+                window.Logger.disable("lifecycle");
+                const logStart = performance.now();
+                for (let i = 0; i < 1000; i++) {
+                    window.Logger.log(`Log message ${i}`, "lifecycle");
+                }
+                const logTime = performance.now() - logStart;
+                tests.push(`Disabled logging (1000): ${logTime.toFixed(2)}ms`);
+                window.Logger.enable("lifecycle");
+
+                results.innerHTML = `<h4>Performance Results:</h4><ul>${tests.map((t) => `<li>${t}</li>`).join("")}</ul>`;
+            }
+
+            function testUI() {
+                if (window.uiManager) {
+                    // Test UI manager functionality
+                    window.uiManager.showNotification(
+                        "Test notification",
+                        "info",
+                        2000,
+                    );
+                    appendToLog("✓ UIManager notification test", "log");
+                } else {
+                    appendToLog("✗ UIManager not available", "error");
+                }
+
+                if (window.parameterControls) {
+                    // Test parameter controls
+                    const testValue = 0.75;
+                    window.parameterControls.setParameterValue(
+                        "masterGain",
+                        testValue,
+                    );
+                    const retrievedValue =
+                        window.parameterControls.getParameterValue(
+                            "masterGain",
+                        );
+
+                    if (Math.abs(retrievedValue - testValue) < 0.01) {
+                        appendToLog(
+                            "✓ ParameterControls set/get working",
+                            "log",
+                        );
+                    } else {
+                        appendToLog(
+                            "✗ ParameterControls set/get failed",
+                            "error",
+                        );
+                    }
+
+                    // Test getting all parameters
+                    const allParams =
+                        window.parameterControls.getAllParameterValues();
+                    if (allParams && Object.keys(allParams).length > 0) {
+                        appendToLog(
+                            `✓ ParameterControls returned ${Object.keys(allParams).length} parameters`,
+                            "log",
+                        );
+                    } else {
+                        appendToLog(
+                            "✗ ParameterControls failed to get all parameters",
+                            "error",
+                        );
+                    }
+                } else {
+                    appendToLog("✗ ParameterControls not available", "error");
+                }
+
+                if (window.pianoKeyboard) {
+                    // Test piano keyboard
+                    const testChord = [261.63, 329.63, 392.0]; // C major chord
+                    window.pianoKeyboard.setChord(testChord);
+
+                    const chordInfo = window.pianoKeyboard.getChordInfo();
+                    if (chordInfo.count === 3) {
+                        appendToLog(
+                            `✓ PianoKeyboard chord set: ${chordInfo.noteNames.join(", ")}`,
+                            "log",
+                        );
+                    } else {
+                        appendToLog(
+                            "✗ PianoKeyboard chord setting failed",
+                            "error",
+                        );
+                    }
+
+                    // Test clear chord
+                    window.pianoKeyboard.clearChord();
+                    const clearedChord = window.pianoKeyboard.getChordInfo();
+                    if (clearedChord.count === 0) {
+                        appendToLog("✓ PianoKeyboard chord cleared", "log");
+                    } else {
+                        appendToLog(
+                            "✗ PianoKeyboard chord clear failed",
+                            "error",
+                        );
+                    }
+                } else {
+                    appendToLog("✗ PianoKeyboard not available", "error");
+                }
+
+                appendToLog("✓ UI components test completed", "log");
+            }
+
+            function testAudio() {
+                if (window.AudioUtilities) {
+                    // Test frequency conversion
+                    const testFreq = 440; // A4
+                    const noteName =
+                        window.AudioUtilities.frequencyToNoteName(testFreq);
+                    if (noteName === "A4") {
+                        appendToLog(
+                            "✓ AudioUtilities frequency conversion working",
+                            "log",
+                        );
+                    } else {
+                        appendToLog(
+                            "✗ AudioUtilities frequency conversion failed",
+                            "error",
+                        );
+                    }
+
+                    // Test chord generation
+                    const chord = window.AudioUtilities.generateChord(
+                        261.63,
+                        "major",
+                    ); // C major
+                    if (chord && chord.length === 3) {
+                        appendToLog(
+                            `✓ AudioUtilities chord generation: ${chord.length} notes`,
+                            "log",
+                        );
+                    } else {
+                        appendToLog(
+                            "✗ AudioUtilities chord generation failed",
+                            "error",
+                        );
+                    }
+                } else {
+                    appendToLog("✗ AudioUtilities not available", "error");
+                }
+
+                if (window.chordManager) {
+                    // Test chord setting
+                    const testChord = [261.63, 329.63, 392.0]; // C major
+                    window.chordManager.setChord(testChord);
+
+                    const chordInfo = window.chordManager.getChordInfo();
+                    if (chordInfo.count === 3) {
+                        appendToLog(
+                            `✓ ChordManager chord set: ${chordInfo.noteNames.join(", ")}`,
+                            "log",
+                        );
+                    } else {
+                        appendToLog(
+                            "✗ ChordManager chord setting failed",
+                            "error",
+                        );
+                    }
+
+                    // Test distribution algorithm
+                    window.chordManager.setDistributionAlgorithm("random");
+                    const algorithms =
+                        window.chordManager.getAvailableAlgorithms();
+                    if (algorithms.includes("random")) {
+                        appendToLog(
+                            `✓ ChordManager algorithms: ${algorithms.join(", ")}`,
+                            "log",
+                        );
+                    } else {
+                        appendToLog(
+                            "✗ ChordManager algorithm setting failed",
+                            "error",
+                        );
+                    }
+                } else {
+                    appendToLog("✗ ChordManager not available", "error");
+                }
+
+                if (window.expressionManager) {
+                    // Test expression manager
+                    const expressions =
+                        window.expressionManager.getCurrentExpressions();
+                    appendToLog(
+                        `✓ ExpressionManager has ${expressions.size} expressions`,
+                        "log",
+                    );
+
+                    const assignments =
+                        window.expressionManager.getNoteAssignments();
+                    appendToLog(
+                        `✓ ExpressionManager has ${assignments.size} assignments`,
+                        "log",
+                    );
+                } else {
+                    appendToLog("✗ ExpressionManager not available", "error");
+                }
+
+                appendToLog("✓ Audio system test completed", "log");
+            }
+
+            function runAllTests() {
+                appendToLog("=== Running All Tests ===", "log");
+                testLogging();
+                testEventBus();
+                testAppState();
+                testConfig();
+                testProgramManager();
+                testNetwork();
+                testUI();
+                testAudio();
+                testLegacyCompat();
+                testGlobalExports();
+                appendToLog("=== All Tests Complete ===", "log");
+            }
+
+            function clearLog() {
+                logOutput.innerHTML = "Console output will appear here...";
+            }
+
+            // Check module loading status
+            function checkModuleStatus() {
+                const modules = [
+                    { id: "logger-status", check: () => window.Logger },
+                    { id: "config-status", check: () => window.Config },
+                    { id: "eventbus-status", check: () => window.eventBus },
+                    { id: "appstate-status", check: () => window.appState },
+                    {
+                        id: "programmanager-status",
+                        check: () => window.programManager,
+                    },
+                    {
+                        id: "websocket-status",
+                        check: () => window.webSocketManager,
+                    },
+                    { id: "webrtc-status", check: () => window.webRTCManager },
+                    {
+                        id: "network-status",
+                        check: () => window.networkCoordinator,
+                    },
+                    {
+                        id: "uimanager-status",
+                        check: () => window.uiManager,
+                    },
+                    {
+                        id: "parametercontrols-status",
+                        check: () => window.parameterControls,
+                    },
+                    {
+                        id: "pianokeyboard-status",
+                        check: () => window.pianoKeyboard,
+                    },
+                    {
+                        id: "expressionmanager-status",
+                        check: () => window.expressionManager,
+                    },
+                    {
+                        id: "chordmanager-status",
+                        check: () => window.chordManager,
+                    },
+                    {
+                        id: "audioutilities-status",
+                        check: () => window.AudioUtilities,
+                    },
+                    {
+                        id: "app-status",
+                        check: () =>
+                            window.modular && window.modular.initialized,
+                    },
+                ];
+
+                modules.forEach(({ id, check }) => {
+                    const element = document.getElementById(id);
+                    if (check()) {
+                        element.textContent = "PASS";
+                        element.className = "status pass";
+                    } else {
+                        element.textContent = "FAIL";
+                        element.className = "status fail";
+                    }
+                });
+            }
+
+            // Check status periodically until all modules are loaded
+            const statusInterval = setInterval(() => {
+                checkModuleStatus();
+
+                // Stop checking once all modules are loaded
+                if (window.modular && window.modular.initialized) {
+                    clearInterval(statusInterval);
+                    appendToLog("✓ All modules loaded successfully!", "log");
+                }
+            }, 100);
+
+            // Initial status check
+            setTimeout(checkModuleStatus, 50);
+        </script>
+    </body>
+</html>

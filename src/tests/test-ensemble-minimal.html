@@ -1,0 +1,301 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>String Assembly FM - Minimal Test</title>
+        <style>
+            body {
+                font-family: Arial, sans-serif;
+                margin: 20px;
+                background: #f0f0f0;
+            }
+            .container {
+                max-width: 800px;
+                margin: 0 auto;
+                background: white;
+                padding: 20px;
+                border-radius: 8px;
+            }
+            button {
+                padding: 10px 20px;
+                margin: 5px;
+                border: none;
+                border-radius: 4px;
+                background: #007bff;
+                color: white;
+                cursor: pointer;
+            }
+            button:hover {
+                background: #0056b3;
+            }
+            button:disabled {
+                background: #ccc;
+                cursor: not-allowed;
+            }
+            .synth-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                gap: 15px;
+                margin: 20px 0;
+            }
+            .synth-unit {
+                border: 1px solid #ddd;
+                border-radius: 4px;
+                padding: 15px;
+                background: #f9f9f9;
+            }
+            .synth-unit.active {
+                border-color: #007bff;
+                background: #e7f3ff;
+            }
+            .log-area {
+                background: #000;
+                color: #0f0;
+                padding: 10px;
+                height: 200px;
+                overflow-y: auto;
+                font-family: monospace;
+                font-size: 12px;
+                border-radius: 4px;
+                margin-top: 20px;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>String Assembly FM - Minimal Test</h1>
+
+            <div>
+                <label>Number of Synths:</label>
+                <input
+                    type="number"
+                    id="synth-count"
+                    value="4"
+                    min="1"
+                    max="8"
+                />
+                <button onclick="initializeEnsemble()">Initialize</button>
+                <button onclick="testTransitions()">Test Transitions</button>
+            </div>
+
+            <div class="synth-grid" id="synth-grid"></div>
+
+            <div class="log-area" id="log-area">
+                <div>Ready to initialize...</div>
+            </div>
+        </div>
+
+        <script>
+            // Global state
+            let audioContext = null;
+            let synths = [];
+            let masterGain = null;
+            let isInitialized = false;
+
+            class TestSynth {
+                constructor(id, index) {
+                    this.id = id;
+                    this.index = index;
+                    this.element = null;
+                    this.bowedString = null;
+                    this.gain = null;
+                    this.isActive = false;
+                }
+
+                async initialize(audioCtx, destination) {
+                    try {
+                        this.gain = audioCtx.createGain();
+                        this.gain.gain.value = 0;
+
+                        this.bowedString = new AudioWorkletNode(
+                            audioCtx,
+                            "continuous-excitation-processor",
+                        );
+
+                        this.bowedString.connect(this.gain);
+                        this.gain.connect(destination);
+
+                        log(`[${this.id}] Initialized`);
+                    } catch (error) {
+                        log(`[${this.id}] Error: ${error.message}`);
+                    }
+                }
+
+                applyProgram(program, transition) {
+                    if (!this.bowedString) return;
+
+                    log(`[${this.id}] Applying program`);
+
+                    // Apply parameters
+                    for (const [param, value] of Object.entries(program)) {
+                        if (this.bowedString.parameters.has(param)) {
+                            const audioParam =
+                                this.bowedString.parameters.get(param);
+
+                            if (
+                                transition &&
+                                transition.period &&
+                                transition.period.min
+                            ) {
+                                const period = transition.period.min;
+                                const lag = transition.lag
+                                    ? transition.lag.min
+                                    : 0;
+                                const startTime =
+                                    audioContext.currentTime + lag;
+                                const endTime = startTime + period;
+
+                                audioParam.cancelScheduledValues(
+                                    audioContext.currentTime,
+                                );
+                                audioParam.setValueAtTime(
+                                    audioParam.value,
+                                    audioContext.currentTime,
+                                );
+
+                                if (
+                                    param === "fundamentalFrequency" &&
+                                    value > 0 &&
+                                    audioParam.value > 0
+                                ) {
+                                    audioParam.exponentialRampToValueAtTime(
+                                        value,
+                                        endTime,
+                                    );
+                                } else {
+                                    audioParam.linearRampToValueAtTime(
+                                        value,
+                                        endTime,
+                                    );
+                                }
+                            } else {
+                                audioParam.setValueAtTime(
+                                    value,
+                                    audioContext.currentTime,
+                                );
+                            }
+                        }
+                    }
+
+                    // Handle expressions
+                    let targetExpression = "NONE";
+                    if (program.vibratoEnabled) targetExpression = "VIBRATO";
+                    else if (program.tremoloEnabled)
+                        targetExpression = "TREMOLO";
+                    else if (program.trillEnabled) targetExpression = "TRILL";
+
+                    this.bowedString.port.postMessage({
+                        type: "setExpression",
+                        expression: targetExpression,
+                    });
+
+                    this.element.classList.add("active");
+                }
+
+                createUI() {
+                    const unit = document.createElement("div");
+                    unit.className = "synth-unit";
+                    unit.innerHTML = `<h4>${this.id}</h4><div>Status: Ready</div>`;
+                    this.element = unit;
+                    return unit;
+                }
+
+                setPower(on) {
+                    this.isActive = on;
+                    if (this.gain) {
+                        this.gain.gain.linearRampToValueAtTime(
+                            on ? 0.5 : 0,
+                            audioContext.currentTime + 0.1,
+                        );
+                    }
+                }
+            }
+
+            async function initializeEnsemble() {
+                const synthCount = parseInt(
+                    document.getElementById("synth-count").value,
+                );
+
+                try {
+                    if (!audioContext) {
+                        audioContext = new (window.AudioContext ||
+                            window.webkitAudioContext)();
+
+                        if (audioContext.state === "suspended") {
+                            await audioContext.resume();
+                        }
+
+                        masterGain = audioContext.createGain();
+                        masterGain.gain.value = 0.7;
+                        masterGain.connect(audioContext.destination);
+
+                        await audioContext.audioWorklet.addModule(
+                            "../worklets/bowed_string_worklet.js",
+                        );
+                        log("Worklet loaded");
+                    }
+
+                    // Clear existing synths
+                    synths = [];
+                    const synthGrid = document.getElementById("synth-grid");
+                    synthGrid.innerHTML = "";
+
+                    // Create new synths
+                    for (let i = 0; i < synthCount; i++) {
+                        const synth = new TestSynth(`synth-${i}`, i);
+                        await synth.initialize(audioContext, masterGain);
+                        synthGrid.appendChild(synth.createUI());
+                        synths.push(synth);
+                    }
+
+                    isInitialized = true;
+                    log(`Initialized ${synthCount} synths`);
+                } catch (error) {
+                    log(`Error: ${error.message}`);
+                }
+            }
+
+            function testTransitions() {
+                if (!isInitialized) {
+                    log("Initialize first!");
+                    return;
+                }
+
+                log("Testing transitions...");
+
+                const baseProgram = {
+                    fundamentalFrequency: 440,
+                    bowForce: 0.5,
+                    bowSpeed: 0.5,
+                    bowPosition: 0.1,
+                    stringDamping: 0.3,
+                    brightness: 0.5,
+                    masterGain: 0.8,
+                };
+
+                synths.forEach((synth, index) => {
+                    const delay = index * 0.2; // Stagger by 200ms
+
+                    setTimeout(() => {
+                        synth.setPower(true);
+                        synth.applyProgram(baseProgram, {
+                            period: { min: 1.0 },
+                            lag: { min: 0 },
+                        });
+                    }, delay * 1000);
+                });
+            }
+
+            function log(message) {
+                const logArea = document.getElementById("log-area");
+                const entry = document.createElement("div");
+                entry.textContent = `${new Date().toLocaleTimeString()}: ${message}`;
+                logArea.appendChild(entry);
+                logArea.scrollTop = logArea.scrollHeight;
+            }
+
+            log("Minimal test client ready");
+        </script>
+    </body>
+</html>

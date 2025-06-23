@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Module Import Test</title>
+    <style>
+        body {
+            font-family: monospace;
+            background: #222;
+            color: #0f0;
+            padding: 20px;
+        }
+        .test { margin: 10px 0; }
+        .pass { color: #0f0; }
+        .fail { color: #f44; }
+        .pending { color: #fa0; }
+    </style>
+</head>
+<body>
+    <h1>Module Import Test</h1>
+    <div id="results"></div>
+
+    <script type="module">
+        const results = document.getElementById('results');
+
+        function log(message, status = 'pending') {
+            const div = document.createElement('div');
+            div.className = `test ${status}`;
+            div.textContent = message;
+            results.appendChild(div);
+            console.log(message);
+        }
+
+        async function testImports() {
+            log('Starting module import tests...');
+
+            // Test 1: Logger
+            try {
+                log('Testing Logger import...');
+                const { Logger } = await import('./js/modules/core/Logger.js');
+                if (Logger && typeof Logger.log === 'function') {
+                    log('✓ Logger imported successfully', 'pass');
+                    Logger.log('Logger test message', 'lifecycle');
+                } else {
+                    log('✗ Logger import failed - no log function', 'fail');
+                }
+            } catch (error) {
+                log(`✗ Logger import error: ${error.message}`, 'fail');
+                console.error(error);
+            }
+
+            // Test 2: Config
+            try {
+                log('Testing Config import...');
+                const { Config } = await import('./js/modules/core/Config.js');
+                if (Config && Config.WS_URL) {
+                    log('✓ Config imported successfully', 'pass');
+                    log(`  WebSocket URL: ${Config.WS_URL}`);
+                } else {
+                    log('✗ Config import failed - no WS_URL', 'fail');
+                }
+            } catch (error) {
+                log(`✗ Config import error: ${error.message}`, 'fail');
+                console.error(error);
+            }
+
+            // Test 3: EventBus
+            try {
+                log('Testing EventBus import...');
+                const { eventBus } = await import('./js/modules/core/EventBus.js');
+                if (eventBus && typeof eventBus.emit === 'function') {
+                    log('✓ EventBus imported successfully', 'pass');
+                    eventBus.emit('test', { message: 'test event' });
+                } else {
+                    log('✗ EventBus import failed - no emit function', 'fail');
+                }
+            } catch (error) {
+                log(`✗ EventBus import error: ${error.message}`, 'fail');
+                console.error(error);
+            }
+
+            // Test 4: AppState
+            try {
+                log('Testing AppState import...');
+                const { appState } = await import('./js/modules/state/AppState.js');
+                if (appState && typeof appState.get === 'function') {
+                    log('✓ AppState imported successfully', 'pass');
+                    appState.set('testKey', 'testValue');
+                    const value = appState.get('testKey');
+                    if (value === 'testValue') {
+                        log('✓ AppState get/set working', 'pass');
+                    } else {
+                        log('✗ AppState get/set failed', 'fail');
+                    }
+                } else {
+                    log('✗ AppState import failed - no get function', 'fail');
+                }
+            } catch (error) {
+                log(`✗ AppState import error: ${error.message}`, 'fail');
+                console.error(error);
+            }
+
+            // Test 5: Full App
+            try {
+                log('Testing full app import...');
+                await import('./js/app.js');
+
+                // Wait a bit for initialization
+                setTimeout(() => {
+                    if (window.modular && window.modular.initialized) {
+                        log('✓ Full app imported and initialized', 'pass');
+                    } else {
+                        log('✗ Full app imported but not initialized', 'fail');
+                    }
+                }, 1000);
+
+            } catch (error) {
+                log(`✗ Full app import error: ${error.message}`, 'fail');
+                console.error(error);
+            }
+
+            log('Import tests completed.');
+        }
+
+        // Run tests
+        testImports().catch(error => {
+            log(`Test runner error: ${error.message}`, 'fail');
+            console.error(error);
+        });
+
+    </script>
+</body>
+</html>
