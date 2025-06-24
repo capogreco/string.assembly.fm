@@ -3,9 +3,9 @@
  * Handles chord distribution, note allocation, and chord state management
  */
 
-import { eventBus } from '../core/EventBus.js';
-import { appState } from '../state/AppState.js';
-import { Config } from '../core/Config.js';
+import { eventBus } from "../core/EventBus.js";
+import { appState } from "../state/AppState.js";
+import { Config } from "../core/Config.js";
 
 export class ChordManager {
   constructor() {
@@ -13,7 +13,7 @@ export class ChordManager {
     this.appState = appState;
     this.currentChord = [];
     this.chordDistribution = new Map();
-    this.distributionAlgorithm = 'stochastic'; // 'stochastic', 'round-robin', 'random'
+    this.distributionAlgorithm = "stochastic"; // 'stochastic', 'round-robin', 'random'
     this.isInitialized = false;
   }
 
@@ -23,13 +23,13 @@ export class ChordManager {
   initialize() {
     if (this.isInitialized) {
       if (window.Logger) {
-        window.Logger.log('ChordManager already initialized', 'lifecycle');
+        window.Logger.log("ChordManager already initialized", "lifecycle");
       }
       return;
     }
 
     if (window.Logger) {
-      window.Logger.log('Initializing ChordManager...', 'lifecycle');
+      window.Logger.log("Initializing ChordManager...", "lifecycle");
     }
 
     // Set up event listeners
@@ -41,7 +41,7 @@ export class ChordManager {
     this.isInitialized = true;
 
     if (window.Logger) {
-      window.Logger.log('ChordManager initialized', 'lifecycle');
+      window.Logger.log("ChordManager initialized", "lifecycle");
     }
   }
 
@@ -51,21 +51,21 @@ export class ChordManager {
    */
   setupEventListeners() {
     // Listen for piano chord changes
-    this.eventBus.on('piano:chordChanged', (data) => {
+    this.eventBus.on("piano:chordChanged", (data) => {
       this.handleChordChange(data.chord, data.noteNames);
     });
 
     // Listen for synth connections/disconnections
-    this.eventBus.on('network:synthConnected', (data) => {
+    this.eventBus.on("network:synthConnected", (data) => {
       this.redistributeChord();
     });
 
-    this.eventBus.on('webrtc:peerDisconnected', (data) => {
+    this.eventBus.on("webrtc:peerDisconnected", (data) => {
       this.handleSynthDisconnected(data.peerId);
     });
 
     // Listen for distribution algorithm changes
-    this.eventBus.on('chord:algorithmChanged', (data) => {
+    this.eventBus.on("chord:algorithmChanged", (data) => {
       this.setDistributionAlgorithm(data.algorithm);
     });
   }
@@ -76,12 +76,12 @@ export class ChordManager {
    */
   setupStateSubscriptions() {
     // Subscribe to chord changes
-    this.appState.subscribe('currentChord', (newChord) => {
+    this.appState.subscribe("currentChord", (newChord) => {
       this.updateChord(newChord);
     });
 
     // Subscribe to connected synths changes
-    this.appState.subscribe('connectedSynths', () => {
+    this.appState.subscribe("connectedSynths", () => {
       this.redistributeChord();
     });
   }
@@ -96,18 +96,21 @@ export class ChordManager {
     this.currentChord = [...chord];
 
     if (window.Logger) {
-      window.Logger.log(`Chord changed: [${noteNames.join(', ')}]`, 'expressions');
+      window.Logger.log(
+        `Chord changed: [${noteNames.join(", ")}]`,
+        "expressions",
+      );
     }
 
     // Distribute chord to connected synths
     this.distributeChord(chord, noteNames);
 
     // Emit chord distribution event
-    this.eventBus.emit('chord:distributed', {
+    this.eventBus.emit("chord:distributed", {
       chord,
       noteNames,
       distribution: this.getDistributionSummary(),
-      timestamp: Date.now()
+      timestamp: Date.now(),
     });
   }
 
@@ -126,7 +129,7 @@ export class ChordManager {
     this.currentChord = [...newChord];
 
     // Convert frequencies to note names
-    const noteNames = newChord.map(freq => this.frequencyToNoteName(freq));
+    const noteNames = newChord.map((freq) => this.frequencyToNoteName(freq));
 
     // Redistribute with new chord
     this.distributeChord(newChord, noteNames);
@@ -143,10 +146,13 @@ export class ChordManager {
       return;
     }
 
-    const connectedSynths = this.appState.get('connectedSynths');
+    const connectedSynths = this.appState.get("connectedSynths");
     if (connectedSynths.size === 0) {
       if (window.Logger) {
-        window.Logger.log('No synths connected for chord distribution', 'expressions');
+        window.Logger.log(
+          "No synths connected for chord distribution",
+          "expressions",
+        );
       }
       return;
     }
@@ -156,21 +162,40 @@ export class ChordManager {
 
     // Distribute notes based on selected algorithm
     switch (this.distributionAlgorithm) {
-      case 'stochastic':
-        this.distributeStochastic(chord, noteNames, Array.from(connectedSynths.keys()));
+      case "stochastic":
+        this.distributeStochastic(
+          chord,
+          noteNames,
+          Array.from(connectedSynths.keys()),
+        );
         break;
-      case 'round-robin':
-        this.distributeRoundRobin(chord, noteNames, Array.from(connectedSynths.keys()));
+      case "round-robin":
+        this.distributeRoundRobin(
+          chord,
+          noteNames,
+          Array.from(connectedSynths.keys()),
+        );
         break;
-      case 'random':
-        this.distributeRandom(chord, noteNames, Array.from(connectedSynths.keys()));
+      case "random":
+        this.distributeRandom(
+          chord,
+          noteNames,
+          Array.from(connectedSynths.keys()),
+        );
         break;
       default:
-        this.distributeRoundRobin(chord, noteNames, Array.from(connectedSynths.keys()));
+        this.distributeRoundRobin(
+          chord,
+          noteNames,
+          Array.from(connectedSynths.keys()),
+        );
     }
 
     if (window.Logger) {
-      window.Logger.log(`Distributed ${chord.length} notes to ${connectedSynths.size} synths using ${this.distributionAlgorithm}`, 'expressions');
+      window.Logger.log(
+        `Distributed ${chord.length} notes to ${connectedSynths.size} synths using ${this.distributionAlgorithm}`,
+        "expressions",
+      );
     }
   }
 
@@ -182,9 +207,23 @@ export class ChordManager {
    * @private
    */
   distributeStochastic(chord, noteNames, synthIds) {
-    if (window.chordDistributor && typeof window.chordDistributor.distributeChord === 'function') {
+    if (
+      window.chordDistributor &&
+      typeof window.chordDistributor.distributeChord === "function"
+    ) {
       try {
-        const distribution = window.chordDistributor.distributeChord(chord, noteNames, synthIds);
+        // Format chord data for stochastic distributor
+        const chordData = { notes: noteNames };
+
+        // Get per-note expressions from AppState
+        const perNoteExpressions =
+          this.appState.get("perNoteExpressions") || {};
+
+        const distribution = window.chordDistributor.distributeChord(
+          chordData,
+          synthIds,
+          { expressions: perNoteExpressions }, // Pass expressions here
+        );
 
         // Convert to our internal format
         Object.entries(distribution).forEach(([synthId, assignment]) => {
@@ -192,13 +231,16 @@ export class ChordManager {
             frequency: assignment.frequency,
             noteName: assignment.note,
             index: assignment.index,
-            algorithm: 'stochastic',
-            timestamp: Date.now()
+            algorithm: "stochastic",
+            timestamp: Date.now(),
           });
         });
       } catch (error) {
         if (window.Logger) {
-          window.Logger.log(`Stochastic distribution failed: ${error}, falling back to round-robin`, 'error');
+          window.Logger.log(
+            `Stochastic distribution failed: ${error}, falling back to round-robin`,
+            "error",
+          );
         }
         this.distributeRoundRobin(chord, noteNames, synthIds);
       }
@@ -223,8 +265,8 @@ export class ChordManager {
         frequency: chord[noteIndex],
         noteName: noteNames[noteIndex],
         index: noteIndex,
-        algorithm: 'round-robin',
-        timestamp: Date.now()
+        algorithm: "round-robin",
+        timestamp: Date.now(),
       });
     });
   }
@@ -237,15 +279,15 @@ export class ChordManager {
    * @private
    */
   distributeRandom(chord, noteNames, synthIds) {
-    synthIds.forEach(synthId => {
+    synthIds.forEach((synthId) => {
       const randomIndex = Math.floor(Math.random() * chord.length);
 
       this.chordDistribution.set(synthId, {
         frequency: chord[randomIndex],
         noteName: noteNames[randomIndex],
         index: randomIndex,
-        algorithm: 'random',
-        timestamp: Date.now()
+        algorithm: "random",
+        timestamp: Date.now(),
       });
     });
   }
@@ -255,7 +297,9 @@ export class ChordManager {
    */
   redistributeChord() {
     if (this.currentChord.length > 0) {
-      const noteNames = this.currentChord.map(freq => this.frequencyToNoteName(freq));
+      const noteNames = this.currentChord.map((freq) =>
+        this.frequencyToNoteName(freq),
+      );
       this.distributeChord(this.currentChord, noteNames);
     }
   }
@@ -269,7 +313,10 @@ export class ChordManager {
     this.chordDistribution.delete(synthId);
 
     if (window.Logger) {
-      window.Logger.log(`Removed chord assignment for disconnected synth: ${synthId}`, 'expressions');
+      window.Logger.log(
+        `Removed chord assignment for disconnected synth: ${synthId}`,
+        "expressions",
+      );
     }
 
     // Redistribute remaining chord if needed
@@ -283,12 +330,12 @@ export class ChordManager {
     this.chordDistribution.clear();
     this.currentChord = [];
 
-    this.eventBus.emit('chord:cleared', {
-      timestamp: Date.now()
+    this.eventBus.emit("chord:cleared", {
+      timestamp: Date.now(),
     });
 
     if (window.Logger) {
-      window.Logger.log('Cleared chord distribution', 'expressions');
+      window.Logger.log("Cleared chord distribution", "expressions");
     }
   }
 
@@ -322,14 +369,16 @@ export class ChordManager {
    * @returns {Object} Chord information
    */
   getChordInfo() {
-    const noteNames = this.currentChord.map(freq => this.frequencyToNoteName(freq));
+    const noteNames = this.currentChord.map((freq) =>
+      this.frequencyToNoteName(freq),
+    );
 
     return {
       frequencies: [...this.currentChord],
       noteNames,
       count: this.currentChord.length,
       distribution: this.getDistributionSummary(),
-      algorithm: this.distributionAlgorithm
+      algorithm: this.distributionAlgorithm,
     };
   }
 
@@ -343,14 +392,14 @@ export class ChordManager {
       totalSynths: this.chordDistribution.size,
       totalNotes: this.currentChord.length,
       assignments: {},
-      algorithm: this.distributionAlgorithm
+      algorithm: this.distributionAlgorithm,
     };
 
     this.chordDistribution.forEach((assignment, synthId) => {
       summary.assignments[synthId] = {
         noteName: assignment.noteName,
         frequency: assignment.frequency,
-        index: assignment.index
+        index: assignment.index,
       };
     });
 
@@ -362,11 +411,14 @@ export class ChordManager {
    * @param {string} algorithm - Algorithm name ('stochastic', 'round-robin', 'random')
    */
   setDistributionAlgorithm(algorithm) {
-    const validAlgorithms = ['stochastic', 'round-robin', 'random'];
+    const validAlgorithms = ["stochastic", "round-robin", "random"];
 
     if (!validAlgorithms.includes(algorithm)) {
       if (window.Logger) {
-        window.Logger.log(`Invalid distribution algorithm: ${algorithm}`, 'error');
+        window.Logger.log(
+          `Invalid distribution algorithm: ${algorithm}`,
+          "error",
+        );
       }
       return;
     }
@@ -374,15 +426,18 @@ export class ChordManager {
     this.distributionAlgorithm = algorithm;
 
     if (window.Logger) {
-      window.Logger.log(`Distribution algorithm set to: ${algorithm}`, 'expressions');
+      window.Logger.log(
+        `Distribution algorithm set to: ${algorithm}`,
+        "expressions",
+      );
     }
 
     // Redistribute current chord with new algorithm
     this.redistributeChord();
 
-    this.eventBus.emit('chord:algorithmChanged', {
+    this.eventBus.emit("chord:algorithmChanged", {
       algorithm,
-      timestamp: Date.now()
+      timestamp: Date.now(),
     });
   }
 
@@ -391,7 +446,7 @@ export class ChordManager {
    * @returns {Array} Available algorithms
    */
   getAvailableAlgorithms() {
-    return ['stochastic', 'round-robin', 'random'];
+    return ["stochastic", "round-robin", "random"];
   }
 
   /**
@@ -404,11 +459,11 @@ export class ChordManager {
       this.currentChord.sort((a, b) => a - b);
 
       // Update app state
-      this.appState.set('currentChord', this.currentChord);
+      this.appState.set("currentChord", this.currentChord);
 
       if (window.Logger) {
         const noteName = this.frequencyToNoteName(frequency);
-        window.Logger.log(`Added note to chord: ${noteName}`, 'expressions');
+        window.Logger.log(`Added note to chord: ${noteName}`, "expressions");
       }
     }
   }
@@ -423,11 +478,14 @@ export class ChordManager {
       this.currentChord.splice(index, 1);
 
       // Update app state
-      this.appState.set('currentChord', this.currentChord);
+      this.appState.set("currentChord", this.currentChord);
 
       if (window.Logger) {
         const noteName = this.frequencyToNoteName(frequency);
-        window.Logger.log(`Removed note from chord: ${noteName}`, 'expressions');
+        window.Logger.log(
+          `Removed note from chord: ${noteName}`,
+          "expressions",
+        );
       }
     }
   }
@@ -441,12 +499,12 @@ export class ChordManager {
     this.currentChord.sort((a, b) => a - b);
 
     // Update app state
-    this.appState.set('currentChord', this.currentChord);
+    this.appState.set("currentChord", this.currentChord);
 
-    const noteNames = frequencies.map(freq => this.frequencyToNoteName(freq));
+    const noteNames = frequencies.map((freq) => this.frequencyToNoteName(freq));
 
     if (window.Logger) {
-      window.Logger.log(`Chord set: [${noteNames.join(', ')}]`, 'expressions');
+      window.Logger.log(`Chord set: [${noteNames.join(", ")}]`, "expressions");
     }
   }
 
@@ -458,10 +516,10 @@ export class ChordManager {
     this.clearDistribution();
 
     // Update app state
-    this.appState.set('currentChord', []);
+    this.appState.set("currentChord", []);
 
     if (window.Logger) {
-      window.Logger.log('Chord cleared', 'expressions');
+      window.Logger.log("Chord cleared", "expressions");
     }
   }
 
@@ -481,7 +539,20 @@ export class ChordManager {
     const octave = Math.floor(h / 12);
     const noteIndex = h % 12;
 
-    const noteNames = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+    const noteNames = [
+      "C",
+      "C#",
+      "D",
+      "D#",
+      "E",
+      "F",
+      "F#",
+      "G",
+      "G#",
+      "A",
+      "A#",
+      "B",
+    ];
     return `${noteNames[noteIndex]}${octave}`;
   }
 
@@ -491,7 +562,7 @@ export class ChordManager {
    */
   getStatistics() {
     const noteDistribution = {};
-    this.chordDistribution.forEach(assignment => {
+    this.chordDistribution.forEach((assignment) => {
       const note = assignment.noteName;
       noteDistribution[note] = (noteDistribution[note] || 0) + 1;
     });
@@ -501,12 +572,18 @@ export class ChordManager {
       connectedSynths: this.chordDistribution.size,
       algorithm: this.distributionAlgorithm,
       noteDistribution,
-      averageFrequency: this.currentChord.length > 0 ?
-        this.currentChord.reduce((sum, freq) => sum + freq, 0) / this.currentChord.length : 0,
-      frequencyRange: this.currentChord.length > 0 ? {
-        min: Math.min(...this.currentChord),
-        max: Math.max(...this.currentChord)
-      } : { min: 0, max: 0 }
+      averageFrequency:
+        this.currentChord.length > 0
+          ? this.currentChord.reduce((sum, freq) => sum + freq, 0) /
+            this.currentChord.length
+          : 0,
+      frequencyRange:
+        this.currentChord.length > 0
+          ? {
+              min: Math.min(...this.currentChord),
+              max: Math.max(...this.currentChord),
+            }
+          : { min: 0, max: 0 },
     };
   }
 
@@ -537,7 +614,7 @@ export class ChordManager {
     this.isInitialized = false;
 
     if (window.Logger) {
-      window.Logger.log('ChordManager destroyed', 'lifecycle');
+      window.Logger.log("ChordManager destroyed", "lifecycle");
     }
   }
 }
@@ -546,7 +623,7 @@ export class ChordManager {
 export const chordManager = new ChordManager();
 
 // Make available globally for backward compatibility
-if (typeof window !== 'undefined') {
+if (typeof window !== "undefined") {
   window.ChordManager = ChordManager;
   window.chordManager = chordManager;
 }

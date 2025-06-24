@@ -316,10 +316,18 @@ function initializeState() {
   // Subscribe to state changes for debugging
   if (Logger.categories.lifecycle) {
     appState.subscribeAll((key, newValue, oldValue) => {
-      Logger.log(
-        `State change: ${key} = ${JSON.stringify(newValue)}`,
-        "lifecycle",
-      );
+      // Format value for logging, handling Maps specially
+      let formattedValue;
+      if (newValue instanceof Map) {
+        formattedValue = `Map(${newValue.size}) {${Array.from(
+          newValue.entries(),
+        )
+          .map(([k, v]) => `${k}: ${JSON.stringify(v)}`)
+          .join(", ")}}`;
+      } else {
+        formattedValue = JSON.stringify(newValue);
+      }
+      Logger.log(`State change: ${key} = ${formattedValue}`, "lifecycle");
     });
   }
 

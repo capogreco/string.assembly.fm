@@ -219,15 +219,31 @@ class SVGInteractiveExpression {
 
     // Check if it's an SVG rect with note data
     if (target.tagName === "rect" && target.hasAttribute("data-note")) {
+      // Handle new modular format (data-note-name, data-frequency)
+      if (target.hasAttribute("data-note-name")) {
+        const noteName = target.getAttribute("data-note-name");
+        const freq = parseFloat(target.getAttribute("data-frequency"));
+
+        return {
+          element: target,
+          note: noteName,
+          freq: freq || 440,
+        };
+      }
+
+      // Handle old format (data-note + data-octave)
       const note = target.getAttribute("data-note");
       const octave = target.getAttribute("data-octave");
       const freq = parseFloat(target.getAttribute("data-freq"));
 
-      return {
-        element: target,
-        note: note + octave,
-        freq: freq || 440,
-      };
+      // Ensure both note and octave exist to avoid "66null" concatenation
+      if (note && octave) {
+        return {
+          element: target,
+          note: note + octave,
+          freq: freq || 440,
+        };
+      }
     }
 
     return null;

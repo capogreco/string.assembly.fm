@@ -242,53 +242,6 @@ async function handle_request(request: Request): Promise<Response> {
     });
   }
 
-  // handle SDP log uploads
-  if (url.pathname === "/api/sdp-logs" && request.method === "POST") {
-    try {
-      const body = await request.json();
-      const { role, timestamp, entries } = body;
-
-      // Create logs directory if it doesn't exist
-      try {
-        await Deno.mkdir("./sdp-logs", { recursive: true });
-      } catch {
-        // Directory might already exist
-      }
-
-      // Generate filename
-      const sanitizedTimestamp = timestamp.replace(/[:.]/g, "-");
-      const filename = `./sdp-logs/sdp_${role}_${sanitizedTimestamp}.json`;
-
-      // Write log file
-      await Deno.writeTextFile(filename, JSON.stringify(body, null, 2));
-
-      console.log(`[SDP-LOG] Saved SDP log from ${role} to ${filename}`);
-
-      return new Response(
-        JSON.stringify({
-          success: true,
-          filename: filename.replace("./sdp-logs/", ""),
-        }),
-        {
-          headers: { "content-type": "application/json" },
-          status: 200,
-        },
-      );
-    } catch (error) {
-      console.error("[SDP-LOG] Error saving SDP log:", error);
-      return new Response(
-        JSON.stringify({
-          error: "Failed to save SDP log",
-          details: error.message,
-        }),
-        {
-          headers: { "content-type": "application/json" },
-          status: 500,
-        },
-      );
-    }
-  }
-
   // serve static files
   let fsPathRoot = "./public"; // Base directory for public-facing files
   let requestedPath = url.pathname;

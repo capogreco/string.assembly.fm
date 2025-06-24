@@ -3,9 +3,9 @@
  * Handles chord expressions, note assignment, and expression distribution
  */
 
-import { eventBus } from '../core/EventBus.js';
-import { appState } from '../state/AppState.js';
-import { Config } from '../core/Config.js';
+import { eventBus } from "../core/EventBus.js";
+import { appState } from "../state/AppState.js";
+import { Config } from "../core/Config.js";
 
 export class ExpressionManager {
   constructor() {
@@ -13,7 +13,7 @@ export class ExpressionManager {
     this.appState = appState;
     this.currentExpressions = new Map();
     this.noteAssignments = new Map();
-    this.expressionModes = ['none', 'vibrato', 'trill', 'tremolo'];
+    this.expressionModes = ["none", "vibrato", "trill", "tremolo"];
     this.isInitialized = false;
   }
 
@@ -23,13 +23,13 @@ export class ExpressionManager {
   initialize() {
     if (this.isInitialized) {
       if (window.Logger) {
-        window.Logger.log('ExpressionManager already initialized', 'lifecycle');
+        window.Logger.log("ExpressionManager already initialized", "lifecycle");
       }
       return;
     }
 
     if (window.Logger) {
-      window.Logger.log('Initializing ExpressionManager...', 'lifecycle');
+      window.Logger.log("Initializing ExpressionManager...", "lifecycle");
     }
 
     // Set up event listeners
@@ -41,7 +41,7 @@ export class ExpressionManager {
     this.isInitialized = true;
 
     if (window.Logger) {
-      window.Logger.log('ExpressionManager initialized', 'lifecycle');
+      window.Logger.log("ExpressionManager initialized", "lifecycle");
     }
   }
 
@@ -51,27 +51,27 @@ export class ExpressionManager {
    */
   setupEventListeners() {
     // Listen for piano chord changes
-    this.eventBus.on('piano:chordChanged', (data) => {
+    this.eventBus.on("piano:chordChanged", (data) => {
       this.handleChordChange(data.chord, data.noteNames);
     });
 
     // Listen for expression changes
-    this.eventBus.on('expression:changed', (data) => {
+    this.eventBus.on("expression:changed", (data) => {
       this.handleExpressionChange(data.expression);
     });
 
     // Listen for harmonic ratio changes
-    this.eventBus.on('harmonicRatio:changed', (data) => {
+    this.eventBus.on("harmonicRatio:changed", (data) => {
       this.handleHarmonicRatioChange(data);
     });
 
     // Listen for synth connections
-    this.eventBus.on('network:synthConnected', (data) => {
+    this.eventBus.on("network:synthConnected", (data) => {
       this.assignNoteToSynth(data.synthId);
     });
 
     // Listen for program requests
-    this.eventBus.on('network:programRequested', (data) => {
+    this.eventBus.on("network:programRequested", (data) => {
       this.sendProgramToSynth(data.synthId);
     });
   }
@@ -82,17 +82,17 @@ export class ExpressionManager {
    */
   setupStateSubscriptions() {
     // Subscribe to chord changes
-    this.appState.subscribe('currentChord', (newChord) => {
+    this.appState.subscribe("currentChord", (newChord) => {
       this.updateChordExpressions(newChord);
     });
 
     // Subscribe to expression changes
-    this.appState.subscribe('selectedExpression', (newExpression) => {
+    this.appState.subscribe("selectedExpression", (newExpression) => {
       this.updateExpressionMode(newExpression);
     });
 
     // Subscribe to harmonic selections
-    this.appState.subscribe('harmonicSelections', (newSelections) => {
+    this.appState.subscribe("harmonicSelections", (newSelections) => {
       this.updateHarmonicSelections(newSelections);
     });
   }
@@ -105,12 +105,15 @@ export class ExpressionManager {
    */
   handleChordChange(chord, noteNames) {
     if (window.Logger) {
-      window.Logger.log(`Chord changed: [${noteNames.join(', ')}]`, 'expressions');
+      window.Logger.log(
+        `Chord changed: [${noteNames.join(", ")}]`,
+        "expressions",
+      );
     }
 
     // Create chord state for distribution
     const chordState = this.createChordState(chord, noteNames);
-    this.appState.set('currentChordState', chordState);
+    this.appState.set("currentChordState", chordState);
 
     // Update expression display
     this.updateExpressionDisplay();
@@ -124,18 +127,47 @@ export class ExpressionManager {
    * @param {string} expression - New expression mode
    * @private
    */
-  handleExpressionChange(expression) {
+  handleExpressionChange(data) {
+    // data is { note, expression, allExpressions }
     if (window.Logger) {
-      window.Logger.log(`Expression changed: ${expression}`, 'expressions');
+      // Log the actual expression object for the note, or the note if expression is removed
+      const logMessage = data.expression
+        ? `Expression for note ${data.note}: ${JSON.stringify(data.expression)}`
+        : `Expression removed for note ${data.note}`;
+      window.Logger.log(
+        `ExpressionManager handling expression:changed - ${logMessage}`,
+        "expressions",
+      );
     }
 
-    // Update current expressions
-    this.updateCurrentExpressions(expression);
+    // Update the specific note's expression in ExpressionManager's state
+    // PianoExpressionHandler is the source of truth for what the expression is.
+    // ExpressionManager needs to stay in sync to generate correct programs.
+    if (data.note && data.expression) {
+      this.currentExpressions.set(data.note, data.expression);
+    } else if (data.note && !data.expression) {
+      // This case might occur if PianoExpressionHandler sends null/undefined for expression
+      // when a note's expression is cleared or the note is removed from chord.
+      this.currentExpressions.delete(data.note);
+    }
 
-    // Update expression display
-    this.updateExpressionDisplay();
+    // Update AppState with the complete map of per-note expressions
+    // Create a plain object copy for AppState, as StochasticChordDistributor expects an object
+    const perNoteExpressionsObject = Object.fromEntries(
+      this.currentExpressions,
+    );
+    this.appState.set("perNoteExpressions", perNoteExpressionsObject);
 
-    // Send updated programs to synths
+    // The PianoExpressionHandler has already updated the visual state of the piano keys.
+    // this.updateExpressionDisplay(); // This method was for the legacy window.svgExpression.render()
+    // and can be removed or made conditional if still needed for other UI.
+
+    // Send updated programs to synths based on the potentially new expression state for one or more notes.
+    // updateSynthPrograms iterates over this.noteAssignments, which should be updated
+    // by assignNoteToSynth if the overall chord or synth availability changes.
+    // For a per-note expression change, we might need a more targeted update.
+    // For now, let's assume updateSynthPrograms will correctly regenerate programs
+    // if this.currentExpressions (used by createProgramWithExpression) has changed.
     this.updateSynthPrograms();
   }
 
@@ -146,7 +178,10 @@ export class ExpressionManager {
    */
   handleHarmonicRatioChange(data) {
     if (window.Logger) {
-      window.Logger.log(`Harmonic ratio changed: ${data.expression} ${data.type}`, 'expressions');
+      window.Logger.log(
+        `Harmonic ratio changed: ${data.expression} ${data.type}`,
+        "expressions",
+      );
     }
 
     // Update expression parameters
@@ -164,15 +199,16 @@ export class ExpressionManager {
    * @private
    */
   createChordState(chord, noteNames) {
-    const selectedExpression = this.appState.get('selectedExpression') || 'none';
-    const harmonicSelections = this.appState.get('harmonicSelections');
+    const selectedExpression =
+      this.appState.get("selectedExpression") || "none";
+    const harmonicSelections = this.appState.get("harmonicSelections");
 
     return {
       chord,
       noteNames,
       expression: selectedExpression,
       harmonicSelections: this.serializeHarmonicSelections(harmonicSelections),
-      timestamp: Date.now()
+      timestamp: Date.now(),
     };
   }
 
@@ -200,24 +236,37 @@ export class ExpressionManager {
    * @private
    */
   updateChordExpressions(chord) {
-    const selectedExpression = this.appState.get('selectedExpression') || 'none';
+    const selectedExpression =
+      this.appState.get("selectedExpression") || "none";
 
     // Clear existing expressions
     this.currentExpressions.clear();
 
-    if (chord && chord.length > 0 && selectedExpression !== 'none') {
+    if (chord && chord.length > 0 && selectedExpression !== "none") {
       // Create expressions for each note in chord
       chord.forEach((frequency, index) => {
-        const expression = this.createNoteExpression(frequency, selectedExpression, index, chord.length);
-        this.currentExpressions.set(frequency, expression);
+        const noteName = this.frequencyToNoteName(frequency); // Get note name
+        const expression = this.createNoteExpression(
+          frequency,
+          selectedExpression,
+          index,
+          chord.length,
+        );
+        this.currentExpressions.set(noteName, expression); // Use noteName as key
       });
     }
 
+    // Update AppState with the complete map of per-note expressions
+    const perNoteExpressionsObject = Object.fromEntries(
+      this.currentExpressions,
+    );
+    this.appState.set("perNoteExpressions", perNoteExpressionsObject);
+
     // Emit expression update event
-    this.eventBus.emit('expressions:updated', {
+    this.eventBus.emit("expressions:updated", {
       expressions: Array.from(this.currentExpressions.values()),
       expressionMode: selectedExpression,
-      timestamp: Date.now()
+      timestamp: Date.now(),
     });
   }
 
@@ -231,7 +280,7 @@ export class ExpressionManager {
    * @private
    */
   createNoteExpression(frequency, expressionType, index, totalNotes) {
-    const harmonicSelections = this.appState.get('harmonicSelections');
+    const harmonicSelections = this.appState.get("harmonicSelections");
     const noteName = this.frequencyToNoteName(frequency);
 
     const expression = {
@@ -240,21 +289,36 @@ export class ExpressionManager {
       type: expressionType,
       index,
       totalNotes,
-      parameters: this.getExpressionParameters(expressionType, harmonicSelections),
-      timestamp: Date.now()
+      parameters: this.getExpressionParameters(
+        expressionType,
+        harmonicSelections,
+      ),
+      timestamp: Date.now(),
     };
 
     // Add expression-specific data
     switch (expressionType) {
-      case 'vibrato':
-        expression.vibratoRate = this.getRandomHarmonicRatio(harmonicSelections['vibrato-numerator'], harmonicSelections['vibrato-denominator']);
+      case "vibrato":
+        expression.vibratoRate = this.getRandomHarmonicRatio(
+          harmonicSelections["vibrato-numerator"],
+          harmonicSelections["vibrato-denominator"],
+        );
         break;
-      case 'trill':
-        expression.trillTarget = this.calculateTrillTarget(frequency, harmonicSelections);
-        expression.trillRate = this.getRandomHarmonicRatio(harmonicSelections['trill-numerator'], harmonicSelections['trill-denominator']);
+      case "trill":
+        expression.trillTarget = this.calculateTrillTarget(
+          frequency,
+          harmonicSelections,
+        );
+        expression.trillRate = this.getRandomHarmonicRatio(
+          harmonicSelections["trill-numerator"],
+          harmonicSelections["trill-denominator"],
+        );
         break;
-      case 'tremolo':
-        expression.tremoloRate = this.getRandomHarmonicRatio(harmonicSelections['tremolo-numerator'], harmonicSelections['tremolo-denominator']);
+      case "tremolo":
+        expression.tremoloRate = this.getRandomHarmonicRatio(
+          harmonicSelections["tremolo-numerator"],
+          harmonicSelections["tremolo-denominator"],
+        );
         break;
     }
 
@@ -272,38 +336,50 @@ export class ExpressionManager {
     const baseParams = {
       enabled: true,
       depth: 0.5,
-      phase: Math.random() * 2 * Math.PI
+      phase: Math.random() * 2 * Math.PI,
     };
 
     switch (expressionType) {
-      case 'vibrato':
+      case "vibrato":
         return {
           ...baseParams,
           rate: 5.0,
           ratios: {
-            numerator: Array.from(harmonicSelections['vibrato-numerator'] || new Set([1])),
-            denominator: Array.from(harmonicSelections['vibrato-denominator'] || new Set([1]))
-          }
+            numerator: Array.from(
+              harmonicSelections["vibrato-numerator"] || new Set([1]),
+            ),
+            denominator: Array.from(
+              harmonicSelections["vibrato-denominator"] || new Set([1]),
+            ),
+          },
         };
-      case 'trill':
+      case "trill":
         return {
           ...baseParams,
           speed: 10.0,
           articulation: 0.5,
           ratios: {
-            numerator: Array.from(harmonicSelections['trill-numerator'] || new Set([1])),
-            denominator: Array.from(harmonicSelections['trill-denominator'] || new Set([1]))
-          }
+            numerator: Array.from(
+              harmonicSelections["trill-numerator"] || new Set([1]),
+            ),
+            denominator: Array.from(
+              harmonicSelections["trill-denominator"] || new Set([1]),
+            ),
+          },
         };
-      case 'tremolo':
+      case "tremolo":
         return {
           ...baseParams,
           speed: 15.0,
           articulation: 0.7,
           ratios: {
-            numerator: Array.from(harmonicSelections['tremolo-numerator'] || new Set([1])),
-            denominator: Array.from(harmonicSelections['tremolo-denominator'] || new Set([1]))
-          }
+            numerator: Array.from(
+              harmonicSelections["tremolo-numerator"] || new Set([1]),
+            ),
+            denominator: Array.from(
+              harmonicSelections["tremolo-denominator"] || new Set([1]),
+            ),
+          },
         };
       default:
         return baseParams;
@@ -318,10 +394,17 @@ export class ExpressionManager {
    * @private
    */
   calculateTrillTarget(baseFrequency, harmonicSelections) {
-    const numerators = Array.from(harmonicSelections['trill-numerator'] || new Set([1]));
-    const denominators = Array.from(harmonicSelections['trill-denominator'] || new Set([1]));
+    const numerators = Array.from(
+      harmonicSelections["trill-numerator"] || new Set([1]),
+    );
+    const denominators = Array.from(
+      harmonicSelections["trill-denominator"] || new Set([1]),
+    );
 
-    const ratio = this.getRandomHarmonicRatio(new Set(numerators), new Set(denominators));
+    const ratio = this.getRandomHarmonicRatio(
+      new Set(numerators),
+      new Set(denominators),
+    );
 
     // Calculate target frequency based on harmonic ratio
     const semitonesUp = Math.log2(ratio) * 12;
@@ -351,91 +434,186 @@ export class ExpressionManager {
    * @returns {Object|null} Assignment result
    */
   assignNoteToSynth(synthId) {
-    const chordState = this.appState.get('currentChordState');
+    const chordState = this.appState.get("currentChordState");
 
     if (!chordState || chordState.chord.length === 0) {
       if (window.Logger) {
-        window.Logger.log(`No chord state available for ${synthId} - cannot assign note`, 'expressions');
+        window.Logger.log(
+          `No chord state available for ${synthId} - cannot assign note`,
+          "expressions",
+        );
       }
       return null;
     }
 
-    // Use stochastic chord distributor if available
-    if (window.chordDistributor) {
-      try {
-        const assignment = window.chordDistributor.assignNoteToSynth(synthId, chordState);
+    // Get expressions from app state
+    const expressions = this.appState.get("expressions") || {};
 
-        if (assignment) {
-          // Store assignment
-          this.noteAssignments.set(synthId, assignment);
+    // Select note for this synth using round-robin
+    const assignedNote = this.selectNoteForSynth(synthId, chordState.noteNames);
+    const assignedFreq = this.noteToFrequency(assignedNote);
+    const expression = expressions[assignedNote] || { type: "none" };
 
-          // Create program with expression
-          const program = this.createProgramWithExpression(assignment);
+    // Build synth program
+    const synthProgram = { ...chordState.baseProgram };
+    synthProgram.fundamentalFrequency = assignedFreq;
 
-          if (window.Logger) {
-            window.Logger.log(`Assigned ${assignment.note} (${assignment.frequency.toFixed(1)}Hz, ${assignment.expression}) to ${synthId}`, 'expressions');
-          }
-
-          return {
-            synthId,
-            assignment,
-            program,
-            transition: this.calculateTransitionTiming(program)
-          };
-        }
-      } catch (error) {
-        if (window.Logger) {
-          window.Logger.log(`Error in chord distributor: ${error}`, 'error');
-        }
-      }
-    }
-
-    // Fallback: simple round-robin assignment
-    return this.fallbackNoteAssignment(synthId, chordState);
-  }
-
-  /**
-   * Fallback note assignment when chord distributor is not available
-   * @param {string} synthId - Synth ID
-   * @param {Object} chordState - Current chord state
-   * @returns {Object|null} Assignment result
-   * @private
-   */
-  fallbackNoteAssignment(synthId, chordState) {
-    const connectedSynths = this.appState.get('connectedSynths');
-    const synthIds = Array.from(connectedSynths.keys());
-    const synthIndex = synthIds.indexOf(synthId);
-
-    if (synthIndex === -1) return null;
-
-    const noteIndex = synthIndex % chordState.chord.length;
-    const frequency = chordState.chord[noteIndex];
-    const noteName = chordState.noteNames[noteIndex];
-
-    const assignment = {
-      synthId,
-      frequency,
-      note: noteName,
-      expression: chordState.expression,
-      index: noteIndex,
-      timestamp: Date.now()
-    };
+    // Apply expression parameters
+    this.applyExpressionToProgram(synthProgram, expression);
 
     // Store assignment
+    const assignment = {
+      synthId,
+      frequency: assignedFreq,
+      note: assignedNote,
+      expression: expression,
+      timestamp: Date.now(),
+    };
     this.noteAssignments.set(synthId, assignment);
 
-    // Create program with expression
-    const program = this.createProgramWithExpression(assignment);
-
     if (window.Logger) {
-      window.Logger.log(`Fallback assigned ${noteName} (${frequency.toFixed(1)}Hz) to ${synthId}`, 'expressions');
+      window.Logger.log(
+        `Assigned ${assignedNote} (${assignedFreq.toFixed(1)}Hz) with ${expression.type} to ${synthId}`,
+        "expressions",
+      );
     }
 
     return {
-      synthId,
-      assignment,
-      program,
-      transition: this.calculateTransitionTiming(program)
+      program: synthProgram,
+      metadata: {
+        baseNote: assignedNote,
+        expression: expression.type,
+      },
+      transition: this.calculateTransitionTiming(synthProgram),
+    };
+  }
+
+  /**
+   * Select note for synth using round-robin distribution
+   * @param {string} synthId - Synth ID
+   * @param {Array} noteNames - Available note names
+   * @returns {string} Selected note name
+   * @private
+   */
+  selectNoteForSynth(synthId, noteNames) {
+    const connectedSynths = this.appState.get("connectedSynths");
+    const synthIds = Array.from(connectedSynths.keys());
+    const synthIndex = synthIds.indexOf(synthId);
+
+    if (synthIndex === -1) return noteNames[0]; // Fallback to first note
+
+    const noteIndex = synthIndex % noteNames.length;
+    return noteNames[noteIndex];
+  }
+
+  /**
+   * Convert note name to frequency
+   * @param {string} noteName - Note name (e.g., "C4", "F#5")
+   * @returns {number} Frequency in Hz
+   * @private
+   */
+  noteToFrequency(noteName) {
+    const noteOrder = [
+      "C",
+      "C#",
+      "D",
+      "D#",
+      "E",
+      "F",
+      "F#",
+      "G",
+      "G#",
+      "A",
+      "A#",
+      "B",
+    ];
+
+    const match = noteName.match(/^([A-G]#?)(\d)$/);
+    if (!match) return 440; // Fallback to A4
+
+    const noteName_ = match[1];
+    const octave = parseInt(match[2]);
+    const noteIndex = noteOrder.indexOf(noteName_);
+
+    if (noteIndex === -1) return 440;
+
+    const midiNote = (octave + 1) * 12 + noteIndex;
+    return 440 * Math.pow(2, (midiNote - 69) / 12);
+  }
+
+  /**
+   * Apply expression parameters to synth program
+   * @param {Object} synthProgram - Synth program to modify
+   * @param {Object} expression - Expression data
+   * @private
+   */
+  applyExpressionToProgram(synthProgram, expression) {
+    // Reset all expression parameters
+    synthProgram.vibratoEnabled = false;
+    synthProgram.tremoloEnabled = false;
+    synthProgram.trillEnabled = false;
+
+    if (!expression || expression.type === "none") {
+      return;
+    }
+
+    // Get harmonic ratios for stochastic variation
+    const harmonicRatios = this.getHarmonicRatios(expression.type);
+
+    switch (expression.type) {
+      case "vibrato":
+        synthProgram.vibratoEnabled = true;
+        synthProgram.vibratoRate =
+          (expression.rate || 4) * harmonicRatios.ratio;
+        synthProgram.vibratoDepth = expression.depth || 0.01;
+        break;
+
+      case "tremolo":
+        synthProgram.tremoloEnabled = true;
+        synthProgram.tremoloSpeed =
+          (expression.speed || 10) * harmonicRatios.ratio;
+        synthProgram.tremoloDepth = expression.depth || 0.3;
+        synthProgram.tremoloArticulation =
+          synthProgram.tremoloArticulation || 0.8;
+        break;
+
+      case "trill":
+        synthProgram.trillEnabled = true;
+        synthProgram.trillSpeed =
+          (expression.speed || 8) * harmonicRatios.ratio;
+        synthProgram.trillInterval = expression.interval || 2;
+        synthProgram.trillArticulation = synthProgram.trillArticulation || 0.7;
+        break;
+    }
+  }
+
+  /**
+   * Get harmonic ratios for expression type
+   * @param {string} expressionType - Expression type
+   * @returns {Object} Harmonic ratio data
+   * @private
+   */
+  getHarmonicRatios(expressionType) {
+    const harmonicSelections = this.appState.get("harmonicSelections") || {};
+    const numeratorKey = `${expressionType}-numerator`;
+    const denominatorKey = `${expressionType}-denominator`;
+
+    const numerators = harmonicSelections[numeratorKey] || new Set([1]);
+    const denominators = harmonicSelections[denominatorKey] || new Set([1]);
+
+    // Random selection from enabled ratios
+    const numeratorArray = Array.from(numerators);
+    const denominatorArray = Array.from(denominators);
+
+    const randomNum =
+      numeratorArray[Math.floor(Math.random() * numeratorArray.length)];
+    const randomDen =
+      denominatorArray[Math.floor(Math.random() * denominatorArray.length)];
+
+    return {
+      numerator: randomNum,
+      denominator: randomDen,
+      ratio: randomNum / randomDen,
     };
   }
 
@@ -450,7 +628,8 @@ export class ExpressionManager {
     const baseProgram = this.getCurrentProgram();
 
     // Add expression-specific parameters
-    const expressionParams = this.getExpressionParametersForAssignment(assignment);
+    const expressionParams =
+      this.getExpressionParametersForAssignment(assignment);
 
     return {
       ...baseProgram,
@@ -458,7 +637,7 @@ export class ExpressionManager {
       frequency: assignment.frequency,
       note: assignment.note,
       expression: assignment.expression,
-      timestamp: Date.now()
+      timestamp: Date.now(),
     };
   }
 
@@ -469,31 +648,36 @@ export class ExpressionManager {
    * @private
    */
   getExpressionParametersForAssignment(assignment) {
-    const harmonicSelections = this.appState.get('harmonicSelections');
+    const harmonicSelections = this.appState.get("harmonicSelections");
     const params = {};
 
     switch (assignment.expression) {
-      case 'vibrato':
-        params.vibratoRate = this.getRandomHarmonicRatio(
-          harmonicSelections['vibrato-numerator'],
-          harmonicSelections['vibrato-denominator']
-        ) * 5.0; // Base vibrato rate
+      case "vibrato":
+        params.vibratoRate =
+          this.getRandomHarmonicRatio(
+            harmonicSelections["vibrato-numerator"],
+            harmonicSelections["vibrato-denominator"],
+          ) * 5.0; // Base vibrato rate
         break;
 
-      case 'trill':
+      case "trill":
         const trillRatio = this.getRandomHarmonicRatio(
-          harmonicSelections['trill-numerator'],
-          harmonicSelections['trill-denominator']
+          harmonicSelections["trill-numerator"],
+          harmonicSelections["trill-denominator"],
         );
         params.trillSpeed = trillRatio * 10.0; // Base trill speed
-        params.trillTarget = this.calculateTrillTarget(assignment.frequency, harmonicSelections);
+        params.trillTarget = this.calculateTrillTarget(
+          assignment.frequency,
+          harmonicSelections,
+        );
         break;
 
-      case 'tremolo':
-        params.tremoloSpeed = this.getRandomHarmonicRatio(
-          harmonicSelections['tremolo-numerator'],
-          harmonicSelections['tremolo-denominator']
-        ) * 15.0; // Base tremolo speed
+      case "tremolo":
+        params.tremoloSpeed =
+          this.getRandomHarmonicRatio(
+            harmonicSelections["tremolo-numerator"],
+            harmonicSelections["tremolo-denominator"],
+          ) * 15.0; // Base tremolo speed
         break;
     }
 
@@ -511,7 +695,7 @@ export class ExpressionManager {
       window.networkCoordinator.sendProgramToSynth(
         synthId,
         assignment.program,
-        assignment.transition
+        assignment.transition,
       );
     }
   }
@@ -520,14 +704,17 @@ export class ExpressionManager {
    * Redistribute notes to all connected synths
    */
   redistributeNotesToSynths() {
-    const connectedSynths = this.appState.get('connectedSynths');
+    const connectedSynths = this.appState.get("connectedSynths");
 
     connectedSynths.forEach((synthData, synthId) => {
       this.sendProgramToSynth(synthId);
     });
 
     if (window.Logger) {
-      window.Logger.log(`Redistributed notes to ${connectedSynths.size} synths`, 'expressions');
+      window.Logger.log(
+        `Redistributed notes to ${connectedSynths.size} synths`,
+        "expressions",
+      );
     }
   }
 
@@ -536,7 +723,7 @@ export class ExpressionManager {
    * @private
    */
   updateSynthPrograms() {
-    const connectedSynths = this.appState.get('connectedSynths');
+    const connectedSynths = this.appState.get("connectedSynths");
 
     // Update programs for synths with current assignments
     this.noteAssignments.forEach((assignment, synthId) => {
@@ -547,7 +734,7 @@ export class ExpressionManager {
           window.networkCoordinator.sendProgramToSynth(
             synthId,
             updatedProgram,
-            this.calculateTransitionTiming(updatedProgram)
+            this.calculateTransitionTiming(updatedProgram),
           );
         }
       }
@@ -561,8 +748,9 @@ export class ExpressionManager {
    */
   updateExpressionMode(newExpression) {
     // Update current expressions for the new mode
-    const currentChord = this.appState.get('currentChord');
+    const currentChord = this.appState.get("currentChord");
     this.updateChordExpressions(currentChord);
+    // updateChordExpressions now also updates AppState with perNoteExpressions
   }
 
   /**
@@ -581,7 +769,7 @@ export class ExpressionManager {
    */
   updateExpressionParameters() {
     // Recalculate expression parameters with new harmonic ratios
-    const currentChord = this.appState.get('currentChord');
+    const currentChord = this.appState.get("currentChord");
     if (currentChord && currentChord.length > 0) {
       this.updateChordExpressions(currentChord);
     }
@@ -599,7 +787,10 @@ export class ExpressionManager {
       }
     } catch (error) {
       if (window.Logger) {
-        window.Logger.log(`Error updating expression display: ${error}`, 'error');
+        window.Logger.log(
+          `Error updating expression display: ${error}`,
+          "error",
+        );
       }
     }
   }
@@ -616,7 +807,7 @@ export class ExpressionManager {
     }
 
     // Fallback to app state
-    return this.appState.get('currentProgram') || Config.DEFAULT_PROGRAM;
+    return this.appState.get("currentProgram") || Config.DEFAULT_PROGRAM;
   }
 
   /**
@@ -630,12 +821,15 @@ export class ExpressionManager {
     const variance = program.transitionVariance || 0.1;
 
     const randomVariance = (Math.random() - 0.5) * 2 * variance;
-    const actualTransitionTime = Math.max(0.1, baseTransitionTime + randomVariance);
+    const actualTransitionTime = Math.max(
+      0.1,
+      baseTransitionTime + randomVariance,
+    );
 
     return {
       duration: actualTransitionTime,
       shape: program.transitionShape || 0.5,
-      delay: 0
+      delay: 0,
     };
   }
 
@@ -655,7 +849,20 @@ export class ExpressionManager {
     const octave = Math.floor(h / 12);
     const noteIndex = h % 12;
 
-    const noteNames = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+    const noteNames = [
+      "C",
+      "C#",
+      "D",
+      "D#",
+      "E",
+      "F",
+      "F#",
+      "G",
+      "G#",
+      "A",
+      "A#",
+      "B",
+    ];
     return `${noteNames[noteIndex]}${octave}`;
   }
 
@@ -683,7 +890,10 @@ export class ExpressionManager {
     this.noteAssignments.delete(synthId);
 
     if (window.Logger) {
-      window.Logger.log(`Cleared assignment for disconnected synth: ${synthId}`, 'expressions');
+      window.Logger.log(
+        `Cleared assignment for disconnected synth: ${synthId}`,
+        "expressions",
+      );
     }
   }
 
@@ -694,8 +904,14 @@ export class ExpressionManager {
     this.currentExpressions.clear();
     this.noteAssignments.clear();
 
+    // Update AppState
+    this.appState.set("perNoteExpressions", {});
+
     if (window.Logger) {
-      window.Logger.log('Cleared all expressions and assignments', 'expressions');
+      window.Logger.log(
+        "Cleared all expressions and assignments",
+        "expressions",
+      );
     }
   }
 
@@ -726,7 +942,7 @@ export class ExpressionManager {
     this.isInitialized = false;
 
     if (window.Logger) {
-      window.Logger.log('ExpressionManager destroyed', 'lifecycle');
+      window.Logger.log("ExpressionManager destroyed", "lifecycle");
     }
   }
 }
@@ -735,7 +951,7 @@ export class ExpressionManager {
 export const expressionManager = new ExpressionManager();
 
 // Make available globally for backward compatibility
-if (typeof window !== 'undefined') {
+if (typeof window !== "undefined") {
   window.ExpressionManager = ExpressionManager;
   window.expressionManager = expressionManager;
 }

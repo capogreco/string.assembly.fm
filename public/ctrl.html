@@ -1267,10 +1267,6 @@
             </div>
         </div>
 
-        <!-- SDP Logger for debugging WebRTC connections -->
-        <script src="./js/modules/debug/SDPLogger.js"></script>
-        <script src="./js/sdp-logging-init.js"></script>
-
         <!-- Load the module loader (handles modular vs legacy) -->
         <script src="./js/module-loader.js"></script>
 
@@ -1280,6 +1276,40 @@
         <script src="../src/common/standard_parameters.js"></script>
 
         <script>
+            // Legacy compatibility functions for inline code
+            function note_to_frequency(noteName) {
+                if (window.modular && window.modular.AudioUtilities) {
+                    return window.modular.AudioUtilities.noteNameToFrequency(
+                        noteName,
+                    );
+                }
+                // Fallback if modular system not available
+                const noteRegex = /^([A-G]#?)(\d+)$/;
+                const match = noteName.match(noteRegex);
+                if (!match) return 440; // Fallback to A4
+
+                const [, note, octaveStr] = match;
+                const octave = parseInt(octaveStr);
+
+                const noteMap = {
+                    C: 0,
+                    "C#": 1,
+                    D: 2,
+                    "D#": 3,
+                    E: 4,
+                    F: 5,
+                    "F#": 6,
+                    G: 7,
+                    "G#": 8,
+                    A: 9,
+                    "A#": 10,
+                    B: 11,
+                };
+
+                const midiNote = (octave + 1) * 12 + noteMap[note];
+                return 440 * Math.pow(2, (midiNote - 69) / 12);
+            }
+
             // Initialize chord and expression system
             // Declarations for svgExpression and currentChord were moved to the earlier main script block.
             // chordDistributor was also declared; initialize it now.
@@ -1295,48 +1325,60 @@
             // currentChord is already declared and initialized to [].
             // svgExpression is already declared as null.
 
-            // Initialize SVG interactive expression when piano is ready
-            function initializeSVGExpression() {
-                // Prevent multiple initializations
-                if (window.svgExpression) {
-                    console.log(
-                        "SVG Interactive expression already initialized",
+            // Helper function to convert frequency to note data
+            function frequencyToNote(freq) {
+                const A4 = 440;
+                const C0 = A4 * Math.pow(2, -4.75);
+
+                const h = 12 * (Math.log(freq / C0) / Math.log(2));
+                const octave = Math.floor(h / 12);
+                const noteIndex = Math.round(h % 12);
+
+                const noteNames = [
+                    "C",
+                    "C#",
+                    "D",
+                    "D#",
+                    "E",
+                    "F",
+                    "F#",
+                    "G",
+                    "G#",
+                    "A",
+                    "A#",
+                    "B",
+                ];
+                return {
+                    note: noteNames[noteIndex],
+                    octave: octave,
+                };
+            }
+
+            // Bridge functions to connect legacy calls to modular system
+            function mark_parameter_changed(param_id) {
+                console.log(`mark_parameter_changed called with: ${param_id}`);
+                if (window.modular && window.modular.ParameterControls) {
+                    window.modular.ParameterControls.markParameterChanged(
+                        param_id,
                     );
-                    return true;
+                } else if (window.modular && window.modular.AppState) {
+                    window.modular.AppState.markParameterChanged(param_id);
                 }
-
-                const piano = document.getElementById("piano");
-                if (piano && piano.querySelectorAll("rect").length > 0) {
-                    window.svgExpression = new SVGInteractiveExpression(piano);
-                    window.svgExpression.onExpressionChange =
-                        handleExpressionChange;
-                    // SVG Interactive expression system initialized
-
-                    // If chord already exists, update the expression system
-                    if (window.currentChord && window.currentChord.length > 0) {
-                        window.svgExpression.setChordNotes(window.currentChord);
-                    }
-
-                    // Check for pending chord update
-                    if (window.pendingChordUpdate) {
-                        window.svgExpression.setChordNotes(
-                            window.pendingChordUpdate,
-                        );
-                        delete window.pendingChordUpdate;
-                    }
-                    return true;
-                }
-                return false;
             }
 
-            // Try to initialize immediately, then retry if needed
-            if (!initializeSVGExpression()) {
-                const initInterval = setInterval(() => {
-                    if (initializeSVGExpression()) {
-                        clearInterval(initInterval);
-                    }
-                }, 100);
+            function check_overall_status() {
+                console.log("check_overall_status called");
+                if (window.modular && window.modular.UIManager) {
+                    window.modular.UIManager.updateConnectionStatus();
+                }
             }
+
+            // SVGInteractiveExpression initialization disabled
+            // The modular PianoKeyboard now handles expressions internally
+            // via PianoExpressionHandler
+
+            // Keep the expression change handler for backward compatibility
+            // but it won't be called anymore
 
             function handleExpressionChange(note, expression) {
                 console.log("Expression changed:", note, expression);
@@ -1345,20 +1387,36 @@
                 if (window.svgExpression) {
                     const chordNotes = window.svgExpression.getChordNotes();
                     window.currentChord = chordNotes.sort((a, b) => {
-                        const freqA = note_to_frequency(
-                            a.slice(0, -1),
-                            parseInt(a.slice(-1)),
-                        );
-                        const freqB = note_to_frequency(
-                            b.slice(0, -1),
-                            parseInt(b.slice(-1)),
-                        );
+                        const freqA = note_to_frequency(a);
+                        const freqB = note_to_frequency(b);
                         return freqA - freqB;
                     });
+
                     console.log(
                         "Updated chord from expression system:",
                         window.currentChord,
                     );
+
+                    // Sync to modular system
+                    if (window.modular && window.modular.AppState) {
+                        // Convert note names to frequencies
+                        const frequencies = window.currentChord.map(
+                            (noteName) => note_to_frequency(noteName),
+                        );
+                        window.modular.AppState.set(
+                            "currentChord",
+                            frequencies,
+                        );
+
+                        // Emit chord change event through modular system
+                        if (window.modular.EventBus) {
+                            window.modular.EventBus.emit("piano:chordChanged", {
+                                chord: frequencies,
+                                noteNames: window.currentChord,
+                                timestamp: Date.now(),
+                            });
+                        }
+                    }
 
                     // Update chord display immediately
                     const chordDisplay =
