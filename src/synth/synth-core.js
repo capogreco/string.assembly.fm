@@ -23,6 +23,7 @@ export class SynthCore {
     this.isPoweredOn = true;
     this.isInitialized = false;
     this.isCalibrating = false;
+    this.isBowing = false;
 
     // Banking
     this.synthBanks = new Map();
@@ -192,7 +193,7 @@ export class SynthCore {
   }
 
   // Apply a program to the synth
-  applyProgram(program) {
+  applyProgram(program, transitionData = null) {
     if (!this.isInitialized) {
       this.log("Cannot apply program: synth not initialized", "warn");
       return;
@@ -208,36 +209,142 @@ export class SynthCore {
 
     this.currentProgram = { ...program };
 
-    // Apply parameters to worklet
+    // Determine if we should apply immediately or with transition
+    const applyTime =
+      transitionData && transitionData.delay
+        ? this.audioContext.currentTime + transitionData.delay
+        : this.audioContext.currentTime;
+
+    if (transitionData) {
+      // Send transition configuration to worklet first
+      this.bowedStringNode.port.postMessage({
+        type: "setTransitionConfig",
+        config: {
+          duration: transitionData.duration || 1.0,
+          spread: transitionData.spread || 0.2,
+          stagger: transitionData.stagger || "sync",
+          variance: transitionData.variance || 0.1,
+        },
+      });
+
+      // Determine target expression from program
+      const hasVibrato =
+        program.vibratoEnabled === true || program.vibratoEnabled === 1;
+      const hasTremolo =
+        program.tremoloEnabled === true || program.tremoloEnabled === 1;
+      const hasTrill =
+        program.trillEnabled === true || program.trillEnabled === 1;
+      const targetExpression = hasVibrato
+        ? "VIBRATO"
+        : hasTremolo
+          ? "TREMOLO"
+          : hasTrill
+            ? "TRILL"
+            : "NONE";
+
+      // Schedule expression change
+      setTimeout(
+        () => {
+          this.bowedStringNode.port.postMessage({
+            type: "setExpression",
+            expression: targetExpression,
+          });
+        },
+        (transitionData.delay || 0) * 1000,
+      );
+    } else {
+      // No transition data - apply expression immediately
+      const hasVibrato =
+        program.vibratoEnabled === true || program.vibratoEnabled === 1;
+      const hasTremolo =
+        program.tremoloEnabled === true || program.tremoloEnabled === 1;
+      const hasTrill =
+        program.trillEnabled === true || program.trillEnabled === 1;
+      const targetExpression = hasVibrato
+        ? "VIBRATO"
+        : hasTremolo
+          ? "TREMOLO"
+          : hasTrill
+            ? "TRILL"
+            : "NONE";
+
+      this.bowedStringNode.port.postMessage({
+        type: "setExpression",
+        expression: targetExpression,
+      });
+    }
+
+    // Apply parameters to worklet (with timing and transitions)
     for (const [param, value] of Object.entries(program)) {
       if (this.bowedStringNode.parameters.has(param)) {
-        this.bowedStringNode.parameters
-          .get(param)
-          .setValueAtTime(value, this.audioContext.currentTime);
+        const audioParam = this.bowedStringNode.parameters.get(param);
+
+        if (transitionData && transitionData.duration) {
+          // Use smooth transition over calculated varied duration
+          audioParam.setValueAtTime(audioParam.value, applyTime);
+          audioParam.linearRampToValueAtTime(
+            value,
+            applyTime + transitionData.duration,
+          );
+        } else {
+          // Immediate change
+          audioParam.setValueAtTime(value, applyTime);
+        }
       }
     }
 
     // Handle special parameters
     if (program.masterGain !== undefined) {
-      this.gainNode.gain.setValueAtTime(
-        program.masterGain * (this.isPoweredOn ? 1 : 0),
-        this.audioContext.currentTime,
-      );
+      const targetGain = program.masterGain * (this.isPoweredOn ? 1 : 0);
+
+      if (transitionData && transitionData.duration) {
+        // Use smooth transition over calculated varied duration
+        this.gainNode.gain.setValueAtTime(this.gainNode.gain.value, applyTime);
+        this.gainNode.gain.linearRampToValueAtTime(
+          targetGain,
+          applyTime + transitionData.duration,
+        );
+      } else {
+        // Immediate change
+        this.gainNode.gain.setValueAtTime(targetGain, applyTime);
+      }
     }
 
     if (program.power !== undefined) {
       this.setPower(program.power);
     }
 
-    // Start bowing if frequency is set
-    if (program.fundamentalFrequency && program.fundamentalFrequency > 0) {
+    // Handle bowing state changes
+    const shouldBow =
+      program.fundamentalFrequency && program.fundamentalFrequency > 0;
+
+    if (shouldBow && !this.isBowing) {
+      // Start bowing
+      if (transitionData && transitionData.delay) {
+        setTimeout(() => {
+          this.bowedStringNode.port.postMessage({
+            type: "setBowing",
+            value: true,
+          });
+          this.isBowing = true;
+        }, transitionData.delay * 1000);
+      } else {
+        this.bowedStringNode.port.postMessage({
+          type: "setBowing",
+          value: true,
+        });
+        this.isBowing = true;
+      }
+    } else if (!shouldBow && this.isBowing) {
+      // Stop bowing
       this.bowedStringNode.port.postMessage({
         type: "setBowing",
-        value: true,
+        value: false,
       });
+      this.isBowing = false;
     }
 
-    // Log program with expression status
+    // Log program with expression status and transition info
     const hasVibrato =
       program.vibratoEnabled === true || program.vibratoEnabled === 1;
     const hasTremolo =
@@ -251,9 +358,16 @@ export class SynthCore {
         : hasTrill
           ? "trill"
           : "none";
-    this.log(
-      `Applied program: ${program.fundamentalFrequency?.toFixed(1)}Hz, expression: ${expression}`,
-    );
+
+    if (transitionData) {
+      this.log(
+        `Applied program with transition: ${program.fundamentalFrequency?.toFixed(1)}Hz, expression: ${expression}, delay: ${transitionData.delay?.toFixed(2)}s, duration: ${transitionData.duration?.toFixed(2)}s`,
+      );
+    } else {
+      this.log(
+        `Applied program: ${program.fundamentalFrequency?.toFixed(1)}Hz, expression: ${expression}`,
+      );
+    }
   }
 
   // Set power state

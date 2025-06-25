@@ -33,9 +33,8 @@ export const Config = {
     "tremoloArticulation",
     "masterGain",
     "transitionDuration",
-    "transitionSpread",
     "transitionStagger",
-    "transitionVariance",
+    "transitionDurationSpread",
   ],
 
   // Expression Types
@@ -66,9 +65,8 @@ export const Config = {
     tremoloArticulation: 0.7,
     masterGain: 0.8,
     transitionDuration: 1.0,
-    transitionSpread: 20,
-    transitionStagger: "sync",
-    transitionVariance: 10,
+    transitionStagger: 0.0,
+    transitionDurationSpread: 0.0,
   },
 
   // UI Configuration

@@ -76,49 +76,19 @@
     };
 
     script.onerror = function (error) {
-      log("Failed to load modular system, falling back to legacy", "error");
+      log("Failed to load modular system - NO FALLBACK", "error");
       console.error("[MODULE-LOADER] app.js failed to load:", error);
-      systemLoaded = null; // Reset since modular failed
-      loadLegacySystem();
+      console.error("Full error details:", error);
+      showErrorMessage();
     };
 
     document.head.appendChild(script);
   }
 
-  // Load legacy system
+  // Legacy system removed - modular only
   function loadLegacySystem() {
-    // Prevent double loading
-    if (systemLoaded) {
-      log(`System already loaded: ${systemLoaded}. Skipping legacy load.`);
-      return;
-    }
-
-    log("Loading legacy system...");
-    systemLoaded = "legacy";
-    console.log(
-      "[MODULE-LOADER] loadLegacySystem() called - loading ctrl-main-logic.js",
-    );
-
-    const script = document.createElement("script");
-    script.src = "./js/ctrl-main-logic.js";
-
-    script.onload = function () {
-      log("Legacy system loaded successfully");
-      document.body.classList.add("legacy-loaded");
-
-      // Initialize legacy system
-      if (typeof start_controller === "function") {
-        start_controller();
-      }
-    };
-
-    script.onerror = function () {
-      log("Failed to load legacy system", "error");
-      systemLoaded = null; // Reset since legacy failed
-      showErrorMessage();
-    };
-
-    document.head.appendChild(script);
+    log("Legacy system disabled - modular only", "error");
+    showErrorMessage();
   }
 
   // Show error message if both systems fail
@@ -139,14 +109,15 @@
     `;
 
     errorDiv.innerHTML = `
-      <h3 style="margin: 0 0 10px 0;">Application Loading Error</h3>
-      <p style="margin: 0;">Unable to load the String Assembly FM Controller. Please:</p>
+      <h3 style="margin: 0 0 10px 0;">Modular System Loading Error</h3>
+      <p style="margin: 0;">Unable to load the modular String Assembly FM system. Check console for details.</p>
       <ul style="margin: 10px 0 0 20px;">
-        <li>Refresh the page</li>
-        <li>Check your browser console for errors</li>
-        <li>Ensure you're using a modern browser</li>
-        <li>Check your internet connection</li>
+        <li>Check browser console for specific module errors</li>
+        <li>Verify all module files exist and have correct MIME types</li>
+        <li>Ensure you're using a modern browser with ES6 module support</li>
+        <li>Check network connectivity</li>
       </ul>
+      <p style="margin: 10px 0 0 0; font-weight: bold;">Legacy fallback has been disabled.</p>
     `;
 
     document.body.appendChild(errorDiv);

@@ -50,14 +50,26 @@ export class ChordManager {
    * @private
    */
   setupEventListeners() {
-    // Listen for piano chord changes
+    // Listen for piano chord changes (but don't auto-distribute)
     this.eventBus.on("piano:chordChanged", (data) => {
-      this.handleChordChange(data.chord, data.noteNames);
+      this.currentChord = [...data.chord];
+      if (window.Logger) {
+        window.Logger.log(
+          `DEBUG ChordManager: Piano chord updated: [${data.noteNames.join(", ")}] (not distributed)`,
+          "expressions",
+        );
+        window.Logger.log(
+          `DEBUG ChordManager: currentChord is now: ${JSON.stringify(this.currentChord)}`,
+          "expressions",
+        );
+      }
     });
 
-    // Listen for synth connections/disconnections
+    // Listen for synth connections (but don't auto-redistribute)
     this.eventBus.on("network:synthConnected", (data) => {
-      this.redistributeChord();
+      if (window.Logger) {
+        window.Logger.log(`Synth connected: ${data.synthId}`, "expressions");
+      }
     });
 
     this.eventBus.on("webrtc:peerDisconnected", (data) => {
@@ -66,7 +78,12 @@ export class ChordManager {
 
     // Listen for distribution algorithm changes
     this.eventBus.on("chord:algorithmChanged", (data) => {
-      this.setDistributionAlgorithm(data.algorithm);
+      this.distributionAlgorithm = data.algorithm;
+    });
+
+    // Listen for explicit program send requests
+    this.eventBus.on("program:sendRequested", (data) => {
+      return this.distributeForProgramSend(data.program);
     });
   }
 
@@ -75,15 +92,12 @@ export class ChordManager {
    * @private
    */
   setupStateSubscriptions() {
-    // Subscribe to chord changes
+    // Subscribe to chord changes (but don't auto-distribute)
     this.appState.subscribe("currentChord", (newChord) => {
-      this.updateChord(newChord);
+      this.currentChord = [...(newChord || [])];
     });
 
-    // Subscribe to connected synths changes
-    this.appState.subscribe("connectedSynths", () => {
-      this.redistributeChord();
-    });
+    // REMOVED connectedSynths subscription - was causing auto-redistribution on ping/pong
   }
 
   /**
@@ -93,25 +107,7 @@ export class ChordManager {
    * @private
    */
   handleChordChange(chord, noteNames) {
-    this.currentChord = [...chord];
-
-    if (window.Logger) {
-      window.Logger.log(
-        `Chord changed: [${noteNames.join(", ")}]`,
-        "expressions",
-      );
-    }
-
-    // Distribute chord to connected synths
-    this.distributeChord(chord, noteNames);
-
-    // Emit chord distribution event
-    this.eventBus.emit("chord:distributed", {
-      chord,
-      noteNames,
-      distribution: this.getDistributionSummary(),
-      timestamp: Date.now(),
-    });
+    // DO NOTHING - no auto-distribution
   }
 
   /**
@@ -120,19 +116,7 @@ export class ChordManager {
    * @private
    */
   updateChord(newChord) {
-    if (!newChord || !Array.isArray(newChord)) {
-      this.currentChord = [];
-      this.chordDistribution.clear();
-      return;
-    }
-
-    this.currentChord = [...newChord];
-
-    // Convert frequencies to note names
-    const noteNames = newChord.map((freq) => this.frequencyToNoteName(freq));
-
-    // Redistribute with new chord
-    this.distributeChord(newChord, noteNames);
+    // DO NOTHING - no auto-distribution
   }
 
   /**
@@ -219,6 +203,13 @@ export class ChordManager {
         const perNoteExpressions =
           this.appState.get("perNoteExpressions") || {};
 
+        if (window.Logger) {
+          window.Logger.log(
+            `DEBUG distributeStochastic: synthIds passed to chordDistributor: ${JSON.stringify(synthIds)}`,
+            "expressions",
+          );
+        }
+
         const distribution = window.chordDistributor.distributeChord(
           chordData,
           synthIds,
@@ -226,15 +217,42 @@ export class ChordManager {
         );
 
         // Convert to our internal format
-        Object.entries(distribution).forEach(([synthId, assignment]) => {
-          this.chordDistribution.set(synthId, {
-            frequency: assignment.frequency,
-            noteName: assignment.note,
-            index: assignment.index,
-            algorithm: "stochastic",
-            timestamp: Date.now(),
-          });
-        });
+        if (window.Logger) {
+          window.Logger.log(
+            `DEBUG distributeStochastic: Raw distribution from chordDistributor: ${JSON.stringify(distribution)}`,
+            "expressions",
+          );
+          window.Logger.log(
+            `DEBUG distributeStochastic: distribution keys: ${JSON.stringify(Object.keys(distribution))}`,
+            "expressions",
+          );
+        }
+
+        Object.entries(distribution).forEach(
+          ([distributionKey, assignment]) => {
+            // The stochastic distributor returns indices as keys, not synth IDs
+            // Map the index back to the actual synth ID
+            const synthIndex = parseInt(distributionKey);
+            const actualSynthId = synthIds[synthIndex];
+
+            const internalAssignment = {
+              frequency: assignment.frequency,
+              noteName: assignment.note,
+              index: assignment.index,
+              algorithm: "stochastic",
+              timestamp: Date.now(),
+            };
+
+            if (window.Logger) {
+              window.Logger.log(
+                `DEBUG distributeStochastic: Creating assignment for ${actualSynthId} (index ${distributionKey}): ${JSON.stringify(internalAssignment)}`,
+                "expressions",
+              );
+            }
+
+            this.chordDistribution.set(actualSynthId, internalAssignment);
+          },
+        );
       } catch (error) {
         if (window.Logger) {
           window.Logger.log(
@@ -258,16 +276,31 @@ export class ChordManager {
    * @private
    */
   distributeRoundRobin(chord, noteNames, synthIds) {
+    if (window.Logger) {
+      window.Logger.log(
+        `DEBUG distributeRoundRobin: chord=${JSON.stringify(chord)}, noteNames=${JSON.stringify(noteNames)}, synthIds=${JSON.stringify(synthIds)}`,
+        "expressions",
+      );
+    }
+
     synthIds.forEach((synthId, synthIndex) => {
       const noteIndex = synthIndex % chord.length;
-
-      this.chordDistribution.set(synthId, {
+      const assignment = {
         frequency: chord[noteIndex],
         noteName: noteNames[noteIndex],
         index: noteIndex,
         algorithm: "round-robin",
         timestamp: Date.now(),
-      });
+      };
+
+      if (window.Logger) {
+        window.Logger.log(
+          `DEBUG distributeRoundRobin: Creating assignment for ${synthId}: ${JSON.stringify(assignment)}`,
+          "expressions",
+        );
+      }
+
+      this.chordDistribution.set(synthId, assignment);
     });
   }
 
@@ -296,12 +329,7 @@ export class ChordManager {
    * Redistribute chord to all connected synths
    */
   redistributeChord() {
-    if (this.currentChord.length > 0) {
-      const noteNames = this.currentChord.map((freq) =>
-        this.frequencyToNoteName(freq),
-      );
-      this.distributeChord(this.currentChord, noteNames);
-    }
+    // DO NOTHING - no auto-redistribution
   }
 
   /**
@@ -319,8 +347,7 @@ export class ChordManager {
       );
     }
 
-    // Redistribute remaining chord if needed
-    this.redistributeChord();
+    // Don't auto-redistribute on disconnect
   }
 
   /**
@@ -432,9 +459,7 @@ export class ChordManager {
       );
     }
 
-    // Redistribute current chord with new algorithm
-    this.redistributeChord();
-
+    // Don't auto-redistribute - wait for explicit program send
     this.eventBus.emit("chord:algorithmChanged", {
       algorithm,
       timestamp: Date.now(),
@@ -554,6 +579,200 @@ export class ChordManager {
       "B",
     ];
     return `${noteNames[noteIndex]}${octave}`;
+  }
+
+  /**
+   * Assign note to newly connected synth without redistributing existing assignments
+   * @param {string} synthId - New synth ID
+   * @returns {Object|null} Assignment object
+   */
+  assignNoteToNewSynth(synthId) {
+    if (!this.currentChord || this.currentChord.length === 0) {
+      return null;
+    }
+
+    if (this.chordDistribution.has(synthId)) {
+      return this.chordDistribution.get(synthId);
+    }
+
+    const existingAssignments = this.chordDistribution.size;
+    const noteIndex = existingAssignments % this.currentChord.length;
+
+    const frequency = this.currentChord[noteIndex];
+    const noteName = this.frequencyToNoteName(frequency);
+
+    const assignment = {
+      frequency,
+      noteName,
+      index: noteIndex,
+      algorithm: this.distributionAlgorithm,
+      timestamp: Date.now(),
+    };
+
+    this.chordDistribution.set(synthId, assignment);
+
+    if (window.Logger) {
+      window.Logger.log(
+        `Assigned ${noteName} to newly connected synth ${synthId}`,
+        "expressions",
+      );
+    }
+
+    return assignment;
+  }
+
+  /**
+   * Distribute chord for explicit program send
+   * @param {Object} program - Complete program object
+   * @returns {Array} Distribution assignments
+   */
+  distributeForProgramSend(program) {
+    if (window.Logger) {
+      window.Logger.log(
+        `DEBUG ChordManager: distributeForProgramSend called with currentChord: ${JSON.stringify(this.currentChord)}`,
+        "expressions",
+      );
+    }
+
+    if (!this.currentChord || this.currentChord.length === 0) {
+      if (window.Logger) {
+        window.Logger.log(
+          "DEBUG ChordManager: No chord selected - sending base program only",
+          "expressions",
+        );
+      }
+      const connectedSynths = this.appState.get("connectedSynths");
+      const assignments = [];
+
+      connectedSynths.forEach((synthData, synthId) => {
+        const baseProgram = { ...program, powerOn: program.powerOn !== false };
+        // Set default expression to none when no chord
+        baseProgram.expression = "none";
+        baseProgram.vibratoEnabled = false;
+        baseProgram.tremoloEnabled = false;
+        baseProgram.trillEnabled = false;
+
+        assignments.push({
+          synthId,
+          program: baseProgram,
+          assignment: null,
+        });
+      });
+
+      return assignments;
+    }
+
+    const connectedSynths = this.appState.get("connectedSynths");
+    if (connectedSynths.size === 0) {
+      return [];
+    }
+
+    const noteNames = this.currentChord.map((freq) =>
+      this.frequencyToNoteName(freq),
+    );
+
+    if (window.Logger) {
+      window.Logger.log(
+        `DEBUG ChordManager: About to call distributeChord with chord=${JSON.stringify(this.currentChord)}, noteNames=${JSON.stringify(noteNames)}`,
+        "expressions",
+      );
+    }
+
+    this.distributeChord(this.currentChord, noteNames);
+
+    if (window.Logger) {
+      window.Logger.log(
+        `DEBUG ChordManager: After distributeChord, chordDistribution has ${this.chordDistribution.size} entries`,
+        "expressions",
+      );
+    }
+
+    const assignments = [];
+    connectedSynths.forEach((synthData, synthId) => {
+      const assignment = this.chordDistribution.get(synthId);
+      const synthProgram = { ...program };
+
+      if (window.Logger) {
+        window.Logger.log(
+          `DEBUG ChordManager: Processing synth ${synthId}, assignment: ${JSON.stringify(assignment)}`,
+          "expressions",
+        );
+      }
+
+      if (assignment) {
+        synthProgram.fundamentalFrequency = assignment.frequency;
+        synthProgram.assignedNote = assignment.noteName;
+
+        const expressions = this.appState.get("perNoteExpressions") || {};
+        const noteExpression = expressions[assignment.noteName];
+
+        if (window.Logger) {
+          window.Logger.log(
+            `DEBUG ChordManager: expressions from appState: ${JSON.stringify(expressions)}`,
+            "expressions",
+          );
+          window.Logger.log(
+            `DEBUG ChordManager: noteExpression for ${assignment.noteName}: ${JSON.stringify(noteExpression)}`,
+            "expressions",
+          );
+        }
+
+        if (noteExpression) {
+          // Set the expression type field for synth compatibility
+          synthProgram.expression = noteExpression.type;
+
+          switch (noteExpression.type) {
+            case "vibrato":
+              synthProgram.vibratoEnabled = true;
+              synthProgram.vibratoDepth = noteExpression.depth || 0.01;
+              synthProgram.vibratoRate = noteExpression.rate || 4;
+              break;
+            case "tremolo":
+              synthProgram.tremoloEnabled = true;
+              synthProgram.tremoloDepth = noteExpression.depth || 0.3;
+              synthProgram.tremoloSpeed = noteExpression.speed || 10;
+              break;
+            case "trill":
+              synthProgram.trillEnabled = true;
+              synthProgram.trillInterval = noteExpression.interval || 2;
+              synthProgram.trillSpeed = noteExpression.speed || 8;
+              break;
+          }
+
+          if (window.Logger) {
+            window.Logger.log(
+              `DEBUG ChordManager: Applied expression ${noteExpression.type} to synth ${synthId}`,
+              "expressions",
+            );
+          }
+        } else {
+          // No expression for this note
+          synthProgram.expression = "none";
+          synthProgram.vibratoEnabled = false;
+          synthProgram.tremoloEnabled = false;
+          synthProgram.trillEnabled = false;
+
+          if (window.Logger) {
+            window.Logger.log(
+              `DEBUG ChordManager: No expression found for note ${assignment.noteName} (synth ${synthId})`,
+              "expressions",
+            );
+          }
+        }
+      }
+
+      assignments.push({ synthId, program: synthProgram, assignment });
+    });
+
+    this.eventBus.emit("chord:distributed", {
+      chord: this.currentChord,
+      noteNames,
+      assignments,
+      distribution: this.getDistributionSummary(),
+      timestamp: Date.now(),
+    });
+
+    return assignments;
   }
 
   /**

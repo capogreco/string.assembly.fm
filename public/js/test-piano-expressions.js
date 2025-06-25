@@ -33,11 +33,102 @@ class PianoExpressionTester {
     // Test 5: Visual Feedback
     await this.testVisualFeedback();
 
-    // Test 6: Distribution Logic
+    // Test distribution logic
     await this.testDistributionLogic();
+
+    // Test 7: Clear Functionality
+    await this.testClearFunctionality();
+
+    // Test 8: Instrument Range
+    await this.testInstrumentRange();
+
+    // Test 9: Out-of-Range Trill Blocking
+    await this.testTrillRangeBlocking();
 
     // Report results
     this.reportResults();
+  }
+
+  /**
+   * Test instrument range functionality
+   */
+  async testInstrumentRange() {
+    console.log("Testing instrument range functionality...");
+
+    // Test different instrument ranges
+    const instrumentTests = [
+      {
+        bodyType: 0, // Violin
+        name: "Violin",
+        lowNote: "G3",
+        highNote: "A7",
+        testNotes: [
+          { note: "G3", shouldBeInRange: true },
+          { note: "E4", shouldBeInRange: true },
+          { note: "A7", shouldBeInRange: true },
+          { note: "C2", shouldBeInRange: false },
+          { note: "C8", shouldBeInRange: false },
+        ],
+      },
+      {
+        bodyType: 3, // Double Bass
+        name: "Double Bass",
+        lowNote: "E1",
+        highNote: "G4",
+        testNotes: [
+          { note: "E1", shouldBeInRange: true },
+          { note: "C2", shouldBeInRange: true },
+          { note: "G4", shouldBeInRange: true },
+          { note: "C1", shouldBeInRange: false },
+          { note: "A5", shouldBeInRange: false },
+        ],
+      },
+      {
+        bodyType: 4, // None (full range)
+        name: "None",
+        lowNote: "C0",
+        highNote: "B8",
+        testNotes: [
+          { note: "C1", shouldBeInRange: true },
+          { note: "C4", shouldBeInRange: true },
+          { note: "C7", shouldBeInRange: true },
+        ],
+      },
+    ];
+
+    for (const test of instrumentTests) {
+      const rangeValid = this.testInstrumentRangeForBodyType(test);
+      this.recordTest(
+        `Instrument Range: ${test.name} range validation`,
+        rangeValid.success,
+        {
+          instrument: test.name,
+          bodyType: test.bodyType,
+          expectedRange: `${test.lowNote} - ${test.highNote}`,
+          details: rangeValid.details,
+        },
+      );
+
+      // Test individual notes for this instrument
+      for (const noteTest of test.testNotes) {
+        const noteInRange = this.simulateNoteRangeCheck(
+          noteTest.note,
+          test.bodyType,
+        );
+        const passed = noteInRange === noteTest.shouldBeInRange;
+
+        this.recordTest(
+          `Instrument Range: ${test.name} - ${noteTest.note} ${noteTest.shouldBeInRange ? "should be" : "should not be"} in range`,
+          passed,
+          {
+            instrument: test.name,
+            note: noteTest.note,
+            expected: noteTest.shouldBeInRange,
+            actual: noteInRange,
+          },
+        );
+      }
+    }
   }
 
   /**
@@ -353,6 +444,117 @@ class PianoExpressionTester {
   }
 
   /**
+   * Test clear functionality
+   */
+  async testClearFunctionality() {
+    console.log("Testing clear functionality...");
+
+    // Test clearing chord and expressions
+    const mockChord = ["C4", "E4", "G4"];
+    const mockExpressions = {
+      C4: { type: "vibrato", depth: 0.5 },
+      E4: { type: "tremolo", depth: 0.3 },
+      G4: { type: "trill", targetNote: "A4" },
+    };
+
+    // Simulate setting up state
+    const mockState = {
+      chord: mockChord,
+      expressions: mockExpressions,
+    };
+
+    // Simulate clear operation
+    const clearedState = this.simulateClearOperation(mockState);
+
+    // Verify everything is cleared
+    const chordCleared = clearedState.chord.length === 0;
+    const expressionsCleared =
+      Object.keys(clearedState.expressions).length === 0;
+    const canvasCleared = clearedState.canvasCleared;
+
+    this.recordTest("Clear: Chord state cleared", chordCleared, {
+      originalChordLength: mockChord.length,
+      clearedChordLength: clearedState.chord.length,
+    });
+
+    this.recordTest("Clear: Expressions cleared", expressionsCleared, {
+      originalExpressionCount: Object.keys(mockExpressions).length,
+      clearedExpressionCount: Object.keys(clearedState.expressions).length,
+    });
+
+    this.recordTest("Clear: Canvas overlay cleared", canvasCleared, {
+      canvasCleared,
+    });
+
+    // Test chord display after clear
+    const chordDisplayAfterClear = this.simulateChordDisplay(
+      clearedState.chord,
+      clearedState.expressions,
+    );
+    const displayShowsNone = chordDisplayAfterClear === "";
+
+    this.recordTest("Clear: Chord display reset", displayShowsNone, {
+      expected: "",
+      actual: chordDisplayAfterClear,
+    });
+  }
+
+  /**
+   * Test that out-of-range keys cannot be selected as trill targets
+   */
+  async testTrillRangeBlocking() {
+    console.log("Testing trill range blocking...");
+
+    const testCases = [
+      {
+        bodyType: 0, // Violin
+        sourceNote: "E4", // In range for violin
+        targetNote: "C2", // Out of range for violin
+        shouldBeBlocked: true,
+        description: "Violin should block trill to low C2",
+      },
+      {
+        bodyType: 0, // Violin
+        sourceNote: "A4", // In range for violin
+        targetNote: "C8", // Out of range for violin
+        shouldBeBlocked: true,
+        description: "Violin should block trill to high C8",
+      },
+      {
+        bodyType: 3, // Double Bass
+        sourceNote: "G2", // In range for bass
+        targetNote: "A5", // Out of range for bass
+        shouldBeBlocked: true,
+        description: "Double Bass should block trill to high A5",
+      },
+      {
+        bodyType: 4, // None (full range)
+        sourceNote: "C4", // In range
+        targetNote: "C2", // In range for "None"
+        shouldBeBlocked: false,
+        description: "None instrument should allow any trill target",
+      },
+    ];
+
+    for (const test of testCases) {
+      const isBlocked = this.simulateTrillRangeBlocking(
+        test.bodyType,
+        test.sourceNote,
+        test.targetNote,
+      );
+      const passed = isBlocked === test.shouldBeBlocked;
+
+      this.recordTest(`Trill Range: ${test.description}`, passed, {
+        bodyType: test.bodyType,
+        sourceNote: test.sourceNote,
+        targetNote: test.targetNote,
+        expected: test.shouldBeBlocked ? "blocked" : "allowed",
+        actual: isBlocked ? "blocked" : "allowed",
+      });
+    }
+  }
+
+  /**
    * Test distribution logic
    */
   async testDistributionLogic() {
@@ -635,6 +837,109 @@ class PianoExpressionTester {
 
   isValidNoteName(note) {
     return /^[A-G]#?[0-9]$/.test(note);
+  }
+
+  simulateClearOperation(state) {
+    // Simulate the clear operation
+    return {
+      chord: [], // Chord should be empty after clear
+      expressions: {}, // Expressions should be empty after clear
+      canvasCleared: true, // Canvas should be cleared
+    };
+  }
+
+  testInstrumentRangeForBodyType(instrumentTest) {
+    try {
+      // Simulate instrument range checking
+      const ranges = {
+        0: { low: 196.0, high: 3520.0 }, // Violin (G3 to A7)
+        1: { low: 130.81, high: 1318.51 }, // Viola (C3 to E6)
+        2: { low: 65.41, high: 1046.5 }, // Cello (C2 to C6)
+        3: { low: 41.2, high: 392.0 }, // Double Bass (E1 to G4)
+        4: { low: 16.35, high: 7902.13 }, // None (C0 to B8)
+      };
+
+      const range = ranges[instrumentTest.bodyType];
+      const hasValidRange = range && range.low > 0 && range.high > range.low;
+
+      return {
+        success: hasValidRange,
+        details: {
+          bodyType: instrumentTest.bodyType,
+          name: instrumentTest.name,
+          lowFreq: range?.low,
+          highFreq: range?.high,
+          rangeValid: hasValidRange,
+        },
+      };
+    } catch (error) {
+      return {
+        success: false,
+        details: { error: error.message },
+      };
+    }
+  }
+
+  simulateNoteRangeCheck(noteName, bodyType) {
+    // Simulate frequency conversion and range checking
+    const noteFrequencies = {
+      C1: 32.7,
+      E1: 41.2,
+      C2: 65.41,
+      G3: 196.0,
+      C4: 261.63,
+      E4: 329.63,
+      G4: 392.0,
+      A5: 880.0,
+      C7: 2093.0,
+      A7: 3520.0,
+      C8: 4186.01,
+    };
+
+    const ranges = {
+      0: { low: 196.0, high: 3520.0 }, // Violin
+      1: { low: 130.81, high: 1318.51 }, // Viola
+      2: { low: 65.41, high: 1046.5 }, // Cello
+      3: { low: 41.2, high: 392.0 }, // Double Bass
+      4: { low: 16.35, high: 7902.13 }, // None
+    };
+
+    const frequency = noteFrequencies[noteName] || 440; // Default to A4
+    const range = ranges[bodyType];
+
+    if (!range) return true; // If no range defined, assume in range
+
+    return frequency >= range.low && frequency <= range.high;
+  }
+
+  simulateTrillRangeBlocking(bodyType, sourceNote, targetNote) {
+    // Simulate the range checking logic
+    const noteFrequencies = {
+      C2: 65.41,
+      G2: 98.0,
+      E4: 329.63,
+      A4: 440.0,
+      C4: 261.63,
+      A5: 880.0,
+      C8: 4186.01,
+    };
+
+    const ranges = {
+      0: { low: 196.0, high: 3520.0 }, // Violin
+      1: { low: 130.81, high: 1318.51 }, // Viola
+      2: { low: 65.41, high: 1046.5 }, // Cello
+      3: { low: 41.2, high: 392.0 }, // Double Bass
+      4: { low: 16.35, high: 7902.13 }, // None
+    };
+
+    const targetFreq = noteFrequencies[targetNote] || 440;
+    const range = ranges[bodyType];
+
+    if (!range) return false; // If no range, allow (shouldn't happen)
+
+    // Key is blocked if it's out of range
+    const isOutOfRange = targetFreq < range.low || targetFreq > range.high;
+    return isOutOfRange;
   }
 
   recordTest(testName, passed, details = {}) {

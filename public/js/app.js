@@ -17,8 +17,7 @@ import { networkCoordinator } from "./modules/network/NetworkCoordinator.js";
 import { uiManager } from "./modules/ui/UIManager.js";
 import { parameterControls } from "./modules/ui/ParameterControls.js";
 import { pianoKeyboard } from "./modules/ui/PianoKeyboard.js";
-import { expressionManager } from "./modules/audio/ExpressionManager.js";
-import { chordManager } from "./modules/audio/ChordManager.js";
+import { partManager } from "./modules/audio/PartManager.js";
 import { AudioUtilities } from "./modules/utils/AudioUtilities.js";
 
 // ========== WebSocket Debugging ==========
@@ -409,11 +408,13 @@ async function initializeUI() {
 async function initializeAudio() {
   Logger.log("Initializing audio system...", "lifecycle");
 
-  // Initialize expression manager
-  expressionManager.initialize();
+  // Initialize part manager (replaces expression and chord managers)
+  await partManager.initialize();
 
-  // Initialize chord manager
-  chordManager.initialize();
+  // Store in app state for global access
+  appState.set("partManager", partManager);
+  appState.set("parameterControls", parameterControls);
+  appState.set("networkCoordinator", networkCoordinator);
 
   // Set up audio event handlers
   setupAudioEventHandlers();
@@ -425,58 +426,50 @@ async function initializeAudio() {
  * Set up audio event handlers
  */
 function setupAudioEventHandlers() {
-  // Handle expression assignments
-  expressionManager.on("updated", (data) => {
-    Logger.log(
-      `Expressions updated: ${data.expressions.length} expressions, mode: ${data.expressionMode}`,
-      "expressions",
-    );
-  });
-
-  // Handle chord distribution
-  chordManager.on("distributed", (data) => {
-    Logger.log(
-      `Chord distributed: ${data.noteNames.join(", ")} to ${Object.keys(data.distribution.assignments).length} synths`,
-      "expressions",
-    );
-  });
-
-  // Handle chord algorithm changes
-  chordManager.on("algorithmChanged", (data) => {
-    Logger.log(
-      `Chord distribution algorithm changed: ${data.algorithm}`,
-      "expressions",
-    );
-  });
+  // PartManager handles all chord and expression events internally
+  // No additional event handlers needed
+  Logger.log(
+    "Audio event handlers set up (PartManager handles internally)",
+    "lifecycle",
+  );
 }
 
 /**
  * Set up UI event handlers
  */
 function setupUIEventHandlers() {
-  // Handle parameter changes
+  // Handle parameter changes (don't auto-send)
   parameterControls.on("changed", (data) => {
     Logger.log(
       `Parameter changed: ${data.paramId} = ${data.value}`,
       "parameters",
     );
-
-    // Send parameter updates to connected synths
-    if (window.networkCoordinator) {
-      const currentProgram = parameterControls.getAllParameterValues();
-      window.networkCoordinator.broadcastProgram(currentProgram);
-    }
+    // Removed auto-send to synths
   });
 
-  // Handle chord changes from piano
+  // Handle chord changes from piano (don't auto-distribute)
   pianoKeyboard.on("chordChanged", (data) => {
-    Logger.log(`Chord changed: ${data.noteNames.join(", ")}`, "expressions");
+    Logger.log(`Chord updated: ${data.noteNames.join(", ")}`, "expressions");
 
-    // Update chord state for distribution
+    // Update part manager
+    partManager.setChord(data.chord);
+
+    // Update legacy app state for compatibility
     appState.set("currentChord", data.chord);
+  });
 
-    // Trigger chord distribution
-    chordManager.setChord(data.chord);
+  // Handle expression changes from piano
+  eventBus.on("expression:changed", (data) => {
+    if (data.note && data.expression) {
+      Logger.log(
+        `Expression assigned: ${data.note} = ${data.expression.type}`,
+        "expressions",
+      );
+      partManager.setNoteExpression(data.note, data.expression);
+    } else if (data.note && !data.expression) {
+      Logger.log(`Expression removed: ${data.note}`, "expressions");
+      partManager.setNoteExpression(data.note, null);
+    }
   });
 
   // Handle program save/load UI feedback
@@ -497,20 +490,49 @@ function setupUIEventHandlers() {
         2000,
       );
     });
+
+  // Set up "Send Current Program" button
+  setupProgramSendButton();
 }
 
 /**
  * Set up network event handlers
  */
 function setupNetworkEventHandlers() {
-  // Handle synth connections
+  // Handle synth connections - send current program but don't redistribute
   networkCoordinator.on("synthConnected", (data) => {
     Logger.log(`Synth connected: ${data.synthId}`, "connections");
 
-    // Auto-send current program to newly connected synth
-    const currentProgram =
-      appState.get("currentProgram") || programManager.createExampleProgram();
-    networkCoordinator.sendProgramToSynth(data.synthId, currentProgram);
+    // Send the current program state to the new synth
+    const currentProgram = appState.get("currentProgram");
+
+    if (currentProgram) {
+      const currentChord = appState.get("currentChord") || [];
+
+      if (currentChord.length > 0) {
+        // PartManager handles synth connections automatically
+        // Just log that we received the connection
+        Logger.log(
+          `Synth ${data.synthId} connected - PartManager will handle assignment`,
+          "messages",
+        );
+      } else {
+        // No active chord - send base program
+        networkCoordinator.sendProgramToSynth(data.synthId, currentProgram);
+        Logger.log(
+          `Sent base program to newly connected ${data.synthId}`,
+          "messages",
+        );
+      }
+    } else {
+      // No current program - send default program
+      const defaultProgram = programManager.createExampleProgram();
+      networkCoordinator.sendProgramToSynth(data.synthId, defaultProgram);
+      Logger.log(
+        `Sent default program to newly connected ${data.synthId}`,
+        "messages",
+      );
+    }
   });
 
   // Handle program requests from synths
@@ -577,6 +599,77 @@ function setupGlobalEventListeners() {
 }
 
 /**
+ * Set up "Send Current Program" button handler
+ */
+function setupProgramSendButton() {
+  const sendButton = document.getElementById("send_current_program");
+  const statusBadge = document.getElementById("status_badge");
+
+  if (!sendButton) {
+    Logger.log("Send Current Program button not found", "error");
+    return;
+  }
+
+  sendButton.addEventListener("click", async () => {
+    try {
+      Logger.log("Send Current Program button clicked", "messages");
+
+      if (statusBadge) {
+        statusBadge.textContent = "⏳ Sending...";
+        statusBadge.className = "status-badge sending";
+      }
+
+      await sendCurrentProgram();
+
+      if (statusBadge) {
+        statusBadge.textContent = "✓ Synced";
+        statusBadge.className = "status-badge synced";
+      }
+
+      Logger.log("Program sent successfully", "messages");
+    } catch (error) {
+      Logger.log(`Failed to send program: ${error}`, "error");
+
+      if (statusBadge) {
+        statusBadge.textContent = "⚠ Error";
+        statusBadge.className = "status-badge error";
+      }
+    }
+  });
+
+  Logger.log("Send Current Program button handler registered", "lifecycle");
+}
+
+// Global function for button handlers
+window.sendCurrentProgram = async () => {
+  try {
+    const result = await partManager.sendCurrentPart();
+    Logger.log(
+      `Program sent successfully to ${result.successCount}/${result.totalSynths} synths`,
+      "messages",
+    );
+
+    // Mark parameters as sent
+    if (parameterControls.markAllParametersSent) {
+      parameterControls.markAllParametersSent();
+    }
+
+    return result;
+  } catch (error) {
+    Logger.log(`Failed to send program: ${error.message}`, "error");
+    throw error;
+  }
+};
+
+/**
+ * Send current program to all connected synths
+ */
+// Simplified send function that uses PartManager
+async function sendCurrentProgram() {
+  return window.sendCurrentProgram();
+}
+
+/**
  * Compatibility layer for legacy code
  */
 function setupCompatibilityLayer() {
@@ -593,8 +686,7 @@ function setupCompatibilityLayer() {
     uiManager,
     parameterControls,
     pianoKeyboard,
-    expressionManager,
-    chordManager,
+    partManager,
     AudioUtilities,
     initialized: true,
   };
@@ -608,7 +700,12 @@ function setupCompatibilityLayer() {
     current_program: null,
     current_chord_state: null,
     program_banks: new Map(),
-    harmonicSelections: appState.get("harmonicSelections"),
+    harmonicSelections: Object.fromEntries(
+      Object.entries(partManager.harmonicSelections).map(([k, v]) => [
+        k,
+        Array.from(v),
+      ]),
+    ),
   };
 
   // Sync legacy state with modular state
@@ -654,29 +751,115 @@ if (Config.DEBUG.ENABLED) {
     uiManager,
     parameterControls,
     pianoKeyboard,
-    expressionManager,
-    chordManager,
-    AudioUtilities,
-    resetApp: () => eventBus.emit("app:reset"),
-    getState: () => appState.getState(),
+    partManager,
+    // Utility functions
+    getStatus: () => appState.getStatus(),
     getHistory: () => appState.getHistory(),
     getBanks: () => programManager.getSavedBanks(),
     getNetworkStatus: () => networkCoordinator.getNetworkStatus(),
-    getChordInfo: () => pianoKeyboard.getChordInfo(),
+    getChordInfo: () => partManager.getChordInfo(),
     getAllParams: () => parameterControls.getAllParameterValues(),
+    getPartStats: () => partManager.getStatistics(),
     testSave: () => programManager.saveToBank(1, Config.DEFAULT_PROGRAM),
     testLoad: () => programManager.loadFromBank(1),
     testConnect: () => networkCoordinator.connect(),
     testDisconnect: () => networkCoordinator.disconnect(),
-    testChord: () => pianoKeyboard.setChord([261.63, 329.63, 392.0]), // C major
+    testChord: () => partManager.setChord([261.63, 329.63, 392.0]),
+    testExpression: () =>
+      partManager.setNoteExpression("C4", { type: "vibrato", depth: 0.02 }),
+    testSend: () => partManager.sendCurrentPart(),
     testParam: () => parameterControls.setParameterValue("masterGain", 0.8),
-    testExpression: () => {
-      pianoKeyboard.setChord([261.63, 329.63, 392.0]);
-      appState.set("selectedExpression", "vibrato");
-      return expressionManager.assignNoteToSynth("test-synth");
+    testTransitions: () => {
+      console.log("=== Testing Transition Controls ===");
+
+      // Set up a chord and expressions
+      partManager.setChord([261.63, 329.63, 392.0]);
+      partManager.setNoteExpression("C4", { type: "vibrato", depth: 0.02 });
+      partManager.setNoteExpression("E4", { type: "tremolo", depth: 0.3 });
+
+      // Test with different transition durations
+      const durations = [0.5, 1.0, 2.0, 3.0];
+      const results = [];
+
+      durations.forEach((duration, i) => {
+        setTimeout(() => {
+          console.log(`Testing transition duration: ${duration}s`);
+          document.getElementById("transitionDuration").value =
+            duration.toString();
+          document.getElementById("transitionDurationValue").textContent =
+            duration.toFixed(1);
+
+          partManager
+            .sendCurrentPart()
+            .then((result) => {
+              console.log(`Duration ${duration}s - Success:`, result);
+              results.push({ duration, result });
+            })
+            .catch((error) => {
+              console.error(`Duration ${duration}s - Failed:`, error);
+              results.push({ duration, error });
+            });
+        }, i * 4000); // 4 seconds apart
+      });
+
+      console.log("Transition tests scheduled. Check results in 20 seconds.");
+      return Promise.resolve("Tests scheduled");
     },
-    testChordDistribution: () =>
-      chordManager.setDistributionAlgorithm("random"),
+    testPartManager: () => {
+      console.log("=== PartManager Test ===");
+
+      // Test chord setting
+      console.log("1. Setting chord to C major...");
+      partManager.setChord([261.63, 329.63, 392.0]);
+
+      // Test expression assignment
+      console.log("2. Adding vibrato to C4...");
+      partManager.setNoteExpression("C4", {
+        type: "vibrato",
+        depth: 0.02,
+        rate: 6,
+      });
+
+      // Test harmonic selection
+      console.log("3. Setting harmonic ratios...");
+      partManager.updateHarmonicSelection({
+        expression: "vibrato",
+        type: "numerator",
+        selection: [1, 2, 3],
+      });
+
+      // Test info retrieval
+      console.log("4. Getting chord info...");
+      const info = partManager.getChordInfo();
+      console.log("Chord info:", info);
+
+      // Test statistics
+      console.log("5. Getting statistics...");
+      const stats = partManager.getStatistics();
+      console.log("Stats:", stats);
+
+      // Test program send (if synths connected)
+      const connectedSynths = appState.get("connectedSynths");
+      if (connectedSynths && connectedSynths.size > 0) {
+        console.log("6. Sending current part...");
+        return partManager
+          .sendCurrentPart()
+          .then((result) => {
+            console.log("Send result:", result);
+            console.log("=== Test Complete ===");
+            return result;
+          })
+          .catch((error) => {
+            console.error("Send failed:", error);
+            console.log("=== Test Complete (with error) ===");
+            return error;
+          });
+      } else {
+        console.log("6. No synths connected, skipping send test");
+        console.log("=== Test Complete ===");
+        return Promise.resolve("No synths to test");
+      }
+    },
     enableAllLogs: () => {
       Object.keys(Logger.categories).forEach((cat) => {
         if (cat !== "errors") Logger.enable(cat);
@@ -684,7 +867,7 @@ if (Config.DEBUG.ENABLED) {
     },
     disableAllLogs: () => {
       Object.keys(Logger.categories).forEach((cat) => {
-        if (cat !== "errors" && cat !== "lifecycle") Logger.disable(cat);
+        Logger.disable(cat);
       });
     },
   };
@@ -716,11 +899,7 @@ function debugModuleLoading() {
     "pianoKeyboard:",
     typeof pianoKeyboard !== "undefined" ? "✓" : "✗",
   );
-  console.log(
-    "expressionManager:",
-    typeof expressionManager !== "undefined" ? "✓" : "✗",
-  );
-  console.log("chordManager:", typeof chordManager !== "undefined" ? "✓" : "✗");
+  console.log("partManager:", typeof partManager !== "undefined" ? "✓" : "✗");
   console.log(
     "AudioUtilities:",
     typeof AudioUtilities !== "undefined" ? "✓" : "✗",

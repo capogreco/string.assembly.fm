@@ -247,7 +247,10 @@
             </div>
         </div>
 
-        <script>
+        <script type="module">
+            // Import SynthCore
+            import { SynthCore } from "../src/synth/synth-core.js";
+
             // Global state
             let audioContext = null;
             let synths = [];
@@ -260,7 +263,7 @@
                 iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
             };
 
-            // Synth class
+            // Wrapper class for SynthCore in ensemble
             class TestSynth {
                 constructor(id, index, totalSynths) {
                     this.id = id;
@@ -270,12 +273,6 @@
                     this.expressionDisplay = null;
                     this.levelMeter = null;
                     this.panControl = null;
-
-                    // Audio nodes
-                    this.bowedString = null;
-                    this.gain = null;
-                    this.panner = null;
-                    this.analyser = null;
 
                     // State
                     this.currentNote = null;
@@ -295,75 +292,30 @@
                         totalSynths === 1
                             ? 0
                             : (index / (totalSynths - 1)) * 2 - 1;
+
+                    // Create SynthCore instance
+                    this.synthCore = new SynthCore(id, { enableLogging: true });
                 }
 
                 async initialize(audioCtx, destination) {
-                    // Create audio nodes
-                    this.gain = audioCtx.createGain();
-                    this.gain.gain.value = 0;
-
+                    // Create additional nodes for ensemble-specific features
                     this.panner = audioCtx.createStereoPanner();
                     this.panner.pan.value = this.panPosition;
 
                     this.analyser = audioCtx.createAnalyser();
                     this.analyser.fftSize = 256;
 
-                    // Create bowed string worklet
-                    try {
-                        // Verify worklet is available
-                        if (!audioCtx.audioWorklet) {
-                            throw new Error("AudioWorklet not supported");
-                        }
+                    // Initialize SynthCore
+                    await this.synthCore.initialize(audioCtx, this.analyser);
 
-                        this.bowedString = new AudioWorkletNode(
-                            audioCtx,
-                            "continuous-excitation-processor",
-                            {
-                                numberOfInputs: 0,
-                                numberOfOutputs: 1,
-                                outputChannelCount: [2],
-                            },
-                        );
+                    // Connect SynthCore output through our panner to destination
+                    this.analyser.connect(this.panner);
+                    this.panner.connect(destination);
 
-                        // Connect audio graph
-                        this.bowedString.connect(this.gain);
-                        this.gain.connect(this.analyser);
-                        this.analyser.connect(this.panner);
-                        this.panner.connect(destination);
-
-                        // Initialize parameters to defaults
-                        const defaultParams = {
-                            fundamentalFrequency: 220,
-                            bowForce: 0.3,
-                            bowPosition: 0.1,
-                            bowSpeed: 0.5,
-                            stringDamping: 0.1,
-                            stringMaterial: 0.5,
-                            brightness: 0.5,
-                            masterGain: 0.8,
-                        };
-
-                        for (const [param, value] of Object.entries(
-                            defaultParams,
-                        )) {
-                            if (this.bowedString.parameters.has(param)) {
-                                this.bowedString.parameters
-                                    .get(param)
-                                    .setValueAtTime(
-                                        value,
-                                        audioCtx.currentTime,
-                                    );
-                            }
-                        }
-
-                        log(`[${this.id}] Audio graph initialized`, "info");
-                    } catch (error) {
-                        log(
-                            `[${this.id}] Failed to create audio nodes: ${error.message}`,
-                            "error",
-                        );
-                        console.error(error);
-                    }
+                    log(
+                        `[${this.id}] SynthCore initialized with panning`,
+                        "info",
+                    );
                 }
 
                 handleParamMessage(event) {
@@ -378,6 +330,10 @@
                     );
 
                     if (data.type === "program") {
+                        log(
+                            `[${this.id}] Received program message with transition: ${JSON.stringify(data.transition)}`,
+                            "info",
+                        );
                         this.applyProgram(data.program, data.transition);
                     } else if (data.type === "setTransitionConfig") {
                         // Forward transition config to worklet
@@ -432,9 +388,16 @@
 
                 applyProgram(program, transition) {
                     log(
-                        `[${this.id}] Applying program: freq=${program.fundamentalFrequency?.toFixed(1)}Hz${transition ? " with transition" : ""}`,
+                        `[${this.id}] Applying program via SynthCore: freq=${program.fundamentalFrequency?.toFixed(1)}Hz${transition ? " with transition" : ""}`,
                         "info",
                     );
+
+                    if (transition) {
+                        log(
+                            `[${this.id}] Transition data: delay=${transition.delay?.toFixed(3)}s, duration=${transition.duration?.toFixed(3)}s`,
+                            "info",
+                        );
+                    }
 
                     // Store current program for banking
                     this.currentProgram = program;
@@ -446,165 +409,36 @@
                         );
                         this.currentNote = noteInfo.note;
                         this.noteDisplay.textContent = noteInfo.note;
+
+                        // Update expression display with specific expression
+                        if (program.vibratoEnabled) {
+                            this.currentExpression = "Vibrato";
+                        } else if (program.tremoloEnabled) {
+                            this.currentExpression = "Tremolo";
+                        } else if (program.trillEnabled) {
+                            this.currentExpression = "Trill";
+                        } else {
+                            this.currentExpression = "None";
+                        }
+                        this.expressionDisplay.textContent =
+                            this.currentExpression;
+                    } else {
+                        this.noteDisplay.textContent = "-";
+                        this.expressionDisplay.textContent = "None";
                     }
 
-                    // Update expression display
-                    let expression = "None";
-                    if (program.vibratoEnabled) expression = "Vibrato";
-                    else if (program.tremoloEnabled) expression = "Tremolo";
-                    else if (program.trillEnabled) expression = "Trill";
-                    this.currentExpression = expression;
-                    this.expressionDisplay.textContent = `Expression: ${expression}`;
+                    // Mark as active
+                    this.isActive = true;
 
-                    // Apply to worklet
-                    if (this.bowedString) {
-                        const defaultPeriod = 0.5; // 500ms default transition
-                        const lag = transition?.lag?.min || 0;
-                        const startTime = audioContext.currentTime + lag;
-
-                        // Send timed expression state to worklet
-                        let targetExpressionType = "NONE";
-                        if (program.vibratoEnabled)
-                            targetExpressionType = "VIBRATO";
-                        else if (program.tremoloEnabled)
-                            targetExpressionType = "TREMOLO";
-                        else if (program.trillEnabled)
-                            targetExpressionType = "TRILL";
-
-                        setTimeout(() => {
-                            if (this.bowedString) {
-                                // Re-check in case synth was destroyed
-                                this.bowedString.port.postMessage({
-                                    type: "setExpression",
-                                    expression: targetExpressionType,
-                                });
-                                log(
-                                    `[${this.id}] Sent setExpression: ${targetExpressionType} at ${lag.toFixed(3)}s lag`,
-                                    "info",
-                                );
-                            }
-                        }, lag * 1000);
-
-                        for (const [param, value] of Object.entries(program)) {
-                            // Skip expression enable flags - they're now handled by the timed setExpression message
-                            if (
-                                param === "vibratoEnabled" ||
-                                param === "tremoloEnabled" ||
-                                param === "trillEnabled"
-                            ) {
-                                continue;
-                            }
-
-                            // Handle AudioParams
-                            if (this.bowedString.parameters.has(param)) {
-                                const audioParam =
-                                    this.bowedString.parameters.get(param);
-                                const currentValue = audioParam.value;
-                                const targetValue =
-                                    typeof value === "boolean"
-                                        ? value
-                                            ? 1
-                                            : 0
-                                        : value;
-
-                                // Skip if value hasn't changed (unless it's fundamental frequency, always set for note on)
-                                if (
-                                    param !== "fundamentalFrequency" &&
-                                    Math.abs(currentValue - targetValue) < 0.001
-                                ) {
-                                    continue;
-                                }
-
-                                const period =
-                                    transition?.period?.min || defaultPeriod;
-                                // lag and startTime are already defined outside this loop
-                                const endTime = startTime + period;
-
-                                // Cancel any scheduled changes and pin current value
-                                audioParam.cancelScheduledValues(
-                                    audioContext.currentTime,
-                                );
-                                audioParam.setValueAtTime(
-                                    currentValue,
-                                    audioContext.currentTime,
-                                );
-
-                                if (transition) {
-                                    // Check if transition object exists
-                                    // Smooth transition for continuous parameters
-                                    if (
-                                        param === "fundamentalFrequency" &&
-                                        targetValue > 0 && // Ensure target is valid
-                                        currentValue > 0 // Ensure current is valid for ramp
-                                    ) {
-                                        // Exponential for frequency
-                                        audioParam.exponentialRampToValueAtTime(
-                                            targetValue,
-                                            endTime,
-                                        );
-                                    } else {
-                                        // Linear for everything else
-                                        audioParam.linearRampToValueAtTime(
-                                            targetValue,
-                                            endTime,
-                                        );
-                                    }
-                                    log(
-                                        `[${this.id}] Transitioning ${param} from ${currentValue.toFixed(3)} to ${targetValue.toFixed(3)} over ${period.toFixed(3)}s starting at ${lag.toFixed(3)}s lag`,
-                                        "info",
-                                    );
-                                } else {
-                                    // Immediate change if no transition object
-                                    audioParam.setValueAtTime(
-                                        targetValue,
-                                        startTime, // If lag is 0, this is effectively currentTime
-                                    );
-                                    log(
-                                        `[${this.id}] Set ${param} immediately to ${targetValue.toFixed(3)} at ${startTime.toFixed(3)}s`,
-                                        "info",
-                                    );
-                                }
-                            }
-                            // Handle discrete parameters via timed messages
-                            else if (
-                                param === "stringMaterial" ||
-                                param === "bodyType"
-                            ) {
-                                setTimeout(() => {
-                                    if (this.bowedString) {
-                                        // Re-check in case synth was destroyed
-                                        this.bowedString.port.postMessage({
-                                            type:
-                                                param === "stringMaterial"
-                                                    ? "setStringMaterial"
-                                                    : "setBodyType",
-                                            value: value,
-                                        });
-                                        log(
-                                            `[${this.id}] Sent ${param}: ${value} at ${lag.toFixed(3)}s lag`,
-                                            "info",
-                                        );
-                                    }
-                                }, lag * 1000);
-                            }
-                            // Else, if it's not an AudioParam and not a handled discrete param, log it (optional)
-                            // else {
-                            //    log(`[${this.id}] Unhandled program parameter (within loop): ${param}`, "info");
-                            // }
-                        } // End of for...of Object.entries(program)
-
-                        // Start bowing (if applicable and synth is active)
-                        // Assuming this.isActive reflects whether the synth *should* be making sound
-                        // and this.bowedString confirms the worklet is ready.
-                        if (this.bowedString && this.isActive !== false) {
-                            // isActive could be undefined initially
-                            this.bowedString.port.postMessage({
-                                type: "setBowing",
-                                value: true,
-                            });
-                            log(`[${this.id}] Sent setBowing: true`, "info");
-                        }
-                    } // End of if (this.bowedString) for applying parameters
+                    // Delegate to SynthCore for all synthesis logic
+                    if (this.synthCore && this.synthCore.isInitialized) {
+                        this.synthCore.applyProgram(program, transition);
+                    } else {
+                        log(
+                            `[${this.id}] SynthCore not ready for program`,
+                            "warn",
+                        );
+                    }
 
                     this.element.classList.add("active");
                     log(
@@ -614,56 +448,46 @@
                 } // End of applyProgram method
 
                 setPower(on) {
-                    const targetGain = on ? 0.7 : 0;
-                    this.gain.gain.linearRampToValueAtTime(
-                        targetGain,
-                        audioContext.currentTime + 0.1,
-                    );
                     this.isActive = on;
+
+                    if (this.synthCore) {
+                        this.synthCore.setPower(on);
+                    }
 
                     if (on) {
                         this.element.classList.add("active");
                     } else {
                         this.element.classList.remove("active");
                     }
+
+                    log(`[${this.id}] Power: ${on ? "ON" : "OFF"}`, "info");
                 }
 
                 handleSaveCommand(bankId) {
-                    if (!this.currentProgram) {
-                        log(`[${this.id}] No current program to save`, "error");
-                        return;
-                    }
-
-                    // Store a deep copy of current resolved parameters
-                    const savedProgram = JSON.parse(
-                        JSON.stringify(this.currentProgram),
-                    );
-                    this.synthBanks.set(bankId, savedProgram);
-
-                    // Also save to localStorage for persistence
-                    try {
-                        const allBanks = {};
-                        this.synthBanks.forEach((program, id) => {
-                            allBanks[id] = program;
-                        });
-                        localStorage.setItem(
-                            `synth-banks-${this.id}`,
-                            JSON.stringify(allBanks),
-                        );
+                    if (this.synthCore) {
+                        this.synthCore.saveToBank(bankId);
                         log(
-                            `[${this.id}] Saved resolved parameters to bank ${bankId}`,
+                            `[${this.id}] Saved to bank ${bankId} via SynthCore`,
                             "info",
                         );
-                    } catch (e) {
+                    } else {
                         log(
-                            `[${this.id}] Failed to save banks to localStorage: ${e.message}`,
+                            `[${this.id}] SynthCore not available for saving`,
                             "error",
                         );
                     }
                 }
 
                 handleLoadCommand(bankId, fallbackProgram) {
-                    if (this.synthBanks.has(bankId)) {
+                    if (this.synthCore) {
+                        const success = this.synthCore.loadFromBank(
+                            bankId,
+                            fallbackProgram,
+                        );
+                        if (!success && fallbackProgram) {
+                            this.applyProgram(fallbackProgram);
+                        }
+                    } else if (this.synthBanks.has(bankId)) {
                         // This synth has saved state - restore exact values
                         const savedProgram = this.synthBanks.get(bankId);
                         log(
@@ -680,8 +504,8 @@
                         this.applyProgram(fallbackProgram);
                     } else {
                         log(
-                            `[${this.id}] Bank ${bankId} not found and no fallback program provided`,
-                            "error",
+                            `[${this.id}] No saved program for bank ${bankId} and no fallback provided`,
+                            "warn",
                         );
                     }
                 }
@@ -739,19 +563,10 @@
                 updateLevel() {
                     if (!this.analyser || !this.levelMeter) return;
 
-                    const dataArray = new Uint8Array(
-                        this.analyser.frequencyBinCount,
-                    );
-                    this.analyser.getByteFrequencyData(dataArray);
-
-                    let sum = 0;
-                    for (let i = 0; i < dataArray.length; i++) {
-                        sum += dataArray[i];
-                    }
-                    const average = sum / dataArray.length;
-                    const normalizedLevel = average / 255;
-
-                    this.levelMeter.style.height = `${normalizedLevel * 100}%`;
+                    const level = this.synthCore
+                        ? this.synthCore.getAudioLevel()
+                        : 0;
+                    this.levelMeter.style.height = `${level * 100}%`;
                 }
 
                 createUI() {
@@ -829,7 +644,7 @@
                 }
             }
 
-            async function initializeEnsemble() {
+            window.initializeEnsemble = async function initializeEnsemble() {
                 const synthCount = parseInt(
                     document.getElementById("synth-count").value,
                 );
@@ -897,9 +712,9 @@
                     );
                     console.error(error);
                 }
-            }
+            };
 
-            function connectToController() {
+            window.connectToController = async function connectToController() {
                 console.log("[DEBUG] connectToController called");
                 if (!isInitialized) {
                     log("Please initialize synths first", "error");
@@ -956,7 +771,7 @@
                         });
                     }
                 }
-            }
+            };
 
             async function handleSynthMessage(synth, message) {
                 switch (message.type) {
@@ -1151,17 +966,17 @@
                 }
             }
 
-            function startAllSynths() {
+            window.startAllSynths = function startAllSynths() {
                 synths.forEach((synth) => {
                     synth.setPower(true);
                 });
-            }
+            };
 
-            function stopAllSynths() {
+            window.stopAllSynths = function stopAllSynths() {
                 synths.forEach((synth) => {
                     synth.setPower(false);
                 });
-            }
+            };
 
             function updateLevelMeters() {
                 if (!isInitialized) return;

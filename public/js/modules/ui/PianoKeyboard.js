@@ -159,10 +159,18 @@ export class PianoKeyboard {
     this.expressionHandler = new PianoExpressionHandler(this);
     this.expressionHandler.initialize();
 
-    // No initial visual graying out. All keys drawn active.
-    // Range logic is handled by PianoExpressionHandler during interaction.
-    // If we later want to add visual graying, updateKeyRangeStyles() would be called here
-    // and on bodyType change.
+    // Initialize bodyType from HTML select element
+    this.initializeBodyTypeFromDOM();
+
+    // Apply visual range styling based on current instrument
+    if (window.Logger) {
+      window.Logger.log("Applying initial instrument range styling", "info");
+    }
+
+    // Small delay to ensure SVG keys are fully rendered
+    setTimeout(() => {
+      this.updateKeyRangeStylesVisual();
+    }, 100);
 
     this.isInitialized = true;
 
@@ -369,6 +377,48 @@ export class PianoKeyboard {
   }
 
   /**
+   * Initialize body type from DOM select element
+   * @private
+   */
+  initializeBodyTypeFromDOM() {
+    const bodyTypeSelect = document.getElementById("bodyType");
+    if (bodyTypeSelect) {
+      const selectedValue = parseInt(bodyTypeSelect.value);
+      this.appState.set("bodyType", selectedValue);
+
+      if (window.Logger) {
+        window.Logger.log(
+          `Initialized bodyType from DOM: ${selectedValue}`,
+          "info",
+        );
+      }
+
+      // Set up change listener
+      bodyTypeSelect.addEventListener("change", (e) => {
+        const newBodyType = parseInt(e.target.value);
+        this.appState.set("bodyType", newBodyType);
+
+        if (window.Logger) {
+          window.Logger.log(
+            `Body type changed via DOM: ${newBodyType}`,
+            "info",
+          );
+        }
+      });
+    } else {
+      // Fallback to default value
+      this.appState.set("bodyType", 0); // Default to Violin
+
+      if (window.Logger) {
+        window.Logger.log(
+          "bodyType select not found, defaulting to Violin (0)",
+          "warn",
+        );
+      }
+    }
+  }
+
+  /**
    * Set up state subscriptions
    * @private
    */
@@ -380,22 +430,28 @@ export class PianoKeyboard {
 
     // Subscribe to body type changes
     this.appState.subscribe("bodyType", (newBodyType) => {
-      // When bodyType changes, the PianoExpressionHandler will use getCurrentInstrumentRange()
-      // to determine interactivity. No need to visually re-style all keys here unless
-      // we re-introduce visual graying out as a feature.
-      // If visual graying is re-added, call this.updateKeyRangeStylesVisual() here.
       if (window.Logger) {
         window.Logger.log(
           `Body type changed to: ${newBodyType}. Piano interaction range updated.`,
           "info",
         );
       }
-      // If expressions need to be re-evaluated or cleared based on new range, trigger that here.
-      // For now, existing expressions on notes that fall out of range will persist visually
-      // until the note is clicked off or a new interaction happens on it.
-      // Or, we can force PianoExpressionHandler to re-evaluate all visuals:
+
+      // Update visual range styling when instrument changes
+      if (window.Logger) {
+        window.Logger.log(
+          `Updating range styling for bodyType: ${newBodyType}`,
+          "info",
+        );
+      }
+      // Small delay to ensure any pending visual updates complete
+      setTimeout(() => {
+        this.updateKeyRangeStylesVisual();
+      }, 50);
+
+      // Re-evaluate expressions that may now be out of range
       if (this.expressionHandler) {
-        this.expressionHandler.syncWithAppState(); // This will re-evaluate visuals based on current chord and new range
+        this.expressionHandler.syncWithAppState();
       }
     });
   }
@@ -406,59 +462,60 @@ export class PianoKeyboard {
    * @private
    */
   updateKeyRangeStylesVisual() {
-    // Renamed to clarify it's for visual styling
-    const currentRange = this.getCurrentInstrumentRange();
-    if (!currentRange) {
-      if (window.Logger)
-        window.Logger.log(
-          "Cannot update key range styles: current range undefined.",
-          "warn",
-        );
-      // Potentially make all keys appear active if no range defined
-      this.keys.forEach((keyData) => {
-        element.setAttribute(
-          "fill",
-          element.getAttribute("data-original-fill-active"),
-        );
-        element.setAttribute(
-          "data-original-fill",
-          element.getAttribute("data-original-fill-active"),
-        );
-        element.style.pointerEvents = "auto";
-        element.classList.remove("out-of-range");
-        keyData.inRange = true; // Assume in range if no specific instrument range
-      });
-      if (this.expressionHandler) this.expressionHandler.updateKeyVisuals();
+    if (!this.keys || this.keys.size === 0) {
+      if (window.Logger) {
+        window.Logger.log("Piano keys not yet created", "warn");
+      }
       return;
     }
 
-    this.keys.forEach((keyData, frequency) => {
-      const inRange =
-        frequency >= currentRange.low && frequency <= currentRange.high;
-      const element = keyData.element;
+    const currentRange = this.getCurrentInstrumentRange();
+    if (window.Logger) {
+      window.Logger.log(
+        `Updating range styling. Current range: ${currentRange ? currentRange.name : "None"}`,
+        "info",
+      );
+    }
 
-      const originalFillActive =
-        element.getAttribute("data-original-fill-active") ||
-        (keyData.type === "white" ? "white" : "#333");
+    let outOfRangeCount = 0;
+
+    this.keys.forEach((keyData, frequency) => {
+      const element = keyData.element;
+      if (!element) return;
+
+      const inRange =
+        !currentRange ||
+        (frequency >= currentRange.low && frequency <= currentRange.high);
 
       if (inRange) {
-        element.setAttribute("fill", originalFillActive);
-        element.setAttribute("data-original-fill", originalFillActive);
+        // Key is in range
         element.style.pointerEvents = "auto";
+        element.style.opacity = "1.0";
         element.classList.remove("out-of-range");
         keyData.inRange = true;
       } else {
-        const disabledFill = keyData.type === "white" ? "#f5f5f5" : "#ccc";
+        // Key is out of range - apply grayed styling
+        const disabledFill = keyData.type === "white" ? "#e0e0e0" : "#999";
         element.setAttribute("fill", disabledFill);
         element.setAttribute("data-original-fill", disabledFill);
         element.style.pointerEvents = "none";
+        element.style.opacity = "0.4";
         element.classList.add("out-of-range");
         keyData.inRange = false;
+        outOfRangeCount++;
       }
     });
 
+    // Update expression handler after range styling
     if (this.expressionHandler) {
       this.expressionHandler.updateKeyVisuals();
+    }
+
+    if (window.Logger) {
+      window.Logger.log(
+        `Range styling complete. ${outOfRangeCount} keys out of range`,
+        "info",
+      );
     }
   }
 
@@ -610,6 +667,11 @@ export class PianoKeyboard {
    */
   clearChord() {
     this.setChord([]);
+
+    // Clear all expression markings from the piano roll
+    if (this.expressionHandler) {
+      this.expressionHandler.clearAll();
+    }
 
     if (window.Logger) {
       window.Logger.log("Chord cleared", "expressions");

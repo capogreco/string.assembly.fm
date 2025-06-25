@@ -361,14 +361,32 @@ export class PianoExpressionHandler {
       const endX = this.currentDragPos.x - svgBounds.left + this.canvasPadding;
       const endY = this.currentDragPos.y - svgBounds.top + this.canvasPadding;
 
+      // Check if there's a valid target key at current position
+      const targetKey = this.getKeyFromPosition(
+        this.currentDragPos.x,
+        this.currentDragPos.y,
+      );
+      const hasValidTarget = targetKey && targetKey.note !== this.dragStartNote;
+
       ctx.save();
-      ctx.strokeStyle = this.EXPRESSION_COLORS.trill;
+      // Use different color/style for invalid trill areas
+      ctx.strokeStyle = hasValidTarget
+        ? this.EXPRESSION_COLORS.trill
+        : "#ff6b6b";
       ctx.lineWidth = 2;
-      ctx.setLineDash([3, 2]);
+      ctx.setLineDash(hasValidTarget ? [3, 2] : [1, 4]);
       ctx.beginPath();
       ctx.moveTo(startX, startY);
       ctx.lineTo(endX, endY);
       ctx.stroke();
+
+      // Show "invalid" indicator for out-of-range areas
+      if (!hasValidTarget) {
+        ctx.fillStyle = "#ff6b6b";
+        ctx.font = "bold 12px sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText("✗", endX, endY);
+      }
 
       ctx.restore();
     }
@@ -425,6 +443,13 @@ export class PianoExpressionHandler {
   getKeyFromEvent(e) {
     const target = e.target;
 
+    if (window.Logger) {
+      window.Logger.log(
+        `DEBUG getKeyFromEvent: target=${target.tagName}, has data-note-name=${target.hasAttribute("data-note-name")}`,
+        "expressions",
+      );
+    }
+
     // Check if it's a piano key
     if (target.tagName === "rect" && target.hasAttribute("data-note-name")) {
       // Check if the key is out-of-range (disabled)
@@ -438,11 +463,25 @@ export class PianoExpressionHandler {
       const noteName = target.getAttribute("data-note-name");
       const frequency = parseFloat(target.getAttribute("data-frequency"));
 
+      if (window.Logger) {
+        window.Logger.log(
+          `DEBUG getKeyFromEvent: noteName=${noteName}, frequency=${frequency}`,
+          "expressions",
+        );
+      }
+
       return {
         element: target,
         note: noteName,
         frequency: frequency,
       };
+    }
+
+    if (window.Logger) {
+      window.Logger.log(
+        `DEBUG getKeyFromEvent: Not a valid piano key, returning null`,
+        "expressions",
+      );
     }
 
     return null;
@@ -636,6 +675,7 @@ export class PianoExpressionHandler {
           targetFreq: targetKey.frequency,
           interval: this.calculateInterval(this.dragStartNote, targetKey.note),
           speed: 8, // Base speed, modified later by harmonic ratios
+          articulation: 0.7, // Default articulation for trill
         };
       }
     } else if (dy < this.VIBRATO_THRESHOLD) {
@@ -727,6 +767,10 @@ export class PianoExpressionHandler {
         svgPoint.y >= rect.y &&
         svgPoint.y <= rect.y + rect.height
       ) {
+        // Check if key is in valid instrument range
+        if (key.classList.contains("out-of-range")) {
+          continue; // Skip out-of-range keys
+        }
         return {
           element: key,
           note: key.getAttribute("data-note-name"),
@@ -744,6 +788,10 @@ export class PianoExpressionHandler {
         svgPoint.y >= rect.y &&
         svgPoint.y <= rect.y + rect.height
       ) {
+        // Check if key is in valid instrument range
+        if (key.classList.contains("out-of-range")) {
+          continue; // Skip out-of-range keys
+        }
         return {
           element: key,
           note: key.getAttribute("data-note-name"),
@@ -827,6 +875,17 @@ export class PianoExpressionHandler {
     // `note` is the source note (dragStartNote)
     // `expression` is the committed expression object e.g. {type: "none"}, {type: "trill", targetNote: ...} or null if removing via click.
 
+    if (window.Logger) {
+      window.Logger.log(
+        `DEBUG setExpression: note=${note}, expression=${JSON.stringify(expression)}`,
+        "expressions",
+      );
+      window.Logger.log(
+        `DEBUG: Current expressions before update: ${JSON.stringify(this.pianoKeyboard.appState.get("expressions") || {})}`,
+        "expressions",
+      );
+    }
+
     const oldExpression = this.expressions.get(note);
 
     // Clean up old expression
@@ -863,16 +922,35 @@ export class PianoExpressionHandler {
     // Update app state
     const currentExpressions =
       this.pianoKeyboard.appState.get("expressions") || {};
+
+    // Create a new object to ensure AppState detects the change
+    const newExpressions = { ...currentExpressions };
+
     if (
       !expression ||
       expression.type === "removed" ||
       expression.type === "none"
     ) {
-      delete currentExpressions[note];
+      delete newExpressions[note];
     } else {
-      currentExpressions[note] = expression;
+      newExpressions[note] = expression;
     }
-    this.pianoKeyboard.appState.set("expressions", currentExpressions);
+
+    if (window.Logger) {
+      window.Logger.log(
+        `DEBUG: Setting expressions to appState: ${JSON.stringify(newExpressions)}`,
+        "expressions",
+      );
+    }
+
+    this.pianoKeyboard.appState.set("expressions", newExpressions);
+
+    if (window.Logger) {
+      window.Logger.log(
+        `DEBUG: After update, appState expressions: ${JSON.stringify(this.pianoKeyboard.appState.get("expressions"))}`,
+        "expressions",
+      );
+    }
 
     // Update visuals for the affected note and any related notes
     this.updateKeyVisual(this.findKeyElement(note), note);
@@ -899,10 +977,17 @@ export class PianoExpressionHandler {
     this.render();
 
     // Emit expression change event
+    if (window.Logger) {
+      window.Logger.log(
+        `DEBUG: Emitting expression:changed event for note=${note}`,
+        "expressions",
+      );
+    }
+
     this.pianoKeyboard.eventBus.emit("expression:changed", {
       note,
       expression,
-      allExpressions: this.getAllExpressions(),
+      timestamp: Date.now(),
     });
   }
 
@@ -922,10 +1007,17 @@ export class PianoExpressionHandler {
    * Update visual state of a single key
    */
   updateKeyVisual(element, note) {
+    if (!element) return;
+
+    // Check if key is out of range - if so, don't override the graying
+    if (element.classList.contains("out-of-range")) {
+      return; // Preserve range graying, don't override
+    }
+
     // Get the original default fill color
     const originalFill =
       element.getAttribute("data-original-fill") ||
-      (element.classList.contains("white-key") ? "white" : "#333"); // Fallback just in case
+      (element.classList.contains("white-key") ? "white" : "#333");
 
     if (this.chordNotes.has(note)) {
       // Note is in chord - use expression color
@@ -972,7 +1064,6 @@ export class PianoExpressionHandler {
         this.indicators.delete(noteName); // Remove entry for note if no indicators left
       }
     }
-    return result;
   }
 
   /**
@@ -1156,7 +1247,28 @@ export class PianoExpressionHandler {
     });
     this.indicators.clear();
 
+    // Clear any hover highlighting
+    if (this.currentHoverElement) {
+      this.clearHoverHighlight(this.currentHoverElement);
+      this.currentHoverElement = null;
+    }
+
+    // Clear canvas overlay
+    if (this.overlayCtx) {
+      this.overlayCtx.clearRect(0, 0, this.overlay.width, this.overlay.height);
+    }
+
+    // Update visuals and chord display
     this.updateKeyVisuals();
+    this.updateChordDisplay();
+
+    // Update app state - create new empty object
+    this.pianoKeyboard.appState.set("expressions", {});
+
+    // Emit clear event
+    this.pianoKeyboard.eventBus.emit("expression:cleared", {
+      timestamp: Date.now(),
+    });
   }
 
   /**

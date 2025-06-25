@@ -566,6 +566,7 @@
                     }
                 } else if (data.type === "program") {
                     current_program = data.program;
+                    const transitionData = data.transition;
 
                     // Simple expression status log
                     const hasVibrato =
@@ -584,12 +585,20 @@
                           : hasTrill
                             ? "trill"
                             : "none";
-                    console.log(
-                        `Received program: ${current_program.fundamentalFrequency?.toFixed(1)}Hz, expression: ${expression}`,
-                    );
+
+                    if (transitionData) {
+                        console.log(
+                            `Received program with transition: ${current_program.fundamentalFrequency?.toFixed(1)}Hz, expression: ${expression}, delay: ${transitionData.delay?.toFixed(2)}s`,
+                        );
+                    } else {
+                        console.log(
+                            `Received program: ${current_program.fundamentalFrequency?.toFixed(1)}Hz, expression: ${expression}`,
+                        );
+                    }
 
                     if (synthCore && synthCore.isInitialized) {
-                        synthCore.applyProgram(current_program);
+                        // Apply program with transition data
+                        synthCore.applyProgram(current_program, transitionData);
                     } else {
                         console.warn("SynthCore not ready for program");
                     }
@@ -697,13 +706,6 @@
                     handle_data_message(data);
                 });
 
-                // command_channel.addEventListener("message", (event) => {
-                //     const command = JSON.parse(event.data);
-                //     if (command.type === "command") {
-                //         handle_command(command);
-                //     }
-                // });
-
                 pc.addEventListener("connectionstatechange", () => {
                     console.log(`connection state: ${pc.connectionState}`);
                     if (
@@ -760,35 +762,6 @@
                                 `<div style="margin: 2px 0;">${id} ${ctrl.connected ? "(connected)" : "(discovered)"}</div>`,
                         )
                         .join("");
-                }
-            }
-
-            // handle command updates
-            function handle_command(command) {
-                console.log(`command ${command.name} = ${command.value}`);
-                if (command.name === "power") {
-                    is_powered_on = command.value;
-
-                    // Use synth core for power control
-                    synthCore.setPower(command.value);
-                } else if (command.name === "save") {
-                    const bank_id = command.bank;
-
-                    // Use synth core for saving to bank
-                    synthCore.saveToBank(bank_id);
-                } else if (command.name === "load") {
-                    const bank_id = command.bank;
-                    const fallback_program = command.fallbackProgram;
-
-                    // Use synth core for loading from bank
-                    const success = synthCore.loadFromBank(
-                        bank_id,
-                        fallback_program,
-                    );
-                    if (!success && fallback_program) {
-                        current_program = fallback_program;
-                        synthCore.applyProgram(fallback_program);
-                    }
                 }
             }
 

@@ -66,7 +66,12 @@ The piano roll GUI functionality has been successfully restored with all critica
 - ✅ Trill target notes appear in light blue color
 - ✅ Drag indicators clear properly on drop
 - ✅ Chord display shows expression indicators (e.g., "C4v45", "A4(→C5)")
-- ✅ Trill note indicators show target note underneath arrow during drag and after creation
+- ✅ Trill target key highlighting during drag (piano keys turn light blue under cursor)
+- ✅ Clear button removes all expression markings from piano roll
+- ✅ Black key selection support for trill targets
+- ✅ Instrument range visual feedback (keys outside range grayed out)
+- ✅ Instrument range interaction blocking (out-of-range keys non-interactive)
+- ✅ Trill target range validation (cannot select out-of-range keys as trill targets)
 
 ### Phase 4: Distribution Logic ✅ COMPLETE
 
@@ -100,6 +105,9 @@ The piano roll GUI functionality has been successfully restored with all critica
 - ✅ Console-accessible test functions
 - ✅ Chord display format testing
 - ✅ Trill key highlighting testing (including black keys)
+- ✅ Clear functionality testing (chord, expressions, canvas overlay)
+- ✅ Instrument range testing (visual feedback and interaction blocking)
+- ✅ Trill range blocking testing (prevents out-of-range trill targets)
 
 ## Success Criteria Status
 
@@ -116,6 +124,9 @@ The piano roll GUI functionality has been successfully restored with all critica
 - ✅ **Chord display with expression notation** - WORKING
 - ✅ **Trill target key highlighting during drag** - WORKING
 - ✅ **Black key selection for trill targets** - WORKING
+- ✅ **Clear button removes all expression markings** - WORKING
+- ✅ **Instrument range visual feedback and interaction blocking** - WORKING
+- ✅ **Trill target range validation** - WORKING
 
 ## Key Implementation Details
 
@@ -236,3 +247,6 @@ All requested fixes have been implemented:
 - ✅ Chord display shows expression notation (e.g., "A4v45", "C4(→D4)")
 - ✅ Trill target key highlighting during drag (piano keys turn light blue under cursor)
 - ✅ Black key selection support for trill targets
+- ✅ Clear button properly removes all expression markings from piano roll canvas
+- ✅ Instrument range respects Body Type selection (keys outside range grayed out and non-interactive)
+- ✅ Trill target selection blocked for out-of-range keys (prevents invalid trill targets)

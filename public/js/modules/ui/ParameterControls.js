@@ -3,9 +3,9 @@
  * Handles all parameter input controls (sliders, checkboxes, etc.)
  */
 
-import { eventBus } from '../core/EventBus.js';
-import { appState } from '../state/AppState.js';
-import { Config } from '../core/Config.js';
+import { eventBus } from "../core/EventBus.js";
+import { appState } from "../state/AppState.js";
+import { Config } from "../core/Config.js";
 
 export class ParameterControls {
   constructor() {
@@ -23,13 +23,13 @@ export class ParameterControls {
   initialize() {
     if (this.isInitialized) {
       if (window.Logger) {
-        window.Logger.log('ParameterControls already initialized', 'lifecycle');
+        window.Logger.log("ParameterControls already initialized", "lifecycle");
       }
       return;
     }
 
     if (window.Logger) {
-      window.Logger.log('Initializing ParameterControls...', 'lifecycle');
+      window.Logger.log("Initializing ParameterControls...", "lifecycle");
     }
 
     // Cache parameter elements
@@ -50,7 +50,7 @@ export class ParameterControls {
     this.isInitialized = true;
 
     if (window.Logger) {
-      window.Logger.log('ParameterControls initialized', 'lifecycle');
+      window.Logger.log("ParameterControls initialized", "lifecycle");
     }
   }
 
@@ -59,10 +59,12 @@ export class ParameterControls {
    * @private
    */
   cacheParameterElements() {
-    Config.PARAM_IDS.forEach(paramId => {
+    Config.PARAM_IDS.forEach((paramId) => {
       const input = document.getElementById(paramId);
-      const valueDisplay = document.getElementById(`${paramId}_value`);
-      const controlGroup = input?.closest('.control-group');
+      const valueDisplay =
+        document.getElementById(`${paramId}Value`) ||
+        document.getElementById(`${paramId}_value`);
+      const controlGroup = input?.closest(".control-group");
 
       if (input) {
         this.paramElements.set(paramId, {
@@ -72,15 +74,31 @@ export class ParameterControls {
           type: input.type,
           min: parseFloat(input.min) || 0,
           max: parseFloat(input.max) || 1,
-          step: parseFloat(input.step) || 0.01
+          step: parseFloat(input.step) || 0.01,
         });
+        if (window.Logger && paramId.includes("transition")) {
+          window.Logger.log(
+            `Cached transition parameter: ${paramId} = ${input.value}`,
+            "debug",
+          );
+        }
       } else if (window.Logger) {
-        window.Logger.log(`Parameter element not found: ${paramId}`, 'error');
+        window.Logger.log(`Parameter element not found: ${paramId}`, "error");
       }
     });
 
     if (window.Logger) {
-      window.Logger.log(`Cached ${this.paramElements.size} parameter elements`, 'parameters');
+      window.Logger.log(
+        `Cached ${this.paramElements.size} parameter elements`,
+        "parameters",
+      );
+      const transitionParams = Array.from(this.paramElements.keys()).filter(
+        (id) => id.includes("transition"),
+      );
+      window.Logger.log(
+        `Transition parameters cached: ${transitionParams.join(", ")}`,
+        "debug",
+      );
     }
   }
 
@@ -93,21 +111,21 @@ export class ParameterControls {
       if (!element.input) return;
 
       // Input event for real-time changes
-      element.input.addEventListener('input', (e) => {
+      element.input.addEventListener("input", (e) => {
         this.handleParameterInput(paramId, e);
       });
 
       // Change event for committed changes
-      element.input.addEventListener('change', (e) => {
+      element.input.addEventListener("change", (e) => {
         this.handleParameterChange(paramId, e);
       });
 
       // Focus events for visual feedback
-      element.input.addEventListener('focus', () => {
+      element.input.addEventListener("focus", () => {
         this.handleParameterFocus(paramId);
       });
 
-      element.input.addEventListener('blur', () => {
+      element.input.addEventListener("blur", () => {
         this.handleParameterBlur(paramId);
       });
     });
@@ -118,10 +136,12 @@ export class ParameterControls {
    * @private
    */
   setupExpressionControls() {
-    const expressionRadios = document.querySelectorAll('input[name="expression"]');
+    const expressionRadios = document.querySelectorAll(
+      'input[name="expression"]',
+    );
 
-    expressionRadios.forEach(radio => {
-      radio.addEventListener('change', (e) => {
+    expressionRadios.forEach((radio) => {
+      radio.addEventListener("change", (e) => {
         if (e.target.checked) {
           this.handleExpressionChange(e.target.value);
         }
@@ -129,7 +149,10 @@ export class ParameterControls {
     });
 
     if (window.Logger) {
-      window.Logger.log(`Set up ${expressionRadios.length} expression controls`, 'parameters');
+      window.Logger.log(
+        `Set up ${expressionRadios.length} expression controls`,
+        "parameters",
+      );
     }
   }
 
@@ -138,22 +161,25 @@ export class ParameterControls {
    * @private
    */
   setupHarmonicRatioSelectors() {
-    const harmonicSelectors = document.querySelectorAll('.harmonic-selector');
+    const harmonicSelectors = document.querySelectorAll(".harmonic-selector");
 
-    harmonicSelectors.forEach(selector => {
+    harmonicSelectors.forEach((selector) => {
       const expression = selector.dataset.expression;
       if (!expression) return;
 
-      const buttons = selector.querySelectorAll('.harmonic-button');
-      buttons.forEach(button => {
-        button.addEventListener('click', (e) => {
+      const buttons = selector.querySelectorAll(".harmonic-button");
+      buttons.forEach((button) => {
+        button.addEventListener("click", (e) => {
           this.handleHarmonicRatioClick(expression, button, e);
         });
       });
     });
 
     if (window.Logger) {
-      window.Logger.log(`Set up ${harmonicSelectors.length} harmonic ratio selectors`, 'parameters');
+      window.Logger.log(
+        `Set up ${harmonicSelectors.length} harmonic ratio selectors`,
+        "parameters",
+      );
     }
   }
 
@@ -163,20 +189,25 @@ export class ParameterControls {
    */
   setupStateSubscriptions() {
     // Subscribe to harmonic selections changes
-    this.appState.subscribe('harmonicSelections', (newSelections) => {
+    this.appState.subscribe("harmonicSelections", (newSelections) => {
       this.updateHarmonicSelectionDisplay(newSelections);
     });
 
     // Subscribe to selected expression changes
-    this.appState.subscribe('selectedExpression', (newExpression) => {
+    this.appState.subscribe("selectedExpression", (newExpression) => {
       this.updateExpressionSelection(newExpression);
     });
 
     // Subscribe to current program changes
-    this.appState.subscribe('currentProgram', (newProgram) => {
+    this.appState.subscribe("currentProgram", (newProgram) => {
       if (newProgram) {
         this.updateParameterValues(newProgram);
       }
+    });
+
+    // Subscribe to expression assignments to update parameter visibility
+    this.appState.subscribe("expressions", (expressions) => {
+      this.updateExpressionParameterVisibility(expressions || {});
     });
   }
 
@@ -202,7 +233,7 @@ export class ParameterControls {
     this.debounceParameterChange(paramId, value);
 
     if (window.Logger) {
-      window.Logger.log(`Parameter input: ${paramId} = ${value}`, 'parameters');
+      window.Logger.log(`Parameter input: ${paramId} = ${value}`, "parameters");
     }
   }
 
@@ -219,19 +250,22 @@ export class ParameterControls {
     const value = this.parseParameterValue(element, event.target.value);
 
     // Emit parameter change event
-    this.eventBus.emit('parameter:changed', {
+    this.eventBus.emit("parameter:changed", {
       paramId,
       value,
-      timestamp: Date.now()
+      timestamp: Date.now(),
     });
 
     // Update current program in app state
-    const currentProgram = this.appState.get('currentProgram') || {};
+    const currentProgram = this.appState.get("currentProgram") || {};
     currentProgram[paramId] = value;
-    this.appState.set('currentProgram', currentProgram);
+    this.appState.set("currentProgram", currentProgram);
 
     if (window.Logger) {
-      window.Logger.log(`Parameter changed: ${paramId} = ${value}`, 'parameters');
+      window.Logger.log(
+        `Parameter changed: ${paramId} = ${value}`,
+        "parameters",
+      );
     }
   }
 
@@ -243,12 +277,12 @@ export class ParameterControls {
   handleParameterFocus(paramId) {
     const element = this.paramElements.get(paramId);
     if (element?.controlGroup) {
-      element.controlGroup.classList.add('focused');
+      element.controlGroup.classList.add("focused");
     }
 
-    this.eventBus.emit('parameter:focused', {
+    this.eventBus.emit("parameter:focused", {
       paramId,
-      timestamp: Date.now()
+      timestamp: Date.now(),
     });
   }
 
@@ -260,12 +294,12 @@ export class ParameterControls {
   handleParameterBlur(paramId) {
     const element = this.paramElements.get(paramId);
     if (element?.controlGroup) {
-      element.controlGroup.classList.remove('focused');
+      element.controlGroup.classList.remove("focused");
     }
 
-    this.eventBus.emit('parameter:blurred', {
+    this.eventBus.emit("parameter:blurred", {
       paramId,
-      timestamp: Date.now()
+      timestamp: Date.now(),
     });
   }
 
@@ -275,18 +309,17 @@ export class ParameterControls {
    * @private
    */
   handleExpressionChange(expression) {
-    this.appState.set('selectedExpression', expression);
+    this.appState.set("selectedExpression", expression);
 
-    // Show/hide expression groups
-    this.updateExpressionGroupVisibility(expression);
+    // Don't show/hide expression groups here - let updateExpressionParameterVisibility handle it based on actual assignments
 
-    this.eventBus.emit('expression:changed', {
+    this.eventBus.emit("expression:changed", {
       expression,
-      timestamp: Date.now()
+      timestamp: Date.now(),
     });
 
     if (window.Logger) {
-      window.Logger.log(`Expression changed: ${expression}`, 'expressions');
+      window.Logger.log(`Expression changed: ${expression}`, "expressions");
     }
   }
 
@@ -302,7 +335,7 @@ export class ParameterControls {
     const type = button.dataset.type; // 'numerator' or 'denominator'
     const selectorKey = `${expression}-${type}`;
 
-    const harmonicSelections = this.appState.get('harmonicSelections');
+    const harmonicSelections = this.appState.get("harmonicSelections");
     const currentSelection = harmonicSelections[selectorKey];
 
     if (!currentSelection) return;
@@ -330,21 +363,24 @@ export class ParameterControls {
     }
 
     // Update state
-    this.appState.set('harmonicSelections', harmonicSelections);
+    this.appState.set("harmonicSelections", harmonicSelections);
 
     // Update button visual state
     this.updateHarmonicButtonStates(expression, type);
 
-    this.eventBus.emit('harmonicRatio:changed', {
+    this.eventBus.emit("harmonicRatio:changed", {
       expression,
       type,
       value,
       selection: Array.from(currentSelection),
-      timestamp: Date.now()
+      timestamp: Date.now(),
     });
 
     if (window.Logger) {
-      window.Logger.log(`Harmonic ratio changed: ${selectorKey} = [${Array.from(currentSelection).join(', ')}]`, 'expressions');
+      window.Logger.log(
+        `Harmonic ratio changed: ${selectorKey} = [${Array.from(currentSelection).join(", ")}]`,
+        "expressions",
+      );
     }
   }
 
@@ -356,8 +392,33 @@ export class ParameterControls {
    * @private
    */
   parseParameterValue(element, rawValue) {
-    if (element.type === 'range' || element.type === 'number') {
-      return parseFloat(rawValue);
+    if (element.type === "range" || element.type === "number") {
+      const numValue = parseFloat(rawValue);
+
+      // Special handling for transitionDuration with logarithmic scaling
+      if (element.input && element.input.id === "transitionDuration") {
+        // Convert 0-100 slider to 0-40s logarithmic scale
+        if (numValue === 0) return 0;
+        // Map 1-100 to 0.1-40s logarithmically
+        const minLog = Math.log(0.1);
+        const maxLog = Math.log(40);
+        const scale = (maxLog - minLog) / 99; // 99 steps from 1 to 100
+        return Math.exp(minLog + (numValue - 1) * scale);
+      }
+
+      // Special handling for transitionStagger (0 = no stagger, 100 = max stagger)
+      if (element.input && element.input.id === "transitionStagger") {
+        // Convert 0-100 slider to stagger amount (0 = no stagger, 1 = full stagger)
+        return numValue / 100;
+      }
+
+      // Special handling for transitionDurationSpread (0 = no variation, 100 = max variation)
+      if (element.input && element.input.id === "transitionDurationSpread") {
+        // Convert 0-100 slider to duration spread amount (0 = no spread, 1 = full 0.5x-2x range)
+        return numValue / 100;
+      }
+
+      return numValue;
     }
     return rawValue;
   }
@@ -373,8 +434,27 @@ export class ParameterControls {
 
     // Format value for display
     let displayValue = value;
-    if (typeof value === 'number') {
-      displayValue = value.toFixed(2);
+    if (typeof value === "number") {
+      // Special formatting for transitionDuration
+      if (paramId === "transitionDuration") {
+        if (value === 0) {
+          displayValue = "0s";
+        } else if (value < 1) {
+          displayValue = value.toFixed(2) + "s";
+        } else if (value < 10) {
+          displayValue = value.toFixed(1) + "s";
+        } else {
+          displayValue = value.toFixed(0) + "s";
+        }
+      } else if (paramId === "transitionStagger") {
+        // Format as percentage (e.g., "0%", "25%", "100%")
+        displayValue = Math.round(value * 100) + "%";
+      } else if (paramId === "transitionDurationSpread") {
+        // Format as percentage (e.g., "0%", "25%", "100%")
+        displayValue = Math.round(value * 100) + "%";
+      } else {
+        displayValue = value.toFixed(2);
+      }
     }
 
     element.valueDisplay.textContent = displayValue;
@@ -387,8 +467,8 @@ export class ParameterControls {
   markParameterChanged(paramId) {
     const element = this.paramElements.get(paramId);
     if (element?.controlGroup) {
-      element.controlGroup.classList.remove('sent');
-      element.controlGroup.classList.add('changed');
+      element.controlGroup.classList.remove("sent");
+      element.controlGroup.classList.add("changed");
     }
 
     // Update app state
@@ -402,8 +482,8 @@ export class ParameterControls {
   markParameterSent(paramId) {
     const element = this.paramElements.get(paramId);
     if (element?.controlGroup) {
-      element.controlGroup.classList.remove('changed');
-      element.controlGroup.classList.add('sent');
+      element.controlGroup.classList.remove("changed");
+      element.controlGroup.classList.add("sent");
     }
   }
 
@@ -421,10 +501,10 @@ export class ParameterControls {
 
     // Set new timeout
     const timeout = setTimeout(() => {
-      this.eventBus.emit('parameter:inputComplete', {
+      this.eventBus.emit("parameter:inputComplete", {
         paramId,
         value,
-        timestamp: Date.now()
+        timestamp: Date.now(),
       });
       this.changeTimeouts.delete(paramId);
     }, this.changeDebounceTime);
@@ -437,7 +517,7 @@ export class ParameterControls {
    * @param {Object} program - Program data
    */
   updateParameterValues(program) {
-    Config.PARAM_IDS.forEach(paramId => {
+    Config.PARAM_IDS.forEach((paramId) => {
       if (program[paramId] !== undefined) {
         this.setParameterValue(paramId, program[paramId]);
       }
@@ -453,11 +533,36 @@ export class ParameterControls {
     const element = this.paramElements.get(paramId);
     if (!element?.input) return;
 
-    element.input.value = value;
+    // Special handling for logarithmic parameters with reverse conversion
+    let sliderValue = value;
+    if (paramId === "transitionDuration") {
+      if (value === 0) {
+        sliderValue = 0;
+      } else {
+        // Convert actual duration (0.1-40s) back to slider position (1-100)
+        const minLog = Math.log(0.1);
+        const maxLog = Math.log(40);
+        const scale = (maxLog - minLog) / 99;
+        sliderValue = Math.round(
+          (Math.log(Math.max(0.1, value)) - minLog) / scale + 1,
+        );
+        sliderValue = Math.max(1, Math.min(100, sliderValue));
+      }
+    } else if (paramId === "transitionStagger") {
+      // Convert stagger amount (0-1) back to slider position (0-100)
+      sliderValue = Math.round(value * 100);
+      sliderValue = Math.max(0, Math.min(100, sliderValue));
+    } else if (paramId === "transitionDurationSpread") {
+      // Convert duration spread amount (0-1) back to slider position (0-100)
+      sliderValue = Math.round(value * 100);
+      sliderValue = Math.max(0, Math.min(100, sliderValue));
+    }
+
+    element.input.value = sliderValue;
     this.updateDisplayValue(paramId, value);
 
     // Trigger input event to notify other systems
-    element.input.dispatchEvent(new Event('input', { bubbles: true }));
+    element.input.dispatchEvent(new Event("input", { bubbles: true }));
   }
 
   /**
@@ -480,9 +585,34 @@ export class ParameterControls {
     const values = {};
     this.paramElements.forEach((element, paramId) => {
       if (element.input) {
-        values[paramId] = this.parseParameterValue(element, element.input.value);
+        values[paramId] = this.parseParameterValue(
+          element,
+          element.input.value,
+        );
       }
     });
+
+    // Debug log transition parameters specifically
+    if (window.Logger) {
+      const transitionValues = {};
+      [
+        "transitionDuration",
+        "transitionSpread",
+        "transitionStagger",
+        "transitionVariance",
+      ].forEach((param) => {
+        if (values[param] !== undefined) {
+          transitionValues[param] = values[param];
+        }
+      });
+      if (Object.keys(transitionValues).length > 0) {
+        window.Logger.log(
+          `Transition parameters collected: ${JSON.stringify(transitionValues)}`,
+          "debug",
+        );
+      }
+    }
+
     return values;
   }
 
@@ -493,7 +623,7 @@ export class ParameterControls {
    */
   updateHarmonicSelectionDisplay(harmonicSelections) {
     Object.entries(harmonicSelections).forEach(([selectorKey, selection]) => {
-      const [expression, type] = selectorKey.split('-');
+      const [expression, type] = selectorKey.split("-");
       this.updateHarmonicButtonStates(expression, type);
     });
   }
@@ -506,17 +636,21 @@ export class ParameterControls {
    */
   updateHarmonicButtonStates(expression, type) {
     const selectorKey = `${expression}-${type}`;
-    const selection = this.appState.get('harmonicSelections')[selectorKey];
+    const selection = this.appState.get("harmonicSelections")[selectorKey];
 
     if (!selection) return;
 
-    const selector = document.querySelector(`.harmonic-selector[data-expression="${expression}"]`);
+    const selector = document.querySelector(
+      `.harmonic-selector[data-expression="${expression}"]`,
+    );
     if (!selector) return;
 
-    const buttons = selector.querySelectorAll(`.harmonic-button[data-type="${type}"]`);
-    buttons.forEach(button => {
+    const buttons = selector.querySelectorAll(
+      `.harmonic-button[data-type="${type}"]`,
+    );
+    buttons.forEach((button) => {
       const value = parseInt(button.dataset.value);
-      button.classList.toggle('selected', selection.has(value));
+      button.classList.toggle("selected", selection.has(value));
     });
   }
 
@@ -526,30 +660,109 @@ export class ParameterControls {
    * @private
    */
   updateExpressionSelection(expression) {
-    const radio = document.querySelector(`input[name="expression"][value="${expression}"]`);
+    const radio = document.querySelector(
+      `input[name="expression"][value="${expression}"]`,
+    );
     if (radio) {
       radio.checked = true;
     }
 
-    this.updateExpressionGroupVisibility(expression);
+    // Don't call updateExpressionGroupVisibility here - let updateExpressionParameterVisibility handle it
   }
 
+  // Removed updateExpressionGroupVisibility - replaced by updateExpressionParameterVisibility
+  // which properly handles multiple expression types simultaneously
+
   /**
-   * Update expression group visibility
-   * @param {string} activeExpression - Currently active expression
+   * Update expression parameter visibility based on assigned expressions
+   * @param {Object} expressions - Map of note names to expression objects
    * @private
    */
-  updateExpressionGroupVisibility(activeExpression) {
-    const expressionGroups = document.querySelectorAll('.expression-group');
+  updateExpressionParameterVisibility(expressions) {
+    const expressionGroups = document.querySelectorAll(".expression-group");
+    const usedExpressionTypes = new Set();
 
-    expressionGroups.forEach(group => {
-      const groupExpression = group.classList.contains('vibrato') ? 'vibrato' :
-                             group.classList.contains('trill') ? 'trill' :
-                             group.classList.contains('tremolo') ? 'tremolo' : null;
+    if (window.Logger) {
+      window.Logger.log(
+        `[DEBUG] Raw expressions object: ${JSON.stringify(expressions)}`,
+        "parameters",
+      );
+    }
+
+    // Collect all expression types currently in use
+    Object.entries(expressions).forEach(([note, expression]) => {
+      if (window.Logger) {
+        window.Logger.log(
+          `[DEBUG] Processing note ${note}: ${JSON.stringify(expression)}`,
+          "parameters",
+        );
+      }
+      if (expression && expression.type && expression.type !== "none") {
+        usedExpressionTypes.add(expression.type);
+        if (window.Logger) {
+          window.Logger.log(
+            `[DEBUG] Added expression type: ${expression.type}`,
+            "parameters",
+          );
+        }
+      }
+    });
+
+    if (window.Logger) {
+      window.Logger.log(
+        `[DEBUG] Final used expression types: ${Array.from(usedExpressionTypes).join(", ")}`,
+        "parameters",
+      );
+      window.Logger.log(
+        `[DEBUG] Found ${expressionGroups.length} expression groups`,
+        "parameters",
+      );
+    }
+
+    // Show/hide expression parameter groups based on usage
+    expressionGroups.forEach((group) => {
+      const groupExpression = group.classList.contains("vibrato")
+        ? "vibrato"
+        : group.classList.contains("trill")
+          ? "trill"
+          : group.classList.contains("tremolo")
+            ? "tremolo"
+            : null;
+
+      if (window.Logger) {
+        window.Logger.log(
+          `Group classes: ${Array.from(group.classList).join(", ")}, detected: ${groupExpression}`,
+          "parameters",
+        );
+      }
 
       if (groupExpression) {
-        group.classList.toggle('active', groupExpression === activeExpression);
-        group.style.display = groupExpression === activeExpression ? 'block' : 'none';
+        const shouldShow = usedExpressionTypes.has(groupExpression);
+        // Use CSS classes instead of direct style manipulation
+        if (shouldShow) {
+          group.classList.add("active");
+        } else {
+          group.classList.remove("active");
+        }
+
+        if (window.Logger) {
+          // Get computed style to debug display issues
+          const computedStyle = window.getComputedStyle(group);
+          const isActuallyVisible = computedStyle.display !== "none";
+
+          window.Logger.log(
+            `${groupExpression} group: shouldShow=${shouldShow}, active=${group.classList.contains("active")}, computedDisplay=${computedStyle.display}, actuallyVisible=${isActuallyVisible}`,
+            "parameters",
+          );
+
+          // Check if something is blocking visibility
+          if (shouldShow && !isActuallyVisible) {
+            window.Logger.log(
+              `WARNING: ${groupExpression} should be visible but is not! Classes: ${Array.from(group.classList).join(", ")}`,
+              "parameters",
+            );
+          }
+        }
       }
     });
   }
@@ -573,17 +786,17 @@ export class ParameterControls {
     this.updateParameterValues(Config.DEFAULT_PROGRAM);
 
     // Reset expressions
-    this.appState.set('selectedExpression', 'none');
+    this.appState.set("selectedExpression", "none");
 
     // Reset harmonic selections
     const defaultHarmonics = {};
-    Object.keys(Config.HARMONIC_SELECTORS).forEach(key => {
+    Object.keys(Config.HARMONIC_SELECTORS).forEach((key) => {
       defaultHarmonics[key] = new Set([1]);
     });
-    this.appState.set('harmonicSelections', defaultHarmonics);
+    this.appState.set("harmonicSelections", defaultHarmonics);
 
     if (window.Logger) {
-      window.Logger.log('Parameters reset to defaults', 'parameters');
+      window.Logger.log("Parameters reset to defaults", "parameters");
     }
   }
 
@@ -611,13 +824,13 @@ export class ParameterControls {
    */
   destroy() {
     // Clear all timeouts
-    this.changeTimeouts.forEach(timeout => clearTimeout(timeout));
+    this.changeTimeouts.forEach((timeout) => clearTimeout(timeout));
     this.changeTimeouts.clear();
 
     this.isInitialized = false;
 
     if (window.Logger) {
-      window.Logger.log('ParameterControls destroyed', 'lifecycle');
+      window.Logger.log("ParameterControls destroyed", "lifecycle");
     }
   }
 }
@@ -626,7 +839,7 @@ export class ParameterControls {
 export const parameterControls = new ParameterControls();
 
 // Make available globally for backward compatibility
-if (typeof window !== 'undefined') {
+if (typeof window !== "undefined") {
   window.ParameterControls = ParameterControls;
   window.parameterControls = parameterControls;
 }
