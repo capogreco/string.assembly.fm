@@ -172,7 +172,18 @@ export class ParameterControls {
         button.addEventListener("click", (e) => {
           this.handleHarmonicRatioClick(expression, button, e);
         });
+        button.addEventListener("mousedown", (e) => {
+          this.handleHarmonicMouseDown(expression, button, e);
+        });
+        button.addEventListener("mouseenter", (e) => {
+          this.handleHarmonicMouseEnter(expression, button, e);
+        });
       });
+    });
+
+    // Global mouse up handler for drag
+    document.addEventListener("mouseup", () => {
+      this.endHarmonicDrag();
     });
 
     if (window.Logger) {
@@ -331,6 +342,9 @@ export class ParameterControls {
    * @private
    */
   handleHarmonicRatioClick(expression, button, event) {
+    // Skip if this was part of a drag operation
+    if (this.isDragging) return;
+
     const value = parseInt(button.dataset.value);
     const type = button.dataset.type; // 'numerator' or 'denominator'
     const selectorKey = `${expression}-${type}`;
@@ -342,7 +356,15 @@ export class ParameterControls {
 
     // Handle different click types
     if (event.ctrlKey || event.metaKey) {
-      // Ctrl+click: toggle selection
+      // Ctrl+click: clear and select only this value (single selection)
+      currentSelection.clear();
+      currentSelection.add(value);
+    } else if (event.shiftKey) {
+      // Shift+click: range selection (if previous selection exists)
+      // For simplicity, just add to selection
+      currentSelection.add(value);
+    } else {
+      // Normal click: toggle selection (multi-select default)
       if (currentSelection.has(value)) {
         currentSelection.delete(value);
         // Ensure at least one value is selected
@@ -352,14 +374,6 @@ export class ParameterControls {
       } else {
         currentSelection.add(value);
       }
-    } else if (event.shiftKey) {
-      // Shift+click: range selection (if previous selection exists)
-      // For simplicity, just add to selection
-      currentSelection.add(value);
-    } else {
-      // Normal click: single selection
-      currentSelection.clear();
-      currentSelection.add(value);
     }
 
     // Update state
@@ -368,19 +382,114 @@ export class ParameterControls {
     // Update button visual state
     this.updateHarmonicButtonStates(expression, type);
 
-    this.eventBus.emit("harmonicRatio:changed", {
-      expression,
-      type,
-      value,
-      selection: Array.from(currentSelection),
-      timestamp: Date.now(),
-    });
+    // Mark parameter as changed
+    this.markParameterChanged("harmonicRatios");
 
     if (window.Logger) {
       window.Logger.log(
         `Harmonic ratio changed: ${selectorKey} = [${Array.from(currentSelection).join(", ")}]`,
         "expressions",
       );
+    }
+  }
+
+  /**
+   * Handle mouse down for drag selection
+   * @param {string} expression - Expression type
+   * @param {Element} button - Button element
+   * @param {Event} event - Mouse event
+   * @private
+   */
+  handleHarmonicMouseDown(expression, button, event) {
+    event.preventDefault();
+
+    const value = parseInt(button.dataset.value);
+    const type = button.dataset.type;
+
+    this.isDragging = true;
+    this.dragStart = { expression, type, value };
+    this.dragCurrent = value;
+
+    // Determine if we're selecting or deselecting based on current state
+    const selectorKey = `${expression}-${type}`;
+    const harmonicSelections = this.appState.get("harmonicSelections");
+    const currentSelection = harmonicSelections[selectorKey];
+
+    this.dragMode = currentSelection.has(value) ? "deselect" : "select";
+  }
+
+  /**
+   * Handle mouse enter during drag
+   * @param {string} expression - Expression type
+   * @param {Element} button - Button element
+   * @param {Event} event - Mouse event
+   * @private
+   */
+  handleHarmonicMouseEnter(expression, button, event) {
+    if (!this.isDragging || !this.dragStart) return;
+
+    const value = parseInt(button.dataset.value);
+    const type = button.dataset.type;
+
+    // Only handle drag within the same expression and type
+    if (
+      expression !== this.dragStart.expression ||
+      type !== this.dragStart.type
+    )
+      return;
+
+    this.dragCurrent = value;
+    this.updateDragSelection();
+  }
+
+  /**
+   * Update selection during drag
+   * @private
+   */
+  updateDragSelection() {
+    if (!this.isDragging || !this.dragStart) return;
+
+    const { expression, type, value: startValue } = this.dragStart;
+    const endValue = this.dragCurrent;
+    const selectorKey = `${expression}-${type}`;
+
+    const harmonicSelections = this.appState.get("harmonicSelections");
+    const currentSelection = harmonicSelections[selectorKey];
+
+    // Create range
+    const min = Math.min(startValue, endValue);
+    const max = Math.max(startValue, endValue);
+
+    // Apply drag mode to range
+    for (let i = min; i <= max; i++) {
+      if (this.dragMode === "select") {
+        currentSelection.add(i);
+      } else {
+        currentSelection.delete(i);
+      }
+    }
+
+    // Ensure at least one value is selected
+    if (currentSelection.size === 0) {
+      currentSelection.add(1);
+    }
+
+    // Update state and UI
+    this.appState.set("harmonicSelections", harmonicSelections);
+    this.updateHarmonicButtonStates(expression, type);
+    this.markParameterChanged("harmonicRatios");
+  }
+
+  /**
+   * End drag selection
+   * @private
+   */
+  endHarmonicDrag() {
+    if (this.isDragging) {
+      this.isDragging = false;
+      this.dragStart = null;
+      this.dragCurrent = null;
+      this.dragMode = null;
     }
   }
 
@@ -485,6 +594,62 @@ export class ParameterControls {
       element.controlGroup.classList.remove("changed");
       element.controlGroup.classList.add("sent");
     }
+  }
+
+  /**
+   * Update visual state of harmonic buttons
+   * @param {string} expression - Expression type
+   * @param {string} type - Numerator or denominator
+   * @private
+   */
+  updateHarmonicButtonStates(expression, type) {
+    const selector = document.querySelector(
+      `[data-expression="${expression}"]`,
+    );
+    if (!selector) return;
+
+    const row = selector.querySelector(`[data-type="${type}"]`);
+    if (!row) return;
+
+    const buttons = row.querySelectorAll(".harmonic-button");
+    const selectorKey = `${expression}-${type}`;
+    const harmonicSelections = this.appState.get("harmonicSelections");
+    const currentSelection = harmonicSelections[selectorKey];
+
+    buttons.forEach((button) => {
+      const value = parseInt(button.dataset.value);
+      button.classList.toggle("selected", currentSelection.has(value));
+    });
+  }
+
+  /**
+   * Mark parameter as changed
+   * @param {string} paramId - Parameter ID
+   * @private
+   */
+  markParameterChanged(paramId) {
+    // Find all harmonic selector control groups
+    if (paramId === "harmonicRatios") {
+      const selectors = document.querySelectorAll(".harmonic-selector");
+      selectors.forEach((selector) => {
+        const group = selector.closest(".control-group");
+        if (group) {
+          group.classList.remove("sent");
+          group.classList.add("changed");
+        }
+      });
+      return;
+    }
+
+    // Handle regular parameters
+    const element = this.paramElements.get(paramId);
+    if (element?.controlGroup) {
+      element.controlGroup.classList.remove("sent");
+      element.controlGroup.classList.add("changed");
+    }
+
+    // Update app state
+    this.appState.markParameterChanged(paramId);
   }
 
   /**

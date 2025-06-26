@@ -534,7 +534,7 @@
                 margin-bottom: 2px;
             }
 
-            .harmonic-number {
+            .harmonic-button {
                 width: 28px;
                 height: 28px;
                 text-align: center;
@@ -548,18 +548,18 @@
                 transition: all 0.2s ease;
             }
 
-            .harmonic-number:hover {
+            .harmonic-button:hover {
                 border-color: #667eea;
                 background: #f0f4ff;
             }
 
-            .harmonic-number.selected {
+            .harmonic-button.selected {
                 background: #667eea;
                 color: white;
                 border-color: #667eea;
             }
 
-            .harmonic-number.selecting {
+            .harmonic-button.selecting {
                 background: #b3c6f7;
                 border-color: #667eea;
             }
@@ -726,79 +726,81 @@
                         >
                             <div class="harmonic-row" data-type="numerator">
                                 <span
-                                    class="harmonic-number selected"
+                                    class="harmonic-button selected"
                                     data-value="1"
                                     >1</span
                                 >
-                                <span class="harmonic-number" data-value="2"
+                                <span class="harmonic-button" data-value="2" data-type="numerator"
                                     >2</span
                                 >
-                                <span class="harmonic-number" data-value="3"
+                                <span class="harmonic-button" data-value="3" data-type="numerator"
                                     >3</span
                                 >
-                                <span class="harmonic-number" data-value="4"
+                                <span class="harmonic-button" data-value="4" data-type="numerator"
                                     >4</span
                                 >
-                                <span class="harmonic-number" data-value="5"
+                                <span class="harmonic-button" data-value="5" data-type="numerator"
                                     >5</span
                                 >
-                                <span class="harmonic-number" data-value="6"
+                                <span class="harmonic-button" data-value="6" data-type="numerator"
                                     >6</span
                                 >
-                                <span class="harmonic-number" data-value="7"
+                                <span class="harmonic-button" data-value="7" data-type="numerator"
                                     >7</span
                                 >
-                                <span class="harmonic-number" data-value="8"
+                                <span class="harmonic-button" data-value="8" data-type="numerator"
                                     >8</span
                                 >
-                                <span class="harmonic-number" data-value="9"
+                                <span class="harmonic-button" data-value="9" data-type="numerator"
                                     >9</span
                                 >
-                                <span class="harmonic-number" data-value="10"
+                                <span class="harmonic-button" data-value="10" data-type="numerator"
                                     >10</span
                                 >
-                                <span class="harmonic-number" data-value="11"
+                                <span class="harmonic-button" data-value="11" data-type="numerator"
                                     >11</span
                                 >
-                                <span class="harmonic-number" data-value="12"
+                                <span class="harmonic-button" data-value="12" data-type="numerator"
                                     >12</span
                                 >
                             </div>
                             <div class="harmonic-row" data-type="denominator">
-                                <span class="harmonic-number selected" data-value="1"
+                                <span
+                                    class="harmonic-button selected"
+                                    data-value="1"
                                     >1</span
                                 >
-                                <span class="harmonic-number" data-value="2"
+                                <span class="harmonic-button" data-value="2" data-type="denominator"
                                     >2</span
                                 >
-                                <span class="harmonic-number" data-value="3"
+                                <span class="harmonic-button" data-value="3" data-type="denominator"
                                     >3</span
                                 >
-                                <span class="harmonic-number" data-value="4"
+                                <span class="harmonic-button" data-value="4" data-type="denominator"
                                     >4</span
                                 >
-                                <span class="harmonic-number" data-value="5"
+                                <span class="harmonic-button" data-value="5" data-type="denominator"
                                     >5</span
                                 >
-                                <span class="harmonic-number" data-value="6"
+                                <span class="harmonic-button" data-value="6" data-type="denominator"
                                     >6</span
                                 >
-                                <span class="harmonic-number" data-value="7"
+                                <span class="harmonic-button" data-value="7" data-type="denominator"
                                     >7</span
                                 >
-                                <span class="harmonic-number" data-value="8"
+                                <span class="harmonic-button" data-value="8" data-type="denominator"
                                     >8</span
                                 >
-                                <span class="harmonic-number" data-value="9"
+                                <span class="harmonic-button" data-value="9" data-type="denominator"
                                     >9</span
                                 >
-                                <span class="harmonic-number" data-value="10"
+                                <span class="harmonic-button" data-value="10" data-type="denominator"
                                     >10</span
                                 >
-                                <span class="harmonic-number" data-value="11"
+                                <span class="harmonic-button" data-value="11" data-type="denominator"
                                     >11</span
                                 >
-                                <span class="harmonic-number" data-value="12"
+                                <span class="harmonic-button" data-value="12" data-type="denominator"
                                     >12</span
                                 >
                             </div>
@@ -842,79 +844,149 @@
                         <div class="harmonic-selector" data-expression="trill">
                             <div class="harmonic-row" data-type="numerator">
                                 <span
-                                    class="harmonic-number selected"
+                                    class="harmonic-button selected"
                                     data-value="1"
+                                    data-type="numerator"
                                     >1</span
                                 >
-                                <span class="harmonic-number" data-value="2"
+                                <span
+                                    class="harmonic-button"
+                                    data-value="2"
+                                    data-type="numerator"
                                     >2</span
                                 >
-                                <span class="harmonic-number" data-value="3"
+                                <span
+                                    class="harmonic-button"
+                                    data-value="3"
+                                    data-type="numerator"
                                     >3</span
                                 >
-                                <span class="harmonic-number" data-value="4"
+                                <span
+                                    class="harmonic-button"
+                                    data-value="4"
+                                    data-type="numerator"
                                     >4</span
                                 >
-                                <span class="harmonic-number" data-value="5"
+                                <span
+                                    class="harmonic-button"
+                                    data-value="5"
+                                    data-type="numerator"
                                     >5</span
                                 >
-                                <span class="harmonic-number" data-value="6"
+                                <span
+                                    class="harmonic-button"
+                                    data-value="6"
+                                    data-type="numerator"
                                     >6</span
                                 >
-                                <span class="harmonic-number" data-value="7"
+                                <span
+                                    class="harmonic-button"
+                                    data-value="7"
+                                    data-type="numerator"
                                     >7</span
                                 >
-                                <span class="harmonic-number" data-value="8"
+                                <span
+                                    class="harmonic-button"
+                                    data-value="8"
+                                    data-type="numerator"
                                     >8</span
                                 >
-                                <span class="harmonic-number" data-value="9"
+                                <span
+                                    class="harmonic-button"
+                                    data-value="9"
+                                    data-type="numerator"
                                     >9</span
                                 >
-                                <span class="harmonic-number" data-value="10"
+                                <span
+                                    class="harmonic-button"
+                                    data-value="10"
+                                    data-type="numerator"
                                     >10</span
                                 >
-                                <span class="harmonic-number" data-value="11"
+                                <span
+                                    class="harmonic-button"
+                                    data-value="11"
+                                    data-type="numerator"
                                     >11</span
                                 >
-                                <span class="harmonic-number" data-value="12"
+                                <span
+                                    class="harmonic-button"
+                                    data-value="12"
+                                    data-type="numerator"
                                     >12</span
                                 >
                             </div>
                             <div class="harmonic-row" data-type="denominator">
-                                <span class="harmonic-number selected" data-value="1"
+                                <span
+                                    class="harmonic-button selected"
+                                    data-value="1"
+                                    data-type="denominator"
                                     >1</span
                                 >
-                                <span class="harmonic-number" data-value="2"
+                                <span
+                                    class="harmonic-button"
+                                    data-value="2"
+                                    data-type="denominator"
                                     >2</span
                                 >
-                                <span class="harmonic-number" data-value="3"
+                                <span
+                                    class="harmonic-button"
+                                    data-value="3"
+                                    data-type="denominator"
                                     >3</span
                                 >
-                                <span class="harmonic-number" data-value="4"
+                                <span
+                                    class="harmonic-button"
+                                    data-value="4"
+                                    data-type="denominator"
                                     >4</span
                                 >
-                                <span class="harmonic-number" data-value="5"
+                                <span
+                                    class="harmonic-button"
+                                    data-value="5"
+                                    data-type="denominator"
                                     >5</span
                                 >
-                                <span class="harmonic-number" data-value="6"
+                                <span
+                                    class="harmonic-button"
+                                    data-value="6"
+                                    data-type="denominator"
                                     >6</span
                                 >
-                                <span class="harmonic-number" data-value="7"
+                                <span
+                                    class="harmonic-button"
+                                    data-value="7"
+                                    data-type="denominator"
                                     >7</span
                                 >
-                                <span class="harmonic-number" data-value="8"
+                                <span
+                                    class="harmonic-button"
+                                    data-value="8"
+                                    data-type="denominator"
                                     >8</span
                                 >
-                                <span class="harmonic-number" data-value="9"
+                                <span
+                                    class="harmonic-button"
+                                    data-value="9"
+                                    data-type="denominator"
                                     >9</span
                                 >
-                                <span class="harmonic-number" data-value="10"
+                                <span
+                                    class="harmonic-button"
+                                    data-value="10"
+                                    data-type="denominator"
                                     >10</span
                                 >
-                                <span class="harmonic-number" data-value="11"
+                                <span
+                                    class="harmonic-button"
+                                    data-value="11"
+                                    data-type="denominator"
                                     >11</span
                                 >
-                                <span class="harmonic-number" data-value="12"
+                                <span
+                                    class="harmonic-button"
+                                    data-value="12"
+                                    data-type="denominator"
                                     >12</span
                                 >
                             </div>
@@ -963,79 +1035,81 @@
                         >
                             <div class="harmonic-row" data-type="numerator">
                                 <span
-                                    class="harmonic-number selected"
+                                    class="harmonic-button selected"
                                     data-value="1"
                                     >1</span
                                 >
-                                <span class="harmonic-number" data-value="2"
+                                <span class="harmonic-button" data-value="2" data-type="numerator"
                                     >2</span
                                 >
-                                <span class="harmonic-number" data-value="3"
+                                <span class="harmonic-button" data-value="3" data-type="numerator"
                                     >3</span
                                 >
-                                <span class="harmonic-number" data-value="4"
+                                <span class="harmonic-button" data-value="4" data-type="numerator"
                                     >4</span
                                 >
-                                <span class="harmonic-number" data-value="5"
+                                <span class="harmonic-button" data-value="5" data-type="numerator"
                                     >5</span
                                 >
-                                <span class="harmonic-number" data-value="6"
+                                <span class="harmonic-button" data-value="6" data-type="numerator"
                                     >6</span
                                 >
-                                <span class="harmonic-number" data-value="7"
+                                <span class="harmonic-button" data-value="7" data-type="numerator"
                                     >7</span
                                 >
-                                <span class="harmonic-number" data-value="8"
+                                <span class="harmonic-button" data-value="8" data-type="numerator"
                                     >8</span
                                 >
-                                <span class="harmonic-number" data-value="9"
+                                <span class="harmonic-button" data-value="9" data-type="numerator"
                                     >9</span
                                 >
-                                <span class="harmonic-number" data-value="10"
+                                <span class="harmonic-button" data-value="10" data-type="numerator"
                                     >10</span
                                 >
-                                <span class="harmonic-number" data-value="11"
+                                <span class="harmonic-button" data-value="11" data-type="numerator"
                                     >11</span
                                 >
-                                <span class="harmonic-number" data-value="12"
+                                <span class="harmonic-button" data-value="12" data-type="numerator"
                                     >12</span
                                 >
                             </div>
                             <div class="harmonic-row" data-type="denominator">
-                                <span class="harmonic-number selected" data-value="1"
+                                <span
+                                    class="harmonic-button selected"
+                                    data-value="1"
                                     >1</span
                                 >
-                                <span class="harmonic-number" data-value="2"
+                                <span class="harmonic-button" data-value="2" data-type="denominator"
                                     >2</span
                                 >
-                                <span class="harmonic-number" data-value="3"
+                                <span class="harmonic-button" data-value="3" data-type="denominator"
                                     >3</span
                                 >
-                                <span class="harmonic-number" data-value="4"
+                                <span class="harmonic-button" data-value="4" data-type="denominator"
                                     >4</span
                                 >
-                                <span class="harmonic-number" data-value="5"
+                                <span class="harmonic-button" data-value="5" data-type="denominator"
                                     >5</span
                                 >
-                                <span class="harmonic-number" data-value="6"
+                                <span class="harmonic-button" data-value="6" data-type="denominator"
                                     >6</span
                                 >
-                                <span class="harmonic-number" data-value="7"
+                                <span class="harmonic-button" data-value="7" data-type="denominator"
                                     >7</span
                                 >
-                                <span class="harmonic-number" data-value="8"
+                                <span class="harmonic-button" data-value="8" data-type="denominator"
                                     >8</span
                                 >
-                                <span class="harmonic-number" data-value="9"
+                                <span class="harmonic-button" data-value="9" data-type="denominator"
                                     >9</span
                                 >
-                                <span class="harmonic-number" data-value="10"
+                                <span class="harmonic-button" data-value="10" data-type="denominator"
                                     >10</span
                                 >
-                                <span class="harmonic-number" data-value="11"
+                                <span class="harmonic-button" data-value="11" data-type="denominator"
                                     >11</span
                                 >
-                                <span class="harmonic-number" data-value="12"
+                                <span class="harmonic-button" data-value="12" data-type="denominator"
                                     >12</span
                                 >
                             </div>

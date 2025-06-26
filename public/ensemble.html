@@ -68,6 +68,49 @@
                 transform: none;
             }
 
+            #start_calibration,
+            #join_instrument {
+                display: block;
+                margin: 30px auto;
+                padding: 15px 30px;
+                background: #c44;
+                font-size: 16px;
+                animation: pulse 2s infinite;
+            }
+
+            #start_calibration:hover,
+            #join_instrument:hover {
+                background: #d55;
+            }
+
+            #start_calibration:disabled,
+            #join_instrument:disabled {
+                animation: none;
+                background: #444;
+                opacity: 0.5;
+            }
+
+            @keyframes pulse {
+                0% {
+                    opacity: 1;
+                }
+                50% {
+                    opacity: 0.7;
+                }
+                100% {
+                    opacity: 1;
+                }
+            }
+
+            #calibration_phase,
+            #join_phase {
+                text-align: center;
+                margin: 20px 0;
+                padding: 20px;
+                background: rgba(255, 255, 255, 0.05);
+                border-radius: 8px;
+            }
+
             .synth-grid {
                 display: grid;
                 grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
@@ -201,6 +244,20 @@
         <div class="container">
             <h1>🎼 Multi-Synth Test Ensemble</h1>
 
+            <div id="calibration_phase">
+                <h3>Volume Calibration</h3>
+                <p>Calibrate the ensemble volume level.</p>
+                <button id="start_calibration">Calibrate Volume</button>
+            </div>
+
+            <div id="join_phase" style="display: none">
+                <p>
+                    Pink noise playing at reference level. Adjust your device
+                    volume to a comfortable level, then:
+                </p>
+                <button id="join_instrument">Join Instrument</button>
+            </div>
+
             <div class="controls">
                 <div class="control-row">
                     <label>Number of Synths:</label>
@@ -210,29 +267,8 @@
                         value="6"
                         min="1"
                         max="12"
+                        readonly
                     />
-                    <button onclick="initializeEnsemble()">Initialize</button>
-                    <button
-                        id="calibrate-btn"
-                        onclick="startCalibration()"
-                        style="display: none"
-                    >
-                        Start Calibration
-                    </button>
-                    <button
-                        id="join-btn"
-                        onclick="joinInstrument()"
-                        style="display: none"
-                    >
-                        Join Instrument
-                    </button>
-
-                    <button id="start-all" onclick="startAllSynths()" disabled>
-                        Start All
-                    </button>
-                    <button id="stop-all" onclick="stopAllSynths()" disabled>
-                        Stop All
-                    </button>
                 </div>
                 <div class="control-row">
                     <label>Master Volume:</label>
@@ -744,7 +780,7 @@
                 }
             };
 
-            window.startCalibration = async function startCalibration() {
+            async function startCalibrationMode() {
                 if (!isInitialized) {
                     log("Please initialize synths first", "error");
                     return;
@@ -767,17 +803,19 @@
                 // Start calibration noise on all synths
                 for (const synth of synths) {
                     if (synth.synthCore && synth.synthCore.isInitialized) {
-                        synth.synthCore.startCalibrationNoise(0.2);
+                        synth.synthCore.startCalibrationNoise(0.7);
                     }
                 }
 
                 // Update UI
-                document.getElementById("calibrate-btn").style.display = "none";
-                document.getElementById("join-btn").style.display =
-                    "inline-block";
-            };
+                document.getElementById("calibration_phase").style.display =
+                    "none";
+                document.getElementById("join_phase").style.display = "block";
 
-            window.joinInstrument = async function joinInstrument() {
+                log("Calibration noise started on all synths", "info");
+            }
+
+            async function joinInstrument() {
                 log("Joining instrument...", "info");
                 inCalibrationMode = false;
 
@@ -789,11 +827,13 @@
                     }
                 }
 
-                // Update UI
-                document.getElementById("join-btn").style.display = "none";
+                // Update UI - hide both phases
+                document.getElementById("calibration_phase").style.display =
+                    "none";
+                document.getElementById("join_phase").style.display = "none";
 
                 log("Joined instrument in synthesis mode", "info");
-            };
+            }
 
             // Connect all synths to controller
             function connectAllSynthsToController() {
@@ -1129,24 +1169,13 @@
                 }
             }
 
-            window.startAllSynths = async function startAllSynths() {
-                // Ensure audio is initialized before starting
-                await initializeAudioSystem();
-
-                for (const synth of synths) {
-                    await synth.ensureAudioInitialized(
-                        audioContext,
-                        masterGain,
-                    );
-                    synth.setPower(true);
-                }
-            };
-
-            window.stopAllSynths = function stopAllSynths() {
-                synths.forEach((synth) => {
-                    synth.setPower(false);
-                });
-            };
+            // Event listeners
+            document
+                .getElementById("start_calibration")
+                .addEventListener("click", startCalibrationMode);
+            document
+                .getElementById("join_instrument")
+                .addEventListener("click", joinInstrument);
 
             function updateLevelMeters() {
                 if (!isInitialized) return;
@@ -1216,18 +1245,11 @@
                         log(`Synth created with ID: ${synth.id}`, "info");
                     }
 
-                    document.getElementById("start-all").disabled = false;
-                    document.getElementById("stop-all").disabled = false;
-
                     isInitialized = true;
                     log(
                         `Initialized ${synthCount} synths (audio deferred)`,
                         "info",
                     );
-
-                    // Show calibration button
-                    document.getElementById("calibrate-btn").style.display =
-                        "inline-block";
 
                     // Connect to controller automatically
                     connectAllSynthsToController();
