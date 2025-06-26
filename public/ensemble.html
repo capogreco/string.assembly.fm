@@ -399,7 +399,15 @@
                             `[${this.id}] Received program message with transition: ${JSON.stringify(data.transition)}`,
                             "info",
                         );
-                        this.applyProgram(data.program, data.transition);
+                        
+                        // Calculate individual timing if stagger/spread are present
+                        if (data.transition && (data.transition.stagger || data.transition.durationSpread)) {
+                            const calculatedTransition = this.calculateTransitionTiming(data.transition);
+                            log(`[${this.id}] Calculated transition: delay=${calculatedTransition.delay?.toFixed(3)}s, duration=${calculatedTransition.duration?.toFixed(3)}s`, "info");
+                            this.applyProgram(data.program, calculatedTransition);
+                        } else {
+                            this.applyProgram(data.program, data.transition);
+                        }
                     } else if (data.type === "setTransitionConfig") {
                         // Forward transition config to worklet
                         if (this.bowedString) {
@@ -445,6 +453,7 @@
                         } else if (data.name === "load") {
                             this.handleLoadCommand(
                                 data.bank,
+                                data.transition,
                                 data.fallbackProgram,
                             );
                         }
@@ -511,6 +520,23 @@
                         "info",
                     );
                 } // End of applyProgram method
+                
+                requestProgramForBank(bankId, transition) {
+                    // Send request to controller for this specific bank
+                    for (const [controllerId, controller] of this.controllers) {
+                        if (controller.channel && controller.channel.readyState === "open") {
+                            controller.channel.send(
+                                JSON.stringify({
+                                    type: "request_bank_program",
+                                    bank: bankId,
+                                    transition: transition
+                                })
+                            );
+                            log(`[${this.id}] Requested program for bank ${bankId} from controller`, "info");
+                            break;
+                        }
+                    }
+                }
 
                 setPower(on) {
                     this.isActive = on;
@@ -530,11 +556,26 @@
 
                 handleSaveCommand(bankId) {
                     if (this.synthCore) {
+                        // Get current state from synthCore.currentProgram
+                        const currentState = this.synthCore.currentProgram;
+                        if (currentState) {
+                            console.log(`[${this.id}] SAVING to bank ${bankId}:`);
+                            console.log(`[${this.id}] - Frequency: ${currentState.fundamentalFrequency?.toFixed(1)}Hz`);
+                            console.log(`[${this.id}] - Power: ${currentState.powerOn}`);
+                            
+                            // Log expression state
+                            if (currentState.vibratoEnabled) {
+                                console.log(`[${this.id}] - Vibrato: rate=${currentState.vibratoRate?.toFixed(2)}, depth=${currentState.vibratoDepth}`);
+                            }
+                            if (currentState.tremoloEnabled) {
+                                console.log(`[${this.id}] - Tremolo: speed=${currentState.tremoloSpeed?.toFixed(2)}, depth=${currentState.tremoloDepth}`);
+                            }
+                            if (currentState.trillEnabled) {
+                                console.log(`[${this.id}] - Trill: speed=${currentState.trillSpeed?.toFixed(2)}, interval=${currentState.trillInterval}`);
+                            }
+                        }
+                        
                         this.synthCore.saveToBank(bankId);
-                        log(
-                            `[${this.id}] Saved to bank ${bankId} via SynthCore`,
-                            "info",
-                        );
                     } else {
                         log(
                             `[${this.id}] SynthCore not available for saving`,
@@ -543,36 +584,77 @@
                     }
                 }
 
-                handleLoadCommand(bankId, fallbackProgram) {
-                    if (this.synthCore) {
-                        const success = this.synthCore.loadFromBank(
-                            bankId,
-                            fallbackProgram,
-                        );
-                        if (!success && fallbackProgram) {
-                            this.applyProgram(fallbackProgram);
-                        }
-                    } else if (this.synthBanks.has(bankId)) {
-                        // This synth has saved state - restore exact values
-                        const savedProgram = this.synthBanks.get(bankId);
-                        log(
-                            `[${this.id}] Loading saved parameters from bank ${bankId}`,
-                            "info",
-                        );
-                        this.applyProgram(savedProgram);
-                    } else if (fallbackProgram) {
-                        // New synth - use fallback program from controller
-                        log(
-                            `[${this.id}] New synth using fallback program for bank ${bankId}`,
-                            "info",
-                        );
-                        this.applyProgram(fallbackProgram);
+                handleLoadCommand(bankId, transition, fallbackProgram) {
+                    let programToApply = null;
+                    let source = "";
+                    
+                    // Check if we have this bank saved locally
+                    if (this.synthCore && this.synthCore.banks && this.synthCore.banks[bankId]) {
+                        programToApply = this.synthCore.banks[bankId];
+                        source = "local";
+                        log(`[${this.id}] Found local bank ${bankId}`, "info");
                     } else {
-                        log(
-                            `[${this.id}] No saved program for bank ${bankId} and no fallback provided`,
-                            "warn",
-                        );
+                        // Request program from controller for this specific bank
+                        log(`[${this.id}] No local bank ${bankId}, requesting from controller`, "info");
+                        this.requestProgramForBank(bankId, transition);
+                        return;
                     }
+                    
+                    // Log what we're loading
+                    if (programToApply) {
+                        console.log(`[${this.id}] LOADING from bank ${bankId} (source: ${source}):`);
+                        console.log(`[${this.id}] - Frequency: ${programToApply.fundamentalFrequency?.toFixed(1)}Hz`);
+                        console.log(`[${this.id}] - Power: ${programToApply.powerOn}`);
+                        
+                        // Log expression state
+                        if (programToApply.vibratoEnabled) {
+                            console.log(`[${this.id}] - Vibrato: rate=${programToApply.vibratoRate?.toFixed(2)}, depth=${programToApply.vibratoDepth}`);
+                        }
+                        if (programToApply.tremoloEnabled) {
+                            console.log(`[${this.id}] - Tremolo: speed=${programToApply.tremoloSpeed?.toFixed(2)}, depth=${programToApply.tremoloDepth}`);
+                        }
+                        if (programToApply.trillEnabled) {
+                            console.log(`[${this.id}] - Trill: speed=${programToApply.trillSpeed?.toFixed(2)}, interval=${programToApply.trillInterval}`);
+                        }
+                        
+                        // Calculate this synth's specific transition timing
+                        const synthIndex = parseInt(this.id.split('-')[1]) || 0;
+                        const synthTransition = this.calculateTransitionTiming(transition, synthIndex);
+                        log(`[${this.id}] - Transition: delay=${synthTransition.delay?.toFixed(3)}s, duration=${synthTransition.duration?.toFixed(3)}s`, "info");
+                        
+                        this.applyProgram(programToApply, synthTransition);
+                    }
+                }
+
+                calculateTransitionTiming(config, synthIndex = 0) {
+                    if (!config) {
+                        return { delay: 0, duration: 1.0 };
+                    }
+                    
+                    const baseDuration = config.duration || 1.0;
+                    const stagger = config.stagger || 0;
+                    const durationSpread = config.durationSpread || 0;
+                    
+                    // Calculate stagger delay
+                    let delay = 0;
+                    if (stagger > 0) {
+                        const staggerExponent = (Math.random() * 2 - 1) * stagger * Math.log(2);
+                        const staggerMultiplier = Math.exp(staggerExponent);
+                        delay = baseDuration * staggerMultiplier;
+                    }
+                    
+                    // Calculate duration variation
+                    let finalDuration = baseDuration;
+                    if (durationSpread > 0) {
+                        const durationExponent = (Math.random() * 2 - 1) * durationSpread * Math.log(2);
+                        const durationMultiplier = Math.exp(durationExponent);
+                        finalDuration = baseDuration * durationMultiplier;
+                    }
+                    
+                    return {
+                        delay: Math.max(0, delay),
+                        duration: finalDuration
+                    };
                 }
 
                 loadSynthBanksFromStorage() {
@@ -1026,28 +1108,27 @@
                 controller.connection = pc;
                 controller.ice_queue = [];
 
-                // Create data channels
-                const param_channel = pc.createDataChannel("params", {
-                    ordered: false,
-                    maxRetransmits: 0,
+                // Create unified data channel
+                const data_channel = pc.createDataChannel("data", {
+                    ordered: true,  // Reliable for all message types
                 });
-                const command_channel = pc.createDataChannel("commands", {
-                    ordered: true,
-                });
+                // Keep legacy references for compatibility
+                const param_channel = data_channel;
+                const command_channel = data_channel;
 
                 controller.channel = param_channel;
                 controller.command_channel = command_channel;
 
-                // Set up param channel handlers
-                param_channel.addEventListener("open", () => {
+                // Set up data channel handlers
+                data_channel.addEventListener("open", () => {
                     log(
-                        `[${synth.id}] Param channel open to ${controllerId}`,
+                        `[${synth.id}] Data channel open to ${controllerId}`,
                         "info",
                     );
                     controller.connected = true;
 
                     // Send immediate state update
-                    param_channel.send(
+                    data_channel.send(
                         JSON.stringify({
                             type: "pong",
                             timestamp: Date.now(),
@@ -1059,24 +1140,22 @@
                     );
                 });
 
-                param_channel.addEventListener("message", (event) => {
-                    synth.handleParamMessage(event);
+                data_channel.addEventListener("message", (event) => {
+                    const data = JSON.parse(event.data);
+                    // Route to appropriate handler based on message type
+                    if (data.type === "command" || data.name === "save_to_bank" || data.name === "load_from_bank") {
+                        synth.handleCommandMessage(event);
+                    } else {
+                        synth.handleParamMessage(event);
+                    }
                 });
 
-                param_channel.addEventListener("close", () => {
+                data_channel.addEventListener("close", () => {
                     log(
-                        `[${synth.id}] Param channel closed to ${controllerId}`,
+                        `[${synth.id}] Data channel closed to ${controllerId}`,
                         "info",
                     );
                     controller.connected = false;
-                });
-
-                // Set up command channel handlers
-                command_channel.addEventListener("message", (event) => {
-                    const command = JSON.parse(event.data);
-                    if (command.type === "command") {
-                        synth.handleCommandMessage(event);
-                    }
                 });
 
                 // Handle ICE candidates
@@ -1255,6 +1334,20 @@
                     connectAllSynthsToController();
 
                     updateLevelMeters();
+                    
+                    // Add utility function to window
+                    window.clearAllSynthBanks = function() {
+                        synths.forEach(synth => {
+                            const storageKey = `synth-banks-${synth.id}`;
+                            localStorage.removeItem(storageKey);
+                            synth.synthBanks.clear();
+                            if (synth.synthCore) {
+                                synth.synthCore.synthBanks.clear();
+                            }
+                            console.log(`Cleared localStorage for ${synth.id}`);
+                        });
+                        console.log('All synth banks cleared from localStorage');
+                    };
                 } catch (error) {
                     log(
                         `Failed to initialize ensemble: ${error.message}`,

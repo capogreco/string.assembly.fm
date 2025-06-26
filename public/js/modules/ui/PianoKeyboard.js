@@ -358,14 +358,7 @@ export class PianoKeyboard {
     });
     */
 
-    // Keyboard events
-    document.addEventListener("keydown", (e) => {
-      this.handleKeyboardDown(e);
-    });
-
-    document.addEventListener("keyup", (e) => {
-      this.handleKeyboardUp(e);
-    });
+    // Keyboard events removed - will be added back later
 
     // Clear chord button
     const clearButton = document.getElementById("clear-chord");
@@ -535,74 +528,7 @@ export class PianoKeyboard {
     // PianoExpressionHandler handles all mouse interactions
   }
 
-  /**
-   * Handle keyboard input (computer keyboard)
-   * @param {KeyboardEvent} event - Keyboard event
-   * @private
-   */
-  handleKeyboardDown(event) {
-    // Map computer keyboard to piano keys
-    const keyMap = {
-      KeyZ: 261.63, // C4
-      KeyS: 277.18, // C#4
-      KeyX: 293.66, // D4
-      KeyD: 311.13, // D#4
-      KeyC: 329.63, // E4
-      KeyV: 349.23, // F4
-      KeyG: 369.99, // F#4
-      KeyB: 392.0, // G4
-      KeyH: 415.3, // G#4
-      KeyN: 440.0, // A4
-      KeyJ: 466.16, // A#4
-      KeyM: 493.88, // B4
-      Comma: 523.25, // C5
-      KeyL: 554.37, // C#5
-      Period: 587.33, // D5
-      Semicolon: 622.25, // D#5
-      Slash: 659.25, // E5
-    };
-
-    const frequency = keyMap[event.code];
-    if (frequency && !event.repeat) {
-      this.addNoteToChord(frequency);
-
-      // Visual feedback
-      this.highlightKey(frequency, true);
-    }
-  }
-
-  /**
-   * Handle keyboard release
-   * @param {KeyboardEvent} event - Keyboard event
-   * @private
-   */
-  handleKeyboardUp(event) {
-    // Remove visual highlight (if implementing temporary highlights)
-    const keyMap = {
-      KeyZ: 261.63,
-      KeyS: 277.18,
-      KeyX: 293.66,
-      KeyD: 311.13,
-      KeyC: 329.63,
-      KeyV: 349.23,
-      KeyG: 369.99,
-      KeyB: 392.0,
-      KeyH: 415.3,
-      KeyN: 440.0,
-      KeyJ: 466.16,
-      KeyM: 493.88,
-      Comma: 523.25,
-      KeyL: 554.37,
-      Period: 587.33,
-      Semicolon: 622.25,
-      Slash: 659.25,
-    };
-
-    const frequency = keyMap[event.code];
-    if (frequency) {
-      this.highlightKey(frequency, false);
-    }
-  }
+  // Keyboard shortcut methods removed - will be added back later
 
   /**
    * Add note to current chord

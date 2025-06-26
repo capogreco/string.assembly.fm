@@ -366,6 +366,20 @@ export class WebRTCManager {
       window.Logger.log(`Received offer from ${peerId}`, "connections");
     }
 
+    // Check if we have an existing connection that might be stale
+    if (this.peers.has(peerId)) {
+      const existingPeerData = this.peers.get(peerId);
+      const existingPc = existingPeerData.connection;
+      
+      // If we're receiving a new offer, it likely means the peer restarted
+      // Close the old connection to ensure we create a fresh one
+      console.log(
+        `[WEBRTC-DIAG] Peer ${peerId}: Received new offer while existing connection in state: ${existingPc.connectionState}. Closing old connection.`,
+      );
+      
+      this.handlePeerDisconnection(peerId);
+    }
+
     try {
       // Ensure we have fresh ICE servers before creating connection
       if (
@@ -1131,7 +1145,7 @@ export class WebRTCManager {
 
     // Enhanced logging
     console.log(
-      `[WEBRTC-DEBUG] handleDataChannel called for channel: ${channelName}, peer: ${peerId}`,
+      `[WEBRTC-DEBUG] handleDataChannel called for channel: ${channelName}, peer: ${peerId}, readyState: ${channel.readyState}`,
       channel,
     );
 
@@ -1146,22 +1160,34 @@ export class WebRTCManager {
       );
     }
 
-    if (channelName === "params") {
+    // Handle single "data" channel or legacy channels
+    if (channelName === "data") {
       if (window.Logger) {
         window.Logger.log(
-          `handleDataChannel: Setting up PARAMS channel for ${peerId}`,
+          `handleDataChannel: Setting up DATA channel for ${peerId}`,
           "connections",
         );
       }
-      this.setupParamChannel(channel, peerId, peerData);
+      this.setupDataChannel(channel, peerId, peerData);
+    } else if (channelName === "params") {
+      // Legacy support - treat params channel as data channel
+      if (window.Logger) {
+        window.Logger.log(
+          `handleDataChannel: Setting up legacy PARAMS channel as DATA for ${peerId}`,
+          "connections",
+        );
+      }
+      this.setupDataChannel(channel, peerId, peerData);
     } else if (channelName === "commands") {
+      // Legacy support - store command channel but prefer data channel
       if (window.Logger) {
         window.Logger.log(
-          `handleDataChannel: Setting up COMMANDS channel for ${peerId}`,
+          `handleDataChannel: Received legacy COMMANDS channel from ${peerId}`,
           "connections",
         );
       }
-      this.setupCommandChannel(channel, peerId, peerData);
+      peerData.commandChannel = channel;
+      this.setupLegacyCommandChannel(channel, peerId, peerData);
     } else {
       if (window.Logger) {
         window.Logger.log(
@@ -1173,18 +1199,27 @@ export class WebRTCManager {
   }
 
   /**
-   * Setup param data channel
+   * Setup unified data channel
    */
-  setupParamChannel(channel, peerId, peerData) {
+  setupDataChannel(channel, peerId, peerData) {
+    console.log(`[WEBRTC-DEBUG] Setting up data channel for ${peerId}, current readyState: ${channel.readyState}`);
+    peerData.dataChannel = channel;
+    // Keep legacy references for backward compatibility
     peerData.paramChannel = channel;
+    
+    // Debug what's stored
+    console.log(`[WEBRTC-DEBUG] Peer ${peerId} now has dataChannel: ${!!peerData.dataChannel}, paramChannel: ${!!peerData.paramChannel}`);
 
     channel.addEventListener("open", () => {
       console.log(
-        `[WEBRTC-DIAG] Peer ${peerId}: Param channel opened. ReadyState: ${channel.readyState}`,
+        `[WEBRTC-DIAG] Peer ${peerId}: Data channel opened. ReadyState: ${channel.readyState}`,
       );
+      
+      // Re-check what's stored when channel opens
+      console.log(`[WEBRTC-DEBUG] On open - Peer ${peerId} has dataChannel: ${!!peerData.dataChannel}, paramChannel: ${!!peerData.paramChannel}`);
 
       if (window.Logger) {
-        window.Logger.log(`Param channel open to ${peerId}`, "connections");
+        window.Logger.log(`Data channel open to ${peerId}`, "connections");
       }
 
       // Check if connection is also ready
@@ -1204,6 +1239,12 @@ export class WebRTCManager {
         });
       }
 
+      // Emit both new and legacy events for compatibility
+      this.eventBus.emit("webrtc:dataChannelOpen", {
+        peerId,
+        channel,
+        timestamp: Date.now(),
+      });
       this.eventBus.emit("webrtc:paramChannelOpen", {
         peerId,
         channel,
@@ -1223,14 +1264,14 @@ export class WebRTCManager {
     });
 
     channel.addEventListener("message", (event) => {
-      this.handleParamChannelMessage(event, peerId, peerData);
+      this.handleDataChannelMessage(event, peerId, peerData);
     });
   }
 
   /**
-   * Setup command data channel
+   * Setup legacy command channel (for backward compatibility)
    */
-  setupCommandChannel(channel, peerId, peerData) {
+  setupLegacyCommandChannel(channel, peerId, peerData) {
     peerData.commandChannel = channel;
 
     channel.addEventListener("open", () => {
@@ -1262,7 +1303,70 @@ export class WebRTCManager {
   }
 
   /**
-   * Handle parameter channel messages
+   * Handle unified data channel messages
+   * @private
+   */
+  handleDataChannelMessage(event, peerId, peerData) {
+    try {
+      const data = JSON.parse(event.data);
+
+      if (window.Logger) {
+        window.Logger.log(
+          `Data message from ${peerId}: ${data.type}`,
+          "messages",
+        );
+      }
+
+      // Handle pong messages for latency calculation
+      if (data.type === "pong") {
+        peerData.latency = Date.now() - data.timestamp;
+        peerData.state = data.state || null;
+        peerData.lastPing = Date.now();
+
+        if (window.Logger) {
+          window.Logger.log(
+            `Pong from ${peerId}, latency: ${peerData.latency}ms`,
+            "performance",
+          );
+        }
+      }
+
+      // Emit unified data message event
+      this.eventBus.emit("webrtc:dataMessage", {
+        peerId,
+        data,
+        peerData,
+        timestamp: Date.now(),
+      });
+
+      // Also emit legacy events based on message type for compatibility
+      if (data.type === "command" || data.type === "save_to_bank" || data.type === "load_from_bank") {
+        this.eventBus.emit("webrtc:commandMessage", {
+          peerId,
+          data,
+          peerData,
+          timestamp: Date.now(),
+        });
+      } else {
+        this.eventBus.emit("webrtc:paramMessage", {
+          peerId,
+          data,
+          peerData,
+          timestamp: Date.now(),
+        });
+      }
+    } catch (error) {
+      if (window.Logger) {
+        window.Logger.log(
+          `Error parsing data message from ${peerId}: ${error}`,
+          "error",
+        );
+      }
+    }
+  }
+
+  /**
+   * Handle parameter channel messages (legacy)
    * @private
    */
   handleParamChannelMessage(event, peerId, peerData) {
@@ -1364,7 +1468,18 @@ export class WebRTCManager {
       }
 
       // Close data channels
-      if (peerData.paramChannel) {
+      if (peerData.dataChannel) {
+        try {
+          peerData.dataChannel.close();
+        } catch (e) {
+          console.warn(
+            `[WEBRTC-DIAG] Peer ${peerId}: Error closing data channel:`,
+            e,
+          );
+        }
+      }
+      // Also close legacy channels if they exist
+      if (peerData.paramChannel && peerData.paramChannel !== peerData.dataChannel) {
         try {
           peerData.paramChannel.close();
         } catch (e) {
@@ -1425,21 +1540,19 @@ export class WebRTCManager {
   }
 
   /**
-   * Send message to peer via parameter channel
+   * Send message to peer via data channel
    * @param {string} peerId - Target peer ID
    * @param {Object} message - Message to send
    * @returns {boolean} Success status
    */
-  sendParamMessage(peerId, message) {
+  sendDataMessage(peerId, message) {
     const peerData = this.peers.get(peerId);
-    if (
-      !peerData ||
-      !peerData.paramChannel ||
-      peerData.paramChannel.readyState !== "open"
-    ) {
+    const channel = peerData?.dataChannel || peerData?.paramChannel;
+    
+    if (!channel || channel.readyState !== "open") {
       if (window.Logger) {
         window.Logger.log(
-          `Cannot send param message to ${peerId} - channel not ready`,
+          `Cannot send data message to ${peerId} - channel not ready (dataChannel: ${!!peerData?.dataChannel}, paramChannel: ${!!peerData?.paramChannel}, readyState: ${channel?.readyState})`,
           "error",
         );
       }
@@ -1447,11 +1560,11 @@ export class WebRTCManager {
     }
 
     try {
-      peerData.paramChannel.send(JSON.stringify(message));
+      channel.send(JSON.stringify(message));
 
       if (window.Logger) {
         window.Logger.log(
-          `Sent param message to ${peerId}: ${message.type}`,
+          `Sent data message to ${peerId}: ${message.type}`,
           "messages",
         );
       }
@@ -1460,7 +1573,7 @@ export class WebRTCManager {
     } catch (error) {
       if (window.Logger) {
         window.Logger.log(
-          `Failed to send param message to ${peerId}: ${error}`,
+          `Failed to send data message to ${peerId}: ${error}`,
           "error",
         );
       }
@@ -1469,47 +1582,42 @@ export class WebRTCManager {
   }
 
   /**
-   * Send message to peer via command channel
+   * Send message to peer via parameter channel (legacy)
+   * @param {string} peerId - Target peer ID
+   * @param {Object} message - Message to send
+   * @returns {boolean} Success status
+   */
+  sendParamMessage(peerId, message) {
+    return this.sendDataMessage(peerId, message);
+  }
+
+  /**
+   * Send message to peer via command channel (legacy)
    * @param {string} peerId - Target peer ID
    * @param {Object} message - Message to send
    * @returns {boolean} Success status
    */
   sendCommandMessage(peerId, message) {
+    // Try to use command channel first for backward compatibility,
+    // fall back to data channel
     const peerData = this.peers.get(peerId);
-    if (
-      !peerData ||
-      !peerData.commandChannel ||
-      peerData.commandChannel.readyState !== "open"
-    ) {
-      if (window.Logger) {
-        window.Logger.log(
-          `Cannot send command message to ${peerId} - channel not ready`,
-          "error",
-        );
+    if (peerData?.commandChannel?.readyState === "open") {
+      try {
+        peerData.commandChannel.send(JSON.stringify(message));
+        if (window.Logger) {
+          window.Logger.log(
+            `Sent command via legacy channel to ${peerId}: ${message.type}`,
+            "messages",
+          );
+        }
+        return true;
+      } catch (error) {
+        // Fall through to use data channel
       }
-      return false;
     }
-
-    try {
-      peerData.commandChannel.send(JSON.stringify(message));
-
-      if (window.Logger) {
-        window.Logger.log(
-          `Sent command message to ${peerId}: ${message.type}`,
-          "messages",
-        );
-      }
-
-      return true;
-    } catch (error) {
-      if (window.Logger) {
-        window.Logger.log(
-          `Failed to send command message to ${peerId}: ${error}`,
-          "error",
-        );
-      }
-      return false;
-    }
+    
+    // Use unified data channel
+    return this.sendDataMessage(peerId, message);
   }
 
   /**
@@ -1522,7 +1630,11 @@ export class WebRTCManager {
     };
 
     this.peers.forEach((peerData, peerId) => {
-      this.sendParamMessage(peerId, pingMessage);
+      // Only ping if we have an open channel
+      const channel = peerData?.dataChannel || peerData?.paramChannel;
+      if (channel && channel.readyState === "open") {
+        this.sendDataMessage(peerId, pingMessage);
+      }
     });
   }
 
@@ -1542,8 +1654,11 @@ export class WebRTCManager {
       latency: peerData.latency,
       lastPing: peerData.lastPing,
       state: peerData.state,
+      hasDataChannel: peerData.dataChannel?.readyState === "open",
       hasParamChannel: peerData.paramChannel?.readyState === "open",
       hasCommandChannel: peerData.commandChannel?.readyState === "open",
+      dataChannelState: peerData.dataChannel?.readyState || "no channel",
+      paramChannelState: peerData.paramChannel?.readyState || "no channel",
       createdAt: peerData.createdAt,
     };
   }
@@ -1556,6 +1671,22 @@ export class WebRTCManager {
     return Array.from(this.peers.keys()).map((peerId) =>
       this.getPeerInfo(peerId),
     );
+  }
+  
+  /**
+   * Debug method to check peer status
+   */
+  debugPeerStatus() {
+    console.log("[WEBRTC-DEBUG] Current peer status:");
+    this.peers.forEach((peerData, peerId) => {
+      console.log(`[WEBRTC-DEBUG] ${peerId}:`, {
+        hasDataChannel: !!peerData.dataChannel,
+        hasParamChannel: !!peerData.paramChannel,
+        dataChannelState: peerData.dataChannel?.readyState || "no channel",
+        paramChannelState: peerData.paramChannel?.readyState || "no channel",
+        connectionState: peerData.connection?.connectionState || "no connection"
+      });
+    });
   }
 
   /**
@@ -1727,4 +1858,7 @@ export const webRTCManager = new WebRTCManager();
 if (typeof window !== "undefined") {
   window.WebRTCManager = WebRTCManager;
   window.webRTCManager = webRTCManager;
+  
+  // Add debug helper
+  window.debugWebRTC = () => webRTCManager.debugPeerStatus();
 }

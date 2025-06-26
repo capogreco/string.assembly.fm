@@ -175,6 +175,30 @@ export class NetworkCoordinator {
     });
 
     // WebRTC data channel events
+    this.webRTC.on("dataChannelOpen", (data) => {
+      if (window.Logger) {
+        window.Logger.log(
+          `Data channel open: ${data.peerId}`,
+          "connections",
+        );
+      }
+
+      // Add to connected synths
+      this.appState.addConnectedSynth(data.peerId, {
+        id: data.peerId,
+        connectedAt: Date.now(),
+        latency: null,
+        state: null,
+      });
+
+      // Auto-send program on connection
+      this.eventBus.emit("network:synthConnected", {
+        synthId: data.peerId,
+        channel: data.channel,
+      });
+    });
+
+    // Legacy param channel support
     this.webRTC.on("paramChannelOpen", (data) => {
       if (window.Logger) {
         window.Logger.log(
@@ -198,6 +222,17 @@ export class NetworkCoordinator {
       });
     });
 
+    this.webRTC.on("dataChannelClosed", (data) => {
+      if (window.Logger) {
+        window.Logger.log(
+          `Data channel closed: ${data.peerId}`,
+          "connections",
+        );
+      }
+      this.appState.removeConnectedSynth(data.peerId);
+    });
+
+    // Legacy param channel support
     this.webRTC.on("paramChannelClosed", (data) => {
       if (window.Logger) {
         window.Logger.log(
@@ -217,7 +252,12 @@ export class NetworkCoordinator {
       }
     });
 
-    // Parameter and command message handling
+    // Unified data message handling
+    this.webRTC.on("dataMessage", (data) => {
+      this.handleDataMessage(data);
+    });
+
+    // Legacy message handling for compatibility
     this.webRTC.on("paramMessage", (data) => {
       this.handleParamMessage(data);
     });
@@ -225,6 +265,21 @@ export class NetworkCoordinator {
     this.webRTC.on("commandMessage", (data) => {
       this.handleCommandMessage(data);
     });
+  }
+
+  /**
+   * Handle unified data channel messages
+   * @private
+   */
+  handleDataMessage(data) {
+    const { peerId, data: message, peerData } = data;
+
+    // Route to appropriate handler based on message type
+    if (message.type === "command" || message.type === "save_to_bank" || message.type === "load_from_bank") {
+      this.handleCommandMessage(data);
+    } else {
+      this.handleParamMessage(data);
+    }
   }
 
   /**
@@ -255,6 +310,20 @@ export class NetworkCoordinator {
         // Emit program request event for handling by other modules
         this.eventBus.emit("network:programRequested", {
           synthId: peerId,
+          timestamp: Date.now(),
+        });
+        break;
+        
+      case "request_bank_program":
+        if (window.Logger) {
+          window.Logger.log(`Bank program request from ${peerId} for bank ${message.bank}`, "messages");
+        }
+
+        // Emit bank program request event for handling by other modules
+        this.eventBus.emit("network:bankProgramRequested", {
+          synthId: peerId,
+          bankId: message.bank,
+          transition: message.transition,
           timestamp: Date.now(),
         });
         break;
@@ -311,7 +380,7 @@ export class NetworkCoordinator {
       ...(transition && { transition }),
     };
 
-    const success = this.webRTC.sendParamMessage(synthId, message);
+    const success = this.webRTC.sendDataMessage(synthId, message);
 
     if (success && window.Logger) {
       window.Logger.log(`Sent program to ${synthId}`, "messages");
@@ -327,7 +396,7 @@ export class NetworkCoordinator {
    * @returns {boolean} Success status
    */
   sendCommandToSynth(synthId, command) {
-    const success = this.webRTC.sendCommandMessage(synthId, command);
+    const success = this.webRTC.sendDataMessage(synthId, command);
 
     if (success && window.Logger) {
       window.Logger.log(

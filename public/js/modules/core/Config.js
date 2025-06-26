@@ -32,9 +32,7 @@ export const Config = {
     "tremoloSpeed",
     "tremoloArticulation",
     "masterGain",
-    "transitionDuration",
-    "transitionStagger",
-    "transitionDurationSpread",
+    // Transition parameters removed - they should always use current GUI values
   ],
 
   // Expression Types

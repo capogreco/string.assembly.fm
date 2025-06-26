@@ -46,6 +46,13 @@ export class PartManager {
 
     Logger.log("Initializing PartManager...", "lifecycle");
 
+    // Sync harmonic selections from AppState
+    const savedSelections = this.appState.get("harmonicSelections");
+    if (savedSelections) {
+      this.harmonicSelections = savedSelections;
+      Logger.log("Loaded harmonic selections from AppState", "parts");
+    }
+
     this.setupEventListeners();
     this.isInitialized = true;
 
@@ -106,6 +113,10 @@ export class PartManager {
 
     // Update app state
     this.appState.set("currentChord", this.currentChord);
+    
+    // Update expressions in app state for UI visibility
+    const expressionsObj = Object.fromEntries(this.noteExpressions);
+    this.appState.set("expressions", expressionsObj);
 
     // Redistribute if we have synths
     this.redistributeToSynths();
@@ -119,11 +130,16 @@ export class PartManager {
    * @param {Object} expression - Expression object {type, ...params}
    */
   setNoteExpression(noteName, expression) {
+    
     if (expression && expression.type && expression.type !== "none") {
       this.noteExpressions.set(noteName, expression);
     } else {
       this.noteExpressions.delete(noteName);
     }
+
+    // Update AppState expressions for UI visibility
+    const expressionsObj = Object.fromEntries(this.noteExpressions);
+    this.appState.set("expressions", expressionsObj);
 
     Logger.log(
       `Expression set: ${noteName} -> ${expression?.type || "none"}`,
@@ -152,8 +168,9 @@ export class PartManager {
     const numeratorKey = `${expression}-numerator`;
     const denominatorKey = `${expression}-denominator`;
 
-    const numerators = Array.from(this.harmonicSelections[numeratorKey]);
-    const denominators = Array.from(this.harmonicSelections[denominatorKey]);
+    const numerators = Array.from(this.harmonicSelections[numeratorKey] || new Set([1]));
+    const denominators = Array.from(this.harmonicSelections[denominatorKey] || new Set([1]));
+
 
     if (numerators.length === 0 || denominators.length === 0) {
       return 1.0;
@@ -164,7 +181,8 @@ export class PartManager {
     const randomDenominator =
       denominators[Math.floor(Math.random() * denominators.length)];
 
-    return randomNumerator / randomDenominator;
+    const ratio = randomNumerator / randomDenominator;
+    return ratio;
   }
 
   /**
@@ -191,15 +209,109 @@ export class PartManager {
       const frequency = this.currentChord[noteIndex];
       const noteName = this.frequencyToNoteName(frequency);
       const expression = this.noteExpressions.get(noteName) || { type: "none" };
+      
 
       this.synthAssignments.set(synthId, {
-        noteName,
         frequency,
         expression,
       });
     });
 
     Logger.log(`Redistributed to ${synthIds.length} synths`, "parts");
+  }
+
+  /**
+   * Send program to a specific synth with stochastic resolution
+   * @param {string} synthId - Synth ID to send to
+   * @param {Object} transitionConfig - Transition configuration
+   */
+  async sendProgramToSpecificSynth(synthId, transitionConfig = {}) {
+    Logger.log(`Sending program to specific synth: ${synthId}`, "parts");
+    
+    const networkCoordinator = this.appState.get("networkCoordinator");
+    if (!networkCoordinator) {
+      throw new Error("Network coordinator not available");
+    }
+    
+    // Get base program parameters
+    const parameterControls = this.appState.get("parameterControls");
+    if (!parameterControls) {
+      throw new Error("Parameter controls not available");
+    }
+    
+    const baseProgram = parameterControls.getAllParameterValues();
+    
+    // Add power state
+    const powerCheckbox = document.getElementById("power");
+    if (powerCheckbox) {
+      baseProgram.powerOn = powerCheckbox.checked;
+    }
+    
+    // Assign synth to chord if not already assigned
+    if (!this.synthAssignments.has(synthId)) {
+      // Find next available note in chord
+      const assignedNotes = new Set(
+        Array.from(this.synthAssignments.values()).map(a => a.frequency)
+      );
+      
+      let assignment = null;
+      for (const frequency of this.currentChord) {
+        if (!assignedNotes.has(frequency)) {
+          const noteName = this.frequencyToNoteName(frequency);
+          const expression = this.noteExpressions.get(noteName) || { type: "none" };
+          assignment = { frequency, expression };
+          break;
+        }
+      }
+      
+      // If no unassigned notes, use round-robin
+      if (!assignment && this.currentChord.length > 0) {
+        const synthIds = Array.from(this.synthAssignments.keys());
+        const index = synthIds.length % this.currentChord.length;
+        const frequency = this.currentChord[index];
+        const noteName = this.frequencyToNoteName(frequency);
+        const expression = this.noteExpressions.get(noteName) || { type: "none" };
+        assignment = { frequency, expression };
+      }
+      
+      if (assignment) {
+        this.synthAssignments.set(synthId, assignment);
+        Logger.log(`Assigned ${synthId} to ${assignment.frequency.toFixed(1)}Hz`, "parts");
+      } else {
+        Logger.log(`No chord available to assign ${synthId}`, "warn");
+        return;
+      }
+    }
+    
+    // Get assignment for this synth
+    const assignment = this.synthAssignments.get(synthId);
+    if (!assignment) {
+      Logger.log(`No assignment found for ${synthId}`, "error");
+      return;
+    }
+    
+    // Create synth-specific program
+    const synthProgram = { ...baseProgram };
+    synthProgram.fundamentalFrequency = assignment.frequency;
+    
+    // Apply expression with stochastic resolution
+    this.applyExpressionToProgram(synthProgram, assignment.expression);
+    
+    // Send with transition
+    const success = networkCoordinator.sendProgramToSynth(
+      synthId,
+      synthProgram,
+      transitionConfig
+    );
+    
+    if (success) {
+      Logger.log(
+        `Sent to ${synthId}: ${assignment.frequency.toFixed(1)}Hz, expression: ${assignment.expression.type || 'none'}`,
+        "parts"
+      );
+    } else {
+      Logger.log(`Failed to send program to ${synthId}`, "error");
+    }
   }
 
   /**
@@ -263,6 +375,14 @@ export class PartManager {
       `DEBUG: Note expressions: ${this.noteExpressions.size} expressions`,
       "debug",
     );
+    
+    // Log all expressions
+    for (const [note, expr] of this.noteExpressions) {
+      Logger.log(
+        `DEBUG: Expression for ${note}: ${JSON.stringify(expr)}`,
+        "debug",
+      );
+    }
 
     for (let i = 0; i < synthIds.length; i++) {
       const synthId = synthIds[i];
@@ -273,14 +393,19 @@ export class PartManager {
         continue;
       }
       Logger.log(
-        `DEBUG: Processing synth ${synthId}: ${assignment.noteName}`,
+        `DEBUG: Processing synth ${synthId}: ${assignment.frequency.toFixed(1)}Hz`,
         "debug",
       );
 
       // Create synth-specific program
       const synthProgram = { ...baseProgram };
       synthProgram.fundamentalFrequency = assignment.frequency;
-      synthProgram.assignedNote = assignment.noteName;
+
+      // Debug log the expression
+      Logger.log(
+        `DEBUG: Assignment for ${synthId}: freq=${assignment.frequency.toFixed(1)}Hz, expression=${JSON.stringify(assignment.expression)}`,
+        "debug",
+      );
 
       // Apply expression parameters
       let targetExpression = "NONE";
@@ -317,9 +442,10 @@ export class PartManager {
           Logger.log(`DEBUG: Successfully sent to ${synthId}`, "debug");
 
           Logger.log(
-            `Sent to ${synthId}: ${assignment.noteName} (${assignment.frequency.toFixed(1)}Hz, ${assignment.expression.type})`,
+            `Sent to ${synthId}: ${assignment.frequency.toFixed(1)}Hz, expression type: ${assignment.expression.type || 'MISSING'}`,
             "parts",
           );
+          
         } else {
           Logger.log(`DEBUG: Failed to send program to ${synthId}`, "debug");
         }
@@ -373,8 +499,9 @@ export class PartManager {
         synthProgram.vibratoDepth =
           expression.depth || synthProgram.vibratoDepth || 0.01;
         const vibratoRatio = this.getRandomHarmonicRatio("vibrato");
+        // Use expression rate as base, not the slider value
         const baseVibratoRate =
-          synthProgram.vibratoRate || expression.rate || 5;
+          expression.rate || synthProgram.vibratoRate || 5;
         synthProgram.vibratoRate = baseVibratoRate * vibratoRatio;
         break;
 
@@ -385,8 +512,9 @@ export class PartManager {
         synthProgram.tremoloArticulation =
           expression.articulation || synthProgram.tremoloArticulation || 0.8;
         const tremoloRatio = this.getRandomHarmonicRatio("tremolo");
+        // Use expression speed as base, not the slider value
         const baseTremoloSpeed =
-          synthProgram.tremoloSpeed || expression.speed || 10;
+          expression.speed || synthProgram.tremoloSpeed || 10;
         synthProgram.tremoloSpeed = baseTremoloSpeed * tremoloRatio;
         break;
 
@@ -397,7 +525,8 @@ export class PartManager {
         synthProgram.trillArticulation =
           expression.articulation || synthProgram.trillArticulation || 0.7;
         const trillRatio = this.getRandomHarmonicRatio("trill");
-        const baseTrillSpeed = synthProgram.trillSpeed || expression.speed || 8;
+        // Use expression speed as base, not the slider value
+        const baseTrillSpeed = expression.speed || synthProgram.trillSpeed || 8;
         synthProgram.trillSpeed = baseTrillSpeed * trillRatio;
         break;
     }
@@ -545,6 +674,7 @@ export class PartManager {
     this.noteExpressions.clear();
     this.synthAssignments.clear();
     this.appState.set("currentChord", []);
+    this.appState.set("expressions", {}); // Clear expressions in app state
     Logger.log("Part cleared", "parts");
   }
 

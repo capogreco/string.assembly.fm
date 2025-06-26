@@ -59,6 +59,7 @@ export class ParameterControls {
    * @private
    */
   cacheParameterElements() {
+    // Cache regular parameters
     Config.PARAM_IDS.forEach((paramId) => {
       const input = document.getElementById(paramId);
       const valueDisplay =
@@ -76,14 +77,47 @@ export class ParameterControls {
           max: parseFloat(input.max) || 1,
           step: parseFloat(input.step) || 0.01,
         });
-        if (window.Logger && paramId.includes("transition")) {
+      } else if (window.Logger) {
+        window.Logger.log(`Parameter element not found: ${paramId}`, "error");
+      }
+    });
+    
+    // Manually cache transition parameters (not saved, but still need UI handling)
+    const transitionParams = ['transitionDuration', 'transitionStagger', 'transitionDurationSpread'];
+    transitionParams.forEach((paramId) => {
+      const input = document.getElementById(paramId);
+      const valueDisplay =
+        document.getElementById(`${paramId}Value`) ||
+        document.getElementById(`${paramId}_value`);
+      const controlGroup = input?.closest(".control-group");
+
+      if (input) {
+        this.paramElements.set(paramId, {
+          input,
+          valueDisplay,
+          controlGroup,
+          type: input.type,
+          min: parseFloat(input.min) || 0,
+          max: parseFloat(input.max) || 1,
+          step: parseFloat(input.step) || 0.01,
+        });
+        if (window.Logger) {
           window.Logger.log(
-            `Cached transition parameter: ${paramId} = ${input.value}`,
+            `Cached transition parameter: ${paramId} = ${input.value}, display element: ${valueDisplay ? 'found' : 'NOT FOUND'}`,
             "debug",
           );
         }
-      } else if (window.Logger) {
-        window.Logger.log(`Parameter element not found: ${paramId}`, "error");
+        
+        // Initialize display value
+        const initialValue = this.parseParameterValue(
+          this.paramElements.get(paramId),
+          input.value
+        );
+        this.updateDisplayValue(paramId, initialValue);
+      } else {
+        if (window.Logger) {
+          window.Logger.log(`Transition parameter element not found: ${paramId}`, "error");
+        }
       }
     });
 
@@ -164,7 +198,7 @@ export class ParameterControls {
     // Use the new HarmonicRatioSelector component
     if (window.HarmonicRatioSelector) {
       this.harmonicComponents =
-        window.HarmonicRatioSelector.replaceExistingSelectors(this.appState);
+        window.HarmonicRatioSelector.replaceExistingSelectors(this.appState, this.eventBus);
 
       if (window.Logger) {
         window.Logger.log(
@@ -689,13 +723,17 @@ export class ParameterControls {
 
     // Show/hide expression parameter groups based on usage
     expressionGroups.forEach((group) => {
-      const groupExpression = group.classList.contains("vibrato")
-        ? "vibrato"
-        : group.classList.contains("trill")
-          ? "trill"
-          : group.classList.contains("tremolo")
-            ? "tremolo"
-            : null;
+      // More robust expression type detection
+      let groupExpression = null;
+      const classList = Array.from(group.classList);
+
+      if (classList.includes("vibrato")) {
+        groupExpression = "vibrato";
+      } else if (classList.includes("trill")) {
+        groupExpression = "trill";
+      } else if (classList.includes("tremolo")) {
+        groupExpression = "tremolo";
+      }
 
       if (window.Logger) {
         window.Logger.log(
@@ -706,11 +744,19 @@ export class ParameterControls {
 
       if (groupExpression) {
         const shouldShow = usedExpressionTypes.has(groupExpression);
-        // Use CSS classes instead of direct style manipulation
+
+        // Always update the active class state
         if (shouldShow) {
           group.classList.add("active");
         } else {
           group.classList.remove("active");
+        }
+
+        // Force visibility update by ensuring display property is correct
+        if (shouldShow) {
+          group.style.display = "block";
+        } else {
+          group.style.display = "none";
         }
 
         if (window.Logger) {

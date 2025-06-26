@@ -3,10 +3,11 @@
  * Handles multi-select with drag support for numerator/denominator ratios
  */
 class HarmonicRatioSelector {
-  constructor(container, expression, appState) {
+  constructor(container, expression, appState, eventBus = null) {
     this.container = container;
     this.expression = expression;
     this.appState = appState;
+    this.eventBus = eventBus || (globalThis.eventBus ? globalThis.eventBus : null);
 
     // Drag state
     this.isDragging = false;
@@ -118,7 +119,7 @@ class HarmonicRatioSelector {
     this.dragMode = currentSelection.has(value) ? 'deselect' : 'select';
   }
 
-  handleMouseEnter(button, event) {
+  handleMouseEnter(button, _event) {
     if (!this.isDragging || !this.dragStart) return;
 
     const value = parseInt(button.dataset.value);
@@ -177,11 +178,21 @@ class HarmonicRatioSelector {
     const selectorKey = `${this.expression}-${this.dragStart?.type || 'unknown'}`;
     const currentSelection = harmonicSelections[selectorKey];
 
-    if (window.Logger && currentSelection) {
-      window.Logger.log(
+    if (globalThis.Logger && currentSelection) {
+      globalThis.Logger.log(
         `Harmonic ratio changed: ${selectorKey} = [${Array.from(currentSelection).join(', ')}]`,
         'expressions'
       );
+    }
+    
+    // Emit event for PartManager
+    if (this.eventBus && currentSelection) {
+      this.eventBus.emit('harmonicRatio:changed', {
+        expression: this.expression,
+        type: this.dragStart?.type || 'unknown',
+        key: selectorKey,
+        selection: Array.from(currentSelection)
+      });
     }
   }
 
@@ -236,9 +247,12 @@ class HarmonicRatioSelector {
   }
 
   // Static method to create HRG components from existing HTML
-  static replaceExistingSelectors(appState) {
+  static replaceExistingSelectors(appState, eventBus = null) {
     const existingSelectors = document.querySelectorAll('.harmonic-selector');
     const components = [];
+    
+    // Try to get eventBus from window if not provided
+    const eventBusInstance = eventBus || (globalThis.eventBus ? globalThis.eventBus : null);
 
     existingSelectors.forEach(selector => {
       const expression = selector.dataset.expression;
@@ -255,7 +269,7 @@ class HarmonicRatioSelector {
       container.appendChild(componentContainer);
 
       // Create and store the component
-      const component = new HarmonicRatioSelector(componentContainer, expression, appState);
+      const component = new HarmonicRatioSelector(componentContainer, expression, appState, eventBusInstance);
       components.push(component);
     });
 
@@ -267,5 +281,5 @@ class HarmonicRatioSelector {
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = HarmonicRatioSelector;
 } else if (typeof window !== 'undefined') {
-  window.HarmonicRatioSelector = HarmonicRatioSelector;
+  globalThis.HarmonicRatioSelector = HarmonicRatioSelector;
 }

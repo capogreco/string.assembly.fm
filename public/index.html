@@ -400,6 +400,38 @@
                 console.log("Audio system and communication are ready.");
             }
 
+            // calculate individual transition timing from stagger and spread parameters
+            function calculate_transition_timing(config) {
+                if (!config) {
+                    return { delay: 0, duration: 1.0 };
+                }
+                
+                const baseDuration = config.duration || 1.0;
+                const stagger = config.stagger || 0;
+                const durationSpread = config.durationSpread || 0;
+                
+                // Calculate stagger delay using exponential algorithm
+                let delay = 0;
+                if (stagger > 0) {
+                    const staggerExponent = (Math.random() * 2 - 1) * stagger * Math.log(2);
+                    const staggerMultiplier = Math.exp(staggerExponent);
+                    delay = baseDuration * staggerMultiplier;
+                }
+                
+                // Calculate duration variation using exponential algorithm
+                let finalDuration = baseDuration;
+                if (durationSpread > 0) {
+                    const durationExponent = (Math.random() * 2 - 1) * durationSpread * Math.log(2);
+                    const durationMultiplier = Math.exp(durationExponent);
+                    finalDuration = baseDuration * durationMultiplier;
+                }
+                
+                return {
+                    delay: Math.max(0, delay),
+                    duration: finalDuration
+                };
+            }
+
             async function start_calibration_mode() {
                 await init_audio_system_if_needed(); // Ensure everything is initialized
 
@@ -598,7 +630,15 @@
 
                     if (synthCore && synthCore.isInitialized) {
                         // Apply program with transition data
-                        synthCore.applyProgram(current_program, transitionData);
+                        if (transitionData && (transitionData.stagger || transitionData.durationSpread)) {
+                            // Calculate individual timing from stagger and spread
+                            const calculatedTransition = calculate_transition_timing(transitionData);
+                            console.log(`[PROGRAM] Transition config: stagger=${transitionData.stagger}, spread=${transitionData.durationSpread}`);
+                            console.log(`[PROGRAM] Calculated: delay=${calculatedTransition.delay?.toFixed(3)}s, duration=${calculatedTransition.duration?.toFixed(3)}s`);
+                            synthCore.applyProgram(current_program, calculatedTransition);
+                        } else {
+                            synthCore.applyProgram(current_program, transitionData);
+                        }
                     } else {
                         console.warn("SynthCore not ready for program");
                     }
@@ -632,6 +672,97 @@
                             break;
                         }
                     }
+                } else if (data.type === "command") {
+                    // Handle command messages
+                    handle_command(data.name, data.value || data);
+                }
+            }
+
+            // handle command messages
+            function handle_command(command_name, command_data) {
+                console.log(`Handling command: ${command_name}`, command_data);
+                
+                if (command_name === "power") {
+                    if (synthCore) {
+                        synthCore.setPower(command_data);
+                        is_powered_on = command_data;
+                    }
+                } else if (command_name === "load") {
+                    const bank_id = command_data.bank || command_data.bank_id || command_data;
+                    const transition = command_data.transition;
+                    
+                    if (synthCore && typeof bank_id === "number") {
+                        // Check if we have this bank saved locally
+                        if (synthCore.banks && synthCore.banks[bank_id]) {
+                            const programToApply = synthCore.banks[bank_id];
+                            console.log(`[SYNTH] LOADING from bank ${bank_id} (source: local):`);
+                            console.log(`[SYNTH] - Frequency: ${programToApply.fundamentalFrequency?.toFixed(1)}Hz`);
+                            console.log(`[SYNTH] - Power: ${programToApply.powerOn}`);
+                            
+                            // Log expression state
+                            if (programToApply.vibratoEnabled) {
+                                console.log(`[SYNTH] - Vibrato: rate=${programToApply.vibratoRate?.toFixed(2)}, depth=${programToApply.vibratoDepth}`);
+                            }
+                            if (programToApply.tremoloEnabled) {
+                                console.log(`[SYNTH] - Tremolo: speed=${programToApply.tremoloSpeed?.toFixed(2)}, depth=${programToApply.tremoloDepth}`);
+                            }
+                            if (programToApply.trillEnabled) {
+                                console.log(`[SYNTH] - Trill: speed=${programToApply.trillSpeed?.toFixed(2)}, interval=${programToApply.trillInterval}`);
+                            }
+                            
+                            if (transition) {
+                                // Calculate individual timing from stagger and spread parameters
+                                console.log(`[SYNTH] - Received transition config: duration=${transition.duration}, stagger=${transition.stagger}, durationSpread=${transition.durationSpread}`);
+                                const synthTransition = calculate_transition_timing(transition);
+                                console.log(`[SYNTH] - Calculated transition: delay=${synthTransition.delay?.toFixed(3)}s, duration=${synthTransition.duration?.toFixed(3)}s`);
+                                synthCore.applyProgram(programToApply, synthTransition);
+                            } else {
+                                synthCore.applyProgram(programToApply);
+                            }
+                        } else {
+                            // Request program from controller for this specific bank
+                            console.log(`[SYNTH] No local bank ${bank_id}, requesting from controller`);
+                            for (const [ctrl_id, ctrl] of controllers) {
+                                if (ctrl.channel && ctrl.channel.readyState === "open") {
+                                    ctrl.channel.send(
+                                        JSON.stringify({
+                                            type: "request_bank_program",
+                                            bank: bank_id,
+                                            transition: transition
+                                        })
+                                    );
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+                } else if (command_name === "save") {
+                    const bank_id = command_data.bank || command_data.bank_id || command_data;
+                    if (synthCore && typeof bank_id === "number") {
+                        // Get current state from synthCore.currentProgram
+                        const currentState = synthCore.currentProgram;
+                        if (currentState) {
+                            console.log(`[SYNTH] SAVING to bank ${bank_id}:`);
+                            console.log(`[SYNTH] - Frequency: ${currentState.fundamentalFrequency?.toFixed(1)}Hz`);
+                            console.log(`[SYNTH] - Power: ${currentState.powerOn}`);
+                            
+                            // Log expression state
+                            if (currentState.vibratoEnabled) {
+                                console.log(`[SYNTH] - Vibrato: rate=${currentState.vibratoRate?.toFixed(2)}, depth=${currentState.vibratoDepth}`);
+                            }
+                            if (currentState.tremoloEnabled) {
+                                console.log(`[SYNTH] - Tremolo: speed=${currentState.tremoloSpeed?.toFixed(2)}, depth=${currentState.tremoloDepth}`);
+                            }
+                            if (currentState.trillEnabled) {
+                                console.log(`[SYNTH] - Trill: speed=${currentState.trillSpeed?.toFixed(2)}, interval=${currentState.trillInterval}`);
+                            }
+                        }
+                        
+                        synthCore.saveToBank(bank_id);
+                    }
+                } else {
+                    console.warn(`Unknown command: ${command_name}`);
                 }
             }
 
@@ -662,26 +793,21 @@
                 }
                 controller.connection = pc;
 
-                // create data channels
-                const param_channel = pc.createDataChannel("params");
+                // create unified data channel
+                const data_channel = pc.createDataChannel("data");
                 console.log(
-                    `[${synth_id}] Created 'params' data channel, initial readyState: ${param_channel.readyState}`,
-                    param_channel,
+                    `[${synth_id}] Created 'data' data channel, initial readyState: ${data_channel.readyState}`,
+                    data_channel,
                 );
-                // const command_channel = pc.createDataChannel("commands");
-                // console.log(
-                //     `[${synth_id}] Created 'commands' data channel, initial readyState: ${command_channel.readyState}`,
-                //     command_channel,
-                // );
-                controller.channel = param_channel;
+                controller.channel = data_channel;
 
-                param_channel.addEventListener("open", () => {
-                    console.log(`param channel open to ${controller_id}`);
+                data_channel.addEventListener("open", () => {
+                    console.log(`data channel open to ${controller_id}`);
                     controller.connected = true;
                     update_controller_list();
 
                     // send immediate state update (like a pong without a ping)
-                    param_channel.send(
+                    data_channel.send(
                         JSON.stringify({
                             type: "pong",
                             timestamp: Date.now(),
@@ -695,13 +821,13 @@
                     }
                 });
 
-                param_channel.addEventListener("close", () => {
-                    console.log(`param channel closed to ${controller_id}`);
+                data_channel.addEventListener("close", () => {
+                    console.log(`data channel closed to ${controller_id}`);
                     controller.connected = false;
                     update_controller_list();
                 });
 
-                param_channel.addEventListener("message", (event) => {
+                data_channel.addEventListener("message", (event) => {
                     const data = JSON.parse(event.data);
                     handle_data_message(data);
                 });

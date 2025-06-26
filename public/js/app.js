@@ -348,10 +348,39 @@ function initializeProgramManager() {
   // Subscribe to program events
   eventBus.on("program:saved", (data) => {
     Logger.log(`Program saved to Bank ${data.bankId}`, "lifecycle");
+    
+    // Send save command to all connected synths
+    networkCoordinator.broadcastCommand({
+      type: "command",
+      name: "save",
+      bank: data.bankId
+    });
   });
 
   eventBus.on("program:loaded", (data) => {
     Logger.log(`Program loaded from Bank ${data.bankId}`, "lifecycle");
+    
+    // Get current transition parameters
+    const transitionParams = parameterControls.getAllParameterValues();
+    const transitionConfig = {
+      duration: parseFloat(transitionParams.transitionDuration) || 1.0,
+      stagger: parseFloat(transitionParams.transitionStagger) || 0.0,
+      durationSpread: parseFloat(transitionParams.transitionDurationSpread) || 0.0,
+    };
+    
+    Logger.log(`Transition config: duration=${transitionConfig.duration.toFixed(2)}s, stagger=${transitionConfig.stagger.toFixed(2)}, spread=${transitionConfig.durationSpread.toFixed(2)}`, "messages");
+    
+    // Send load command with transition data
+    // Synths will load their local bank values or request from controller if needed
+    const command = {
+      type: "command",
+      name: "load",
+      bank: data.bankId,
+      transition: transitionConfig
+    };
+    
+    Logger.log(`Broadcasting load command with transitions to synths: Bank ${data.bankId}`, "messages");
+    networkCoordinator.broadcastCommand(command);
   });
 
   eventBus.on("program:cleared", (data) => {
@@ -398,6 +427,9 @@ async function initializeUI() {
 
   // Initialize piano keyboard
   pianoKeyboard.initialize();
+  
+  // Store reference in appState for ProgramManager
+  appState.set("pianoKeyboard", pianoKeyboard);
 
   // Set up UI event handlers
   setupUIEventHandlers();
@@ -496,6 +528,84 @@ function setupUIEventHandlers() {
 
   // Set up "Send Current Program" button
   setupProgramSendButton();
+  
+  // Set up bank control buttons
+  setupBankControls();
+}
+
+/**
+ * Set up bank control buttons
+ */
+function setupBankControls() {
+  const saveButton = document.getElementById("save_bank");
+  const loadButton = document.getElementById("load_bank");
+  const bankSelector = document.getElementById("bank_selector");
+  
+  if (saveButton) {
+    saveButton.addEventListener("click", (e) => {
+      const bankId = parseInt(bankSelector.value);
+      const currentProgram = parameterControls.getAllParameterValues();
+      
+      // Save to bank
+      programManager.saveToBank(bankId, currentProgram);
+      
+      // Visual feedback
+      e.target.classList.add("success");
+      e.target.textContent = "✓ Saved";
+      setTimeout(() => {
+        e.target.classList.remove("success");
+        e.target.textContent = "Save";
+      }, 1500);
+      
+      Logger.log(`Saved to Bank ${bankId}`, "lifecycle");
+    });
+  }
+  
+  if (loadButton) {
+    loadButton.addEventListener("click", (e) => {
+      const bankId = parseInt(bankSelector.value);
+      const success = programManager.loadFromBank(bankId);
+      
+      if (success) {
+        // Visual feedback
+        e.target.classList.add("success");
+        e.target.textContent = "✓ Loaded";
+        setTimeout(() => {
+          e.target.classList.remove("success");
+          e.target.textContent = "Load";
+        }, 1500);
+      } else {
+        // Error feedback
+        e.target.classList.add("error");
+        e.target.textContent = "✗ Empty";
+        setTimeout(() => {
+          e.target.classList.remove("error");
+          e.target.textContent = "Load";
+        }, 1500);
+      }
+    });
+  }
+  
+  
+  // Update bank display on load
+  updateBankDisplay();
+}
+
+/**
+ * Update bank selector display
+ */
+function updateBankDisplay() {
+  const banks = programManager.getSavedBanks();
+  const selector = document.getElementById("bank_selector");
+  
+  if (selector) {
+    banks.forEach(bank => {
+      const option = selector.querySelector(`option[value="${bank.id}"]`);
+      if (option) {
+        option.textContent = bank.saved ? `Bank ${bank.id} ●` : `Bank ${bank.id} ⚪`;
+      }
+    });
+  }
 }
 
 /**
@@ -546,6 +656,41 @@ function setupNetworkEventHandlers() {
     const currentProgram =
       appState.get("currentProgram") || programManager.createExampleProgram();
     networkCoordinator.sendProgramToSynth(data.synthId, currentProgram);
+  });
+  
+  // Handle bank program requests from synths
+  networkCoordinator.on("bankProgramRequested", (data) => {
+    Logger.log(`Bank ${data.bankId} program requested by: ${data.synthId}`, "messages");
+    
+    // Check if we have this bank saved
+    const programBanks = appState.get("programBanks");
+    if (!programBanks || !programBanks.has(data.bankId)) {
+      Logger.log(`Bank ${data.bankId} not found`, "error");
+      return;
+    }
+    
+    // Get the saved program template  
+    const savedProgram = programBanks.get(data.bankId);
+    
+    // Check if we have a chord saved in this bank
+    if (savedProgram.chordNotes && savedProgram.chordNotes.length > 0) {
+      // Temporarily set the chord without triggering a full load
+      partManager.setChord(savedProgram.chordNotes);
+      
+      // If there are note expressions, apply them
+      if (savedProgram.noteExpressions) {
+        const pianoKeyboard = appState.get('pianoKeyboard');
+        if (pianoKeyboard && pianoKeyboard.expressionHandler) {
+          // Apply expressions to the notes
+          Object.entries(savedProgram.noteExpressions).forEach(([note, expression]) => {
+            partManager.setNoteExpression(note, expression);
+          });
+        }
+      }
+    }
+    
+    // Send the program with the requested transition to this specific synth
+    partManager.sendProgramToSpecificSynth(data.synthId, data.transition);
   });
 
   // Handle controller kick events

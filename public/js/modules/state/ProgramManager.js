@@ -11,6 +11,7 @@ export class ProgramManager {
     this.state = state;
     this.storage = storage;
     this.storageKey = Config.STORAGE_KEYS.BANKS;
+    this.isApplyingProgram = false; // Prevent recursive updates
   }
 
   /**
@@ -60,10 +61,13 @@ export class ProgramManager {
         banksData[bankId] = program;
       });
 
-      this.storage.setItem(this.storageKey, JSON.stringify(banksData));
+      const dataToSave = JSON.stringify(banksData);
+      const dataSize = new Blob([dataToSave]).size;
+      
+      this.storage.setItem(this.storageKey, dataToSave);
 
       if (window.Logger) {
-        window.Logger.log('Saved banks to storage', 'lifecycle');
+        window.Logger.log(`Saved ${Object.keys(banksData).length} banks to storage (${(dataSize/1024).toFixed(2)}KB)`, 'lifecycle');
       }
 
       return true;
@@ -100,23 +104,45 @@ export class ProgramManager {
         harmonicSelectionsForSave[key] = Array.from(harmonicSelections[key]);
       });
 
+      // Get note expressions from PianoKeyboard
+      let noteExpressions = {};
+      const pianoKeyboard = this.state.get('pianoKeyboard');
+      if (pianoKeyboard && pianoKeyboard.expressionHandler) {
+        noteExpressions = pianoKeyboard.expressionHandler.getAllExpressions();
+      }
+
+      // Get current chord
+      const currentChord = this.state.get('currentChord') || [];
+      
+      // Log what we're saving
+      console.log(`CONTROLLER SAVING to Bank ${bankId}:`);
+      console.log(`- Chord: ${currentChord.length > 0 ? currentChord.map(f => f.toFixed(1)).join(', ') + ' Hz' : 'EMPTY'}`);
+      console.log(`- Expressions: ${JSON.stringify(noteExpressions)}`);
+
       // Create complete controller state
       const controllerState = {
         ...program,
-        chordNotes: [...this.state.get('currentChord')],
+        chordNotes: [...currentChord],
+        noteExpressions: noteExpressions,
         selectedExpression: this.state.get('selectedExpression'),
         harmonicSelections: harmonicSelectionsForSave,
         timestamp: Date.now(),
         version: '1.0'
       };
+      
 
       // Update program banks
       const programBanks = new Map(this.state.get('programBanks'));
+      const isOverwrite = programBanks.has(bankId);
       programBanks.set(bankId, controllerState);
       this.state.set('programBanks', programBanks);
 
       // Save to storage
       this.saveBanksToStorage();
+      
+      if (window.Logger) {
+        window.Logger.log(`${isOverwrite ? 'Overwrote' : 'Saved to'} Bank ${bankId}`, 'lifecycle');
+      }
 
       // Emit save event
       if (window.eventBus) {
@@ -145,6 +171,14 @@ export class ProgramManager {
    * @param {number} bankId - Bank ID to load from
    */
   loadFromBank(bankId) {
+    // Prevent recursive loads
+    if (this.isLoadingBank) {
+      console.warn(`[ProgramManager] Prevented recursive load of bank ${bankId}`);
+      return false;
+    }
+    
+    this.isLoadingBank = true;
+    
     try {
       if (window.Logger) {
         window.Logger.log(`Loading from bank ${bankId}...`, 'lifecycle');
@@ -167,7 +201,7 @@ export class ProgramManager {
         }
         return false;
       }
-
+      
       // Restore UI parameter values
       this.applyProgramToUI(savedState);
 
@@ -188,13 +222,51 @@ export class ProgramManager {
         this.applyHarmonicSelectionsToUI(harmonicSelections);
       }
 
+      // Log what we're loading
+      try {
+        console.log(`CONTROLLER LOADING from Bank ${bankId}:`);
+        const chordString = savedState.chordNotes && savedState.chordNotes.length > 0 
+          ? savedState.chordNotes.map(f => f.toFixed(1)).join(', ') + ' Hz' 
+          : 'EMPTY';
+        console.log(`- Chord: ${chordString}`);
+        console.log(`- Expressions: ${JSON.stringify(savedState.noteExpressions || {})}`);
+      } catch (e) {
+        console.error('Error logging load data:', e);
+      }
+
       // Restore chord and expressions
       if (savedState.chordNotes && Array.isArray(savedState.chordNotes)) {
+        console.log(`- Restoring chord with ${savedState.chordNotes.length} notes`);
+        
+        // Clear existing chord first
+        this.state.set('currentChord', []);
+        
+        // Set new chord
         this.state.set('currentChord', [...savedState.chordNotes]);
 
         // Update global compatibility
         if (window.currentChord) {
           window.currentChord = [...savedState.chordNotes];
+        }
+        
+        // Emit chord change event for PianoKeyboard
+        if (window.eventBus) {
+          window.eventBus.emit('chord:changed', {
+            frequencies: [...savedState.chordNotes],
+            timestamp: Date.now()
+          });
+        }
+        
+        console.log(`- Chord restored and events emitted`);
+      } else {
+        console.log(`- No chord to restore`);
+      }
+
+      // Restore note expressions
+      if (savedState.noteExpressions) {
+        const pianoKeyboard = this.state.get('pianoKeyboard');
+        if (pianoKeyboard && pianoKeyboard.expressionHandler) {
+          pianoKeyboard.expressionHandler.restoreExpressions(savedState.noteExpressions);
         }
       }
 
@@ -210,6 +282,12 @@ export class ProgramManager {
       // Update global compatibility
       if (window.current_program) {
         window.current_program = savedState;
+      }
+
+      // Update bank selector to reflect loaded bank
+      const bankSelector = document.getElementById('bank_selector');
+      if (bankSelector) {
+        bankSelector.value = bankId;
       }
 
       // Emit load event
@@ -231,6 +309,8 @@ export class ProgramManager {
         window.Logger.log(`Failed to load from bank ${bankId}: ${error}`, 'error');
       }
       return false;
+    } finally {
+      this.isLoadingBank = false;
     }
   }
 
@@ -285,23 +365,35 @@ export class ProgramManager {
    * @param {Object} program - Program data to apply
    */
   applyProgramToUI(program) {
-    Config.PARAM_IDS.forEach((id) => {
-      if (program[id] !== undefined) {
-        const element = document.getElementById(id);
-        if (element) {
-          element.value = program[id];
+    // Prevent recursive updates
+    if (this.isApplyingProgram) {
+      console.warn('[ProgramManager] Prevented recursive applyProgramToUI call');
+      return;
+    }
+    
+    this.isApplyingProgram = true;
+    
+    try {
+      Config.PARAM_IDS.forEach((id) => {
+        if (program[id] !== undefined) {
+          const element = document.getElementById(id);
+          if (element) {
+            element.value = program[id];
 
-          // Update display value if there's a corresponding display element
-          const displayElement = document.getElementById(`${id}_value`);
-          if (displayElement) {
-            displayElement.textContent = program[id];
+            // Update display value if there's a corresponding display element
+            const displayElement = document.getElementById(`${id}_value`);
+            if (displayElement) {
+              displayElement.textContent = program[id];
+            }
+
+            // Trigger input event to notify other systems
+            element.dispatchEvent(new Event('input', { bubbles: true }));
           }
-
-          // Trigger input event to notify other systems
-          element.dispatchEvent(new Event('input', { bubbles: true }));
         }
-      }
-    });
+      });
+    } finally {
+      this.isApplyingProgram = false;
+    }
   }
 
   /**

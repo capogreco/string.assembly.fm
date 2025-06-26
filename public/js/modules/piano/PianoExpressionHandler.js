@@ -661,39 +661,51 @@ export class PianoExpressionHandler {
       if (this.chordNotes.has(this.dragStartNote)) {
         this.removeFromChord(this.dragStartNote);
       } else {
-        this.addToChord(this.dragStartNote, this.dragStartFrequency);
         expression = { type: "none" };
+        // Set expression BEFORE adding to chord
+        this.setExpression(this.dragStartNote, expression);
+        this.addToChord(this.dragStartNote, this.dragStartFrequency);
+        expression = null; // Don't set it again later
       }
     } else if (Math.abs(dx) > this.HORIZONTAL_THRESHOLD) {
       // Horizontal drag - trill
       const targetKey = this.getKeyFromPosition(x, y);
       if (targetKey && targetKey.note !== this.dragStartNote) {
-        this.addToChord(this.dragStartNote, this.dragStartFrequency);
         expression = {
           type: "trill",
-          targetNote: targetKey.note,
+          targetNote: targetKey.note,  // Keep for UI management
           targetFreq: targetKey.frequency,
           interval: this.calculateInterval(this.dragStartNote, targetKey.note),
           speed: 8, // Base speed, modified later by harmonic ratios
           articulation: 0.7, // Default articulation for trill
         };
+        // Set expression BEFORE adding to chord to ensure it's available during redistribution
+        this.setExpression(this.dragStartNote, expression);
+        this.addToChord(this.dragStartNote, this.dragStartFrequency);
+        expression = null; // Don't set it again later
       }
     } else if (dy < this.VIBRATO_THRESHOLD) {
       // Upward drag - vibrato
-      this.addToChord(this.dragStartNote, this.dragStartFrequency);
       expression = {
         type: "vibrato",
         depth: this.calculateExpressionDepth(dy, this.VIBRATO_THRESHOLD),
         rate: 4, // Base rate, modified later by harmonic ratios
       };
+      // Set expression BEFORE adding to chord
+      this.setExpression(this.dragStartNote, expression);
+      this.addToChord(this.dragStartNote, this.dragStartFrequency);
+      expression = null; // Don't set it again later
     } else if (dy > this.TREMOLO_THRESHOLD) {
       // Downward drag - tremolo
-      this.addToChord(this.dragStartNote, this.dragStartFrequency);
       expression = {
         type: "tremolo",
         depth: this.calculateExpressionDepth(dy, this.TREMOLO_THRESHOLD),
         speed: 10, // Base speed, modified later by harmonic ratios
       };
+      // Set expression BEFORE adding to chord
+      this.setExpression(this.dragStartNote, expression);
+      this.addToChord(this.dragStartNote, this.dragStartFrequency);
+      expression = null; // Don't set it again later
     }
 
     // Set expression if determined
@@ -842,6 +854,15 @@ export class PianoExpressionHandler {
         );
       }
       this.expressions.delete(note);
+      
+      // Emit event to notify PartManager that expression was removed
+      if (window.eventBus) {
+        window.eventBus.emit("expression:changed", {
+          note: note,
+          expression: null, // null indicates removal
+          timestamp: Date.now(),
+        });
+      }
     }
 
     // Find frequency for this note
@@ -1341,6 +1362,66 @@ export class PianoExpressionHandler {
       this.indicators.set(sourceNoteName, noteIndicators);
     }
     noteIndicators.trill = pathElement;
+  }
+
+  /**
+   * Get all note expressions for saving
+   * @returns {Object} Object with note names as keys and expression data as values
+   */
+  getAllExpressions() {
+    const expressionsObj = {};
+    this.expressions.forEach((expression, note) => {
+      expressionsObj[note] = expression;
+    });
+    return expressionsObj;
+  }
+
+  /**
+   * Restore note expressions from saved data
+   * @param {Object} expressionsObj - Object with note names as keys and expression data as values
+   */
+  restoreExpressions(expressionsObj) {
+    // Clear existing expressions
+    this.expressions.clear();
+    this.relatedNotes.clear();
+    
+    // Clear visual indicators
+    this.indicators.forEach((indicators, note) => {
+      Object.values(indicators).forEach(element => {
+        if (element && element.parentNode) {
+          element.parentNode.removeChild(element);
+        }
+      });
+    });
+    this.indicators.clear();
+    
+    // Restore each expression
+    if (expressionsObj) {
+      Object.entries(expressionsObj).forEach(([note, expression]) => {
+        if (expression && expression.type !== "none") {
+          this.expressions.set(note, expression);
+          
+          // Emit event so PartManager gets updated
+          this.pianoKeyboard.eventBus.emit("expression:changed", {
+            note,
+            expression,
+            timestamp: Date.now(),
+          });
+          
+          // Handle trill target relationships
+          if (expression.type === "trill" && expression.targetNote) {
+            this.relatedNotes.set(expression.targetNote, {
+              relatedTo: note,
+              type: "trill-target",
+            });
+          }
+        }
+      });
+    }
+    
+    // Update visuals
+    this.updateKeyVisuals();
+    this.updateChordDisplay();
   }
 }
 

@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug Keyboard C Issue</title>
+    <style>
+        body {
+            font-family: monospace;
+            padding: 20px;
+            background: #1a1a1a;
+            color: #fff;
+        }
+        #log {
+            background: #000;
+            padding: 20px;
+            border: 1px solid #444;
+            height: 600px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            font-size: 12px;
+        }
+        .log-entry {
+            margin-bottom: 10px;
+            padding: 5px;
+            border-left: 3px solid #666;
+        }
+        .log-warning {
+            border-left-color: #ff9800;
+            background: rgba(255, 152, 0, 0.1);
+        }
+        .log-error {
+            border-left-color: #f44336;
+            background: rgba(244, 67, 54, 0.1);
+        }
+        .log-success {
+            border-left-color: #4caf50;
+            background: rgba(76, 175, 80, 0.1);
+        }
+        button {
+            margin: 10px 5px;
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        .instructions {
+            background: #333;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Debug Keyboard 'C' Key Issue</h1>
+    
+    <div class="instructions">
+        <h3>Instructions:</h3>
+        <ol>
+            <li>Open the main String Assembly FM interface in another tab</li>
+            <li>Add some notes with expressions to the chord</li>
+            <li>Click "Start Monitoring" below</li>
+            <li>Press the 'C' key on your keyboard in the main interface</li>
+            <li>Watch the debug log below to see what happens</li>
+        </ol>
+    </div>
+
+    <div>
+        <button onclick="startMonitoring()">Start Monitoring</button>
+        <button onclick="clearLog()">Clear Log</button>
+        <button onclick="stopMonitoring()">Stop Monitoring</button>
+    </div>
+
+    <div id="log"></div>
+
+    <script>
+        let monitoring = false;
+        let logElement = document.getElementById('log');
+        let originalMethods = {};
+        let eventListeners = [];
+
+        function log(message, type = 'info') {
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            if (type === 'warning') entry.classList.add('log-warning');
+            if (type === 'error') entry.classList.add('log-error');
+            if (type === 'success') entry.classList.add('log-success');
+            
+            const timestamp = new Date().toISOString().split('T')[1].slice(0, -1);
+            entry.textContent = `[${timestamp}] ${message}`;
+            logElement.appendChild(entry);
+            logElement.scrollTop = logElement.scrollHeight;
+        }
+
+        function clearLog() {
+            logElement.innerHTML = '';
+            log('Log cleared', 'success');
+        }
+
+        function startMonitoring() {
+            if (monitoring) {
+                log('Already monitoring!', 'warning');
+                return;
+            }
+            
+            monitoring = true;
+            log('Started monitoring keyboard events and state changes...', 'success');
+            
+            // Monitor keyboard events
+            const keydownHandler = (e) => {
+                if (e.code === 'KeyC') {
+                    log(`KEYBOARD EVENT: 'C' key pressed (KeyC)`, 'warning');
+                    log(`  - Key: ${e.key}, Code: ${e.code}`);
+                    log(`  - Modifiers: Ctrl=${e.ctrlKey}, Shift=${e.shiftKey}, Alt=${e.altKey}`);
+                    log(`  - Repeat: ${e.repeat}`);
+                    
+                    // Check if preventDefault is called
+                    const originalPreventDefault = e.preventDefault;
+                    e.preventDefault = function() {
+                        log(`  - preventDefault() called!`, 'error');
+                        originalPreventDefault.call(this);
+                    };
+                }
+            };
+            
+            document.addEventListener('keydown', keydownHandler, true);
+            eventListeners.push(['keydown', keydownHandler]);
+            
+            // Monitor appState changes
+            if (window.opener && window.opener.appState) {
+                log('Connected to parent window appState', 'success');
+                
+                // Monitor currentChord changes
+                const originalSetChord = window.opener.appState.set;
+                window.opener.appState.set = function(key, value) {
+                    if (key === 'currentChord') {
+                        const noteNames = value.map(f => window.opener.pianoKeyboard.frequencyToNoteName(f));
+                        log(`STATE CHANGE: currentChord = [${noteNames.join(', ')}]`, 'warning');
+                        
+                        // Check for E4
+                        if (value.includes(329.63)) {
+                            log(`  - E4 (329.63 Hz) detected in chord!`, 'error');
+                        }
+                    }
+                    
+                    if (key === 'expressions') {
+                        log(`STATE CHANGE: expressions = ${JSON.stringify(value)}`, 'warning');
+                        if (Object.keys(value).length === 0) {
+                            log(`  - EXPRESSIONS CLEARED!`, 'error');
+                        }
+                    }
+                    
+                    return originalSetChord.call(this, key, value);
+                };
+                
+                // Monitor PianoKeyboard methods
+                if (window.opener.pianoKeyboard) {
+                    const pk = window.opener.pianoKeyboard;
+                    
+                    // Monitor addNoteToChord
+                    const originalAddNote = pk.addNoteToChord;
+                    pk.addNoteToChord = function(frequency) {
+                        const noteName = pk.frequencyToNoteName(frequency);
+                        log(`PIANO: addNoteToChord(${frequency}) - ${noteName}`, 'success');
+                        return originalAddNote.call(this, frequency);
+                    };
+                    
+                    // Monitor setChord
+                    const originalSetChord = pk.setChord;
+                    pk.setChord = function(frequencies) {
+                        const noteNames = frequencies.map(f => pk.frequencyToNoteName(f));
+                        log(`PIANO: setChord([${noteNames.join(', ')}])`, 'success');
+                        return originalSetChord.call(this, frequencies);
+                    };
+                    
+                    // Monitor clearChord
+                    const originalClearChord = pk.clearChord;
+                    pk.clearChord = function() {
+                        log(`PIANO: clearChord() called!`, 'error');
+                        console.trace('clearChord call stack');
+                        return originalClearChord.call(this);
+                    };
+                }
+                
+                // Monitor expression handler
+                if (window.opener.pianoKeyboard?.expressionHandler) {
+                    const eh = window.opener.pianoKeyboard.expressionHandler;
+                    
+                    // Monitor handleChordChange
+                    const originalHandleChordChange = eh.handleChordChange;
+                    eh.handleChordChange = function(data) {
+                        log(`EXPRESSION: handleChordChange called`, 'warning');
+                        log(`  - Note names: ${data.noteNames ? data.noteNames.join(', ') : 'none'}`);
+                        log(`  - Current expressions: ${JSON.stringify(this.expressions)}`);
+                        const result = originalHandleChordChange.call(this, data);
+                        log(`  - Expressions after: ${JSON.stringify(this.expressions)}`);
+                        return result;
+                    };
+                    
+                    // Monitor clearAll
+                    const originalClearAll = eh.clearAll;
+                    eh.clearAll = function() {
+                        log(`EXPRESSION: clearAll() called!`, 'error');
+                        console.trace('clearAll call stack');
+                        return originalClearAll.call(this);
+                    };
+                }
+                
+            } else {
+                log('Could not connect to parent window. Make sure the main interface is open.', 'error');
+            }
+        }
+
+        function stopMonitoring() {
+            if (!monitoring) {
+                log('Not currently monitoring.', 'warning');
+                return;
+            }
+            
+            monitoring = false;
+            
+            // Remove event listeners
+            eventListeners.forEach(([event, handler]) => {
+                document.removeEventListener(event, handler, true);
+            });
+            eventListeners = [];
+            
+            // Restore original methods
+            // (In a real implementation, we'd restore all the overridden methods)
+            
+            log('Stopped monitoring.', 'success');
+        }
+
+        // Also log in console
+        window.debugLog = log;
+    </script>
+</body>
+</html>

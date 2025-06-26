@@ -361,7 +361,7 @@ export class SynthCore {
 
     if (transitionData) {
       this.log(
-        `Applied program with transition: ${program.fundamentalFrequency?.toFixed(1)}Hz, expression: ${expression}, delay: ${transitionData.delay?.toFixed(2)}s, duration: ${transitionData.duration?.toFixed(2)}s`,
+        `Applied program with transition: ${program.fundamentalFrequency?.toFixed(1)}Hz, expression: ${expression}, delay: ${transitionData.delay ? transitionData.delay.toFixed(2) : '0.00'}s, duration: ${transitionData.duration ? transitionData.duration.toFixed(2) : '0.00'}s`,
       );
     } else {
       this.log(
