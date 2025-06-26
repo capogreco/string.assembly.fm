@@ -765,7 +765,7 @@
                                 >
                             </div>
                             <div class="harmonic-row" data-type="denominator">
-                                <span class="harmonic-number selected" data-value="1"
+                                <span class="harmonic-number" data-value="1"
                                     >1</span
                                 >
                                 <span class="harmonic-number" data-value="2"
@@ -881,7 +881,7 @@
                                 >
                             </div>
                             <div class="harmonic-row" data-type="denominator">
-                                <span class="harmonic-number selected" data-value="1"
+                                <span class="harmonic-number" data-value="1"
                                     >1</span
                                 >
                                 <span class="harmonic-number" data-value="2"
@@ -1002,7 +1002,7 @@
                                 >
                             </div>
                             <div class="harmonic-row" data-type="denominator">
-                                <span class="harmonic-number selected" data-value="1"
+                                <span class="harmonic-number" data-value="1"
                                     >1</span
                                 >
                                 <span class="harmonic-number" data-value="2"

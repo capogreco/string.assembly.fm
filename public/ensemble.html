@@ -212,9 +212,21 @@
                         max="12"
                     />
                     <button onclick="initializeEnsemble()">Initialize</button>
-                    <button onclick="connectToController()">
-                        Connect to Controller
+                    <button
+                        id="calibrate-btn"
+                        onclick="startCalibration()"
+                        style="display: none"
+                    >
+                        Start Calibration
                     </button>
+                    <button
+                        id="join-btn"
+                        onclick="joinInstrument()"
+                        style="display: none"
+                    >
+                        Join Instrument
+                    </button>
+
                     <button id="start-all" onclick="startAllSynths()" disabled>
                         Start All
                     </button>
@@ -257,6 +269,7 @@
             let controllerConnection = null;
             let masterGain = null;
             let isInitialized = false;
+            let inCalibrationMode = false;
 
             // Real WebRTC configuration
             const rtcConfig = {
@@ -312,10 +325,26 @@
                     this.analyser.connect(this.panner);
                     this.panner.connect(destination);
 
+                    // Ensure we have the analyser reference for level meters
+                    this.analyser =
+                        this.synthCore.analyserNode || this.analyser;
+
+                    this.audioInitialized = true;
                     log(
                         `[${this.id}] SynthCore initialized with panning`,
                         "info",
                     );
+                }
+
+                createElements(container) {
+                    this.element = this.createUI();
+                    container.appendChild(this.element);
+                }
+
+                async ensureAudioInitialized(audioCtx, destination) {
+                    if (!this.audioInitialized) {
+                        await this.initialize(audioCtx, destination);
+                    }
                 }
 
                 handleParamMessage(event) {
@@ -561,11 +590,26 @@
                 }
 
                 updateLevel() {
-                    if (!this.analyser || !this.levelMeter) return;
+                    if (!this.levelMeter) return;
 
-                    const level = this.synthCore
-                        ? this.synthCore.getAudioLevel()
-                        : 0;
+                    // Use SynthCore's getAudioLevel method if available
+                    let level = 0;
+                    if (this.synthCore && this.synthCore.isInitialized) {
+                        level = this.synthCore.getAudioLevel();
+                    } else if (this.analyser) {
+                        // Fallback to manual calculation
+                        const dataArray = new Uint8Array(
+                            this.analyser.frequencyBinCount,
+                        );
+                        this.analyser.getByteFrequencyData(dataArray);
+
+                        let sum = 0;
+                        for (let i = 0; i < dataArray.length; i++) {
+                            sum += dataArray[i];
+                        }
+                        level = sum / dataArray.length / 255;
+                    }
+
                     this.levelMeter.style.height = `${level * 100}%`;
                 }
 
@@ -644,136 +688,211 @@
                 }
             }
 
+            // Initialize audio system when needed (user interaction required)
+            async function initializeAudioSystem() {
+                if (!audioContext) {
+                    audioContext = new (window.AudioContext ||
+                        window.webkitAudioContext)();
+
+                    if (audioContext.state === "suspended") {
+                        await audioContext.resume();
+                        log("Audio context resumed", "info");
+                    }
+
+                    masterGain = audioContext.createGain();
+                    masterGain.gain.value = 0.7;
+                    masterGain.connect(audioContext.destination);
+
+                    log("Loading audio worklets...", "info");
+                    await audioContext.audioWorklet.addModule(
+                        "../src/worklets/bowed_string_worklet.js",
+                    );
+                    await audioContext.audioWorklet.addModule(
+                        "../src/worklets/reverb_worklet.js",
+                    );
+                    await audioContext.audioWorklet.addModule(
+                        "../src/worklets/pink_noise.js",
+                    );
+                    log("Audio worklets loaded successfully", "info");
+                }
+            }
+
             window.initializeEnsemble = async function initializeEnsemble() {
                 const synthCount = parseInt(
                     document.getElementById("synth-count").value,
                 );
 
                 try {
-                    if (!audioContext) {
-                        audioContext = new (window.AudioContext ||
-                            window.webkitAudioContext)();
+                    // Initialize audio system first
+                    await initializeAudioSystem();
 
-                        if (audioContext.state === "suspended") {
-                            await audioContext.resume();
-                            log("Audio context resumed", "info");
-                        }
-
-                        masterGain = audioContext.createGain();
-                        masterGain.gain.value = 0.7;
-                        masterGain.connect(audioContext.destination);
-
-                        log("Loading audio worklets...", "info");
-                        await audioContext.audioWorklet.addModule(
-                            "../src/worklets/bowed_string_worklet.js",
+                    // Ensure all synths have audio initialized
+                    for (const synth of synths) {
+                        await synth.ensureAudioInitialized(
+                            audioContext,
+                            masterGain,
                         );
-                        await audioContext.audioWorklet.addModule(
-                            "../src/worklets/reverb_worklet.js",
-                        );
-                        await audioContext.audioWorklet.addModule(
-                            "../src/worklets/pink_noise.js",
-                        );
-                        log("Audio worklets loaded successfully", "info");
                     }
 
-                    synths.forEach((synth) => {
-                        if (synth.element && synth.element.parentNode) {
-                            synth.element.parentNode.removeChild(synth.element);
-                        }
-                    });
-                    synths = [];
-
-                    const synthGrid = document.getElementById("synth-grid");
-                    synthGrid.innerHTML = "";
-
-                    for (let i = 0; i < synthCount; i++) {
-                        const synth = new TestSynth(
-                            `test-synth-${i}`,
-                            i,
-                            synthCount,
-                        );
-                        await synth.initialize(audioContext, masterGain);
-                        synth.loadSynthBanksFromStorage();
-                        synthGrid.appendChild(synth.createUI());
-                        synths.push(synth);
-                    }
-
-                    document.getElementById("start-all").disabled = false;
-                    document.getElementById("stop-all").disabled = false;
-
-                    isInitialized = true;
-                    log(`Initialized ${synthCount} synths`, "info");
-
-                    updateLevelMeters();
+                    log(`Audio initialized for ${synthCount} synths`, "info");
                 } catch (error) {
                     log(
-                        `Failed to initialize ensemble: ${error.message}`,
+                        `Failed to initialize ensemble audio: ${error.message}`,
                         "error",
                     );
                     console.error(error);
                 }
             };
 
-            window.connectToController = async function connectToController() {
-                console.log("[DEBUG] connectToController called");
+            window.startCalibration = async function startCalibration() {
                 if (!isInitialized) {
                     log("Please initialize synths first", "error");
                     return;
                 }
-                log("Connect to controller function called", "info");
 
-                // Set up WebSocket connections for each synth
+                // Ensure audio system is initialized
+                await initializeAudioSystem();
+
+                // Ensure all synths have audio initialized
                 for (const synth of synths) {
-                    if (!synth.ws) {
-                        const protocol =
-                            window.location.protocol === "https:"
-                                ? "wss:"
-                                : "ws:";
-                        synth.ws = new WebSocket(
-                            `${protocol}//${window.location.host}/ws`,
-                        );
+                    await synth.ensureAudioInitialized(
+                        audioContext,
+                        masterGain,
+                    );
+                }
 
-                        synth.ws.addEventListener("open", () => {
-                            log(`[${synth.id}] WebSocket connected`, "info");
+                log("Starting calibration mode...", "info");
+                inCalibrationMode = true;
 
-                            // Register with server
-                            synth.ws.send(
-                                JSON.stringify({
-                                    type: "register",
-                                    client_id: synth.id,
-                                }),
-                            );
-
-                            // Request list of active controllers
-                            synth.ws.send(
-                                JSON.stringify({
-                                    type: "request-controllers",
-                                    source: synth.id,
-                                }),
-                            );
-                        });
-
-                        synth.ws.addEventListener("message", async (event) => {
-                            const message = JSON.parse(event.data);
-                            await handleSynthMessage(synth, message);
-                        });
-
-                        synth.ws.addEventListener("close", () => {
-                            log(`[${synth.id}] WebSocket disconnected`, "info");
-                            synth.ws = null;
-                        });
-
-                        synth.ws.addEventListener("error", (error) => {
-                            log(
-                                `[${synth.id}] WebSocket error: ${error}`,
-                                "error",
-                            );
-                        });
+                // Start calibration noise on all synths
+                for (const synth of synths) {
+                    if (synth.synthCore && synth.synthCore.isInitialized) {
+                        synth.synthCore.startCalibrationNoise(0.2);
                     }
                 }
+
+                // Update UI
+                document.getElementById("calibrate-btn").style.display = "none";
+                document.getElementById("join-btn").style.display =
+                    "inline-block";
             };
 
+            window.joinInstrument = async function joinInstrument() {
+                log("Joining instrument...", "info");
+                inCalibrationMode = false;
+
+                // Stop calibration noise on all synths
+                for (const synth of synths) {
+                    if (synth.synthCore && synth.synthCore.isInitialized) {
+                        synth.synthCore.stopCalibrationNoise();
+                        await synth.synthCore.setPower(true);
+                    }
+                }
+
+                // Update UI
+                document.getElementById("join-btn").style.display = "none";
+
+                log("Joined instrument in synthesis mode", "info");
+            };
+
+            // Connect all synths to controller
+            function connectAllSynthsToController() {
+                log(
+                    `Attempting to connect ${synths.length} synths to controller`,
+                    "info",
+                );
+                for (const synth of synths) {
+                    log(`Connecting synth: ${synth.id}`, "info");
+                    connectSynthToController(synth);
+                }
+            }
+
+            // Helper function to connect a single synth
+            function connectSynthToController(synth) {
+                if (!synth.ws) {
+                    const protocol =
+                        window.location.protocol === "https:" ? "wss:" : "ws:";
+                    const wsUrl = `${protocol}//${window.location.host}/ws`;
+                    log(
+                        `[${synth.id}] Attempting WebSocket connection to ${wsUrl}`,
+                        "info",
+                    );
+
+                    synth.ws = new WebSocket(wsUrl);
+
+                    synth.ws.addEventListener("open", () => {
+                        log(
+                            `[${synth.id}] WebSocket connected successfully`,
+                            "info",
+                        );
+
+                        // Register with server
+                        const registerMsg = {
+                            type: "register",
+                            client_id: synth.id,
+                        };
+                        log(
+                            `[${synth.id}] Sending registration: ${JSON.stringify(registerMsg)}`,
+                            "info",
+                        );
+                        synth.ws.send(JSON.stringify(registerMsg));
+
+                        // Request list of active controllers
+                        const requestMsg = {
+                            type: "request-controllers",
+                            source: synth.id,
+                        };
+                        log(
+                            `[${synth.id}] Requesting controllers: ${JSON.stringify(requestMsg)}`,
+                            "info",
+                        );
+                        synth.ws.send(JSON.stringify(requestMsg));
+                    });
+
+                    synth.ws.addEventListener("message", async (event) => {
+                        const message = JSON.parse(event.data);
+                        await handleSynthMessage(synth, message);
+                    });
+
+                    synth.ws.addEventListener("close", (event) => {
+                        log(
+                            `[${synth.id}] WebSocket disconnected (code: ${event.code}, reason: ${event.reason}) - reconnecting...`,
+                            "info",
+                        );
+                        synth.ws = null;
+
+                        // Reconnect after 2 seconds
+                        setTimeout(() => {
+                            log(
+                                `[${synth.id}] Attempting reconnection...`,
+                                "info",
+                            );
+                            connectSynthToController(synth);
+                        }, 2000);
+                    });
+
+                    synth.ws.addEventListener("error", (error) => {
+                        log(
+                            `[${synth.id}] WebSocket error: ${JSON.stringify(error)}`,
+                            "error",
+                        );
+                        console.error(
+                            `WebSocket error for ${synth.id}:`,
+                            error,
+                        );
+                    });
+                } else {
+                    log(
+                        `[${synth.id}] WebSocket already exists, skipping connection`,
+                        "info",
+                    );
+                }
+            }
+
             async function handleSynthMessage(synth, message) {
+                log(`[${synth.id}] Received message: ${message.type}`, "info");
+                console.log(`[${synth.id}] Full message:`, message);
+
                 switch (message.type) {
                     case "controllers-list":
                         // Available controllers list received
@@ -795,7 +914,10 @@
                                     ice_queue: [],
                                 });
                                 // Auto-connect to controllers
-                                connectSynthToController(synth, controllerId);
+                                connectSynthToSpecificController(
+                                    synth,
+                                    controllerId,
+                                );
                             }
                         }
                         break;
@@ -805,6 +927,44 @@
                     case "ice":
                         await handleIceCandidate(synth, message);
                         break;
+                    case "controller-joined":
+                        // New controller joined - auto-connect
+                        log(
+                            `[${synth.id}] New controller joined: ${message.controller_id}`,
+                            "info",
+                        );
+                        if (!synth.controllers.has(message.controller_id)) {
+                            synth.controllers.set(message.controller_id, {
+                                connected: false,
+                                connection: null,
+                                channel: null,
+                                command_channel: null,
+                                ice_queue: [],
+                            });
+                            // Auto-connect to new controller
+                            connectSynthToSpecificController(
+                                synth,
+                                message.controller_id,
+                            );
+                        }
+                        break;
+                    case "controller-left":
+                        // Controller disconnected
+                        log(
+                            `[${synth.id}] Controller left: ${message.controller_id}`,
+                            "info",
+                        );
+                        if (synth.controllers.has(message.controller_id)) {
+                            const controller = synth.controllers.get(
+                                message.controller_id,
+                            );
+                            // Close connection if exists
+                            if (controller.connection) {
+                                controller.connection.close();
+                            }
+                            synth.controllers.delete(message.controller_id);
+                        }
+                        break;
                     default:
                         console.log(
                             `[${synth.id}] Unknown message type: ${message.type}`,
@@ -812,7 +972,10 @@
                 }
             }
 
-            async function connectSynthToController(synth, controllerId) {
+            async function connectSynthToSpecificController(
+                synth,
+                controllerId,
+            ) {
                 log(
                     `[${synth.id}] Initiating connection to controller ${controllerId}`,
                     "info",
@@ -966,10 +1129,17 @@
                 }
             }
 
-            window.startAllSynths = function startAllSynths() {
-                synths.forEach((synth) => {
+            window.startAllSynths = async function startAllSynths() {
+                // Ensure audio is initialized before starting
+                await initializeAudioSystem();
+
+                for (const synth of synths) {
+                    await synth.ensureAudioInitialized(
+                        audioContext,
+                        masterGain,
+                    );
                     synth.setPower(true);
-                });
+                }
             };
 
             window.stopAllSynths = function stopAllSynths() {
@@ -1013,6 +1183,64 @@
                     document.getElementById("volume-display").textContent =
                         `${Math.round(value * 100)}%`;
                 });
+
+            // Automatic initialization on page load
+            document.addEventListener("DOMContentLoaded", async function () {
+                log("Page loaded - initializing ensemble connections", "info");
+
+                // Initialize synth objects and WebSocket connections without audio
+                const synthCount = parseInt(
+                    document.getElementById("synth-count").value,
+                );
+
+                try {
+                    // Clear existing synths
+                    synths.forEach((synth) => {
+                        if (synth.element && synth.element.parentNode) {
+                            synth.element.parentNode.removeChild(synth.element);
+                        }
+                    });
+                    synths = [];
+
+                    const synthGrid = document.getElementById("synth-grid");
+                    synthGrid.innerHTML = "";
+
+                    // Create synth objects without audio initialization
+                    for (let i = 0; i < synthCount; i++) {
+                        const synthId = `synth-${i}`;
+                        log(`Creating synth: ${synthId}`, "info");
+                        const synth = new TestSynth(synthId, i, synthCount);
+                        synth.createElements(synthGrid);
+                        synth.loadSynthBanksFromStorage();
+                        synths.push(synth);
+                        log(`Synth created with ID: ${synth.id}`, "info");
+                    }
+
+                    document.getElementById("start-all").disabled = false;
+                    document.getElementById("stop-all").disabled = false;
+
+                    isInitialized = true;
+                    log(
+                        `Initialized ${synthCount} synths (audio deferred)`,
+                        "info",
+                    );
+
+                    // Show calibration button
+                    document.getElementById("calibrate-btn").style.display =
+                        "inline-block";
+
+                    // Connect to controller automatically
+                    connectAllSynthsToController();
+
+                    updateLevelMeters();
+                } catch (error) {
+                    log(
+                        `Failed to initialize ensemble: ${error.message}`,
+                        "error",
+                    );
+                    console.error(error);
+                }
+            });
         </script>
     </body>
 </html>
