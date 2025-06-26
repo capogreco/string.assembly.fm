@@ -18,6 +18,9 @@ import { uiManager } from "./modules/ui/UIManager.js";
 import { parameterControls } from "./modules/ui/ParameterControls.js";
 import { pianoKeyboard } from "./modules/ui/PianoKeyboard.js";
 import { partManager } from "./modules/audio/PartManager.js";
+
+// Import UI components
+import "./modules/ui/HarmonicRatioSelector.js";
 import { AudioUtilities } from "./modules/utils/AudioUtilities.js";
 
 // ========== WebSocket Debugging ==========
