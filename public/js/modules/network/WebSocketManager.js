@@ -241,28 +241,28 @@ export class WebSocketManager {
    * @private
    */
   handleMessage(event) {
-    console.log("[WEBSOCKET-MANAGER] Raw message received:", event.data);
+    // console.log("[WEBSOCKET-MANAGER] Raw message received:", event.data);
     try {
       const message = JSON.parse(event.data);
 
       // Add comprehensive debug logging
-      console.log("[WEBSOCKET-DEBUG] WebSocket received:", message);
+      // console.log("[WEBSOCKET-DEBUG] WebSocket received:", message);
 
       // Unconditional logging for ALL messages to debug offer reception
-      console.log(
-        `[WEBSOCKET-ALL-MESSAGES] type: ${message.type}, source: ${message.source}, target: ${message.target}`,
-      );
+      // console.log(
+      //   `[WEBSOCKET-ALL-MESSAGES] type: ${message.type}, source: ${message.source}, target: ${message.target}`,
+      // );
 
       // Log timestamp to track message order
-      console.log(
-        `[WEBSOCKET-TIMING] Message received at: ${new Date().toISOString()}, type: ${message.type}`,
-      );
-      if (message.type === "offer") {
-        console.log(
-          "[WEBSOCKET-OFFER-RECEIVED] Offer message detected!",
-          message,
-        );
-      }
+      // console.log(
+      //   `[WEBSOCKET-TIMING] Message received at: ${new Date().toISOString()}, type: ${message.type}`,
+      // );
+      // if (message.type === "offer") {
+      //   console.log(
+      //     "[WEBSOCKET-OFFER-RECEIVED] Offer message detected!",
+      //     message,
+      //   );
+      // }
 
       if (window.Logger) {
         window.Logger.log(`Received message: ${message.type}`, "messages");

@@ -10,8 +10,9 @@ export class Logger {
     parameters: false, // Parameter changes
     expressions: false, // Chord and expression changes
     performance: false, // Latency, pings
-    lifecycle: true, // Important state changes (default on)
+    lifecycle: false, // Important state changes (now off by default)
     errors: true, // Always on
+    debug: false, // Debug messages
   };
 
   /**
@@ -118,8 +119,6 @@ export class Logger {
    * Initialize logger with DOM controls (if available)
    */
   static initializeControls() {
-    console.log("[LOGGER] Initializing controls...");
-
     // Load saved configuration
     Logger.loadConfig();
 
@@ -132,8 +131,6 @@ export class Logger {
       } else {
         Logger.setupDOMControls();
       }
-    } else {
-      console.log("[LOGGER] Document not available (server-side?)");
     }
   }
 
@@ -142,9 +139,7 @@ export class Logger {
    * @private
    */
   static setupDOMControls() {
-    console.log("[LOGGER] Setting up DOM controls...");
     const checkboxes = document.querySelectorAll("[data-debug]");
-    console.log(`[LOGGER] Found ${checkboxes.length} debug checkboxes`);
 
     checkboxes.forEach((checkbox) => {
       const category = checkbox.dataset.debug;
@@ -166,9 +161,6 @@ export class Logger {
 // Initialize logger when module loads
 Logger.initializeControls();
 
-// Debug output for module loading
-console.log("[LOGGER] Module loaded, initializing...");
-
 // Make Logger available globally for backward compatibility
 if (typeof window !== "undefined") {
   window.Logger = Logger;
@@ -178,8 +170,33 @@ if (typeof window !== "undefined") {
 
   // Expose DEBUG_CONFIG for backward compatibility
   window.DEBUG_CONFIG = Logger.categories;
-
-  console.log("[LOGGER] Global exports set up");
-} else {
-  console.log("[LOGGER] Window not available (server-side?)");
+  
+  // Simple helpers for console
+  window.enableLogs = () => {
+    Logger.categories.lifecycle = true;
+    Logger.categories.messages = true;
+    Logger.categories.connections = true;
+    console.log("Logging enabled");
+  };
+  
+  window.disableLogs = () => {
+    Logger.categories.lifecycle = false;
+    Logger.categories.messages = false;
+    Logger.categories.connections = false;
+    console.log("Logging disabled (errors still shown)");
+  };
+  
+  window.debugMode = (enable = true) => {
+    if (enable) {
+      Object.keys(Logger.categories).forEach(cat => {
+        if (cat !== 'errors') Logger.categories[cat] = true;
+      });
+      console.log("Debug mode ON - all logging enabled");
+    } else {
+      Object.keys(Logger.categories).forEach(cat => {
+        if (cat !== 'errors') Logger.categories[cat] = false;
+      });
+      console.log("Debug mode OFF - only errors shown");
+    }
+  };
 }

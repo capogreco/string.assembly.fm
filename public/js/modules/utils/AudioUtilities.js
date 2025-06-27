@@ -26,6 +26,18 @@ export class AudioUtilities {
   }
 
   /**
+   * Convert MIDI note number to note name with octave
+   * @param {number} midiNote - MIDI note number (0-127)
+   * @returns {string} Note name with octave (e.g., "A4", "C#3")
+   */
+  static midiToNoteName(midiNote) {
+    const noteNames = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+    const octave = Math.floor(midiNote / 12) - 1;
+    const noteIndex = midiNote % 12;
+    return `${noteNames[noteIndex]}${octave}`;
+  }
+
+  /**
    * Convert frequency to note name with octave
    * @param {number} frequency - Frequency in Hz
    * @returns {string} Note name with octave (e.g., "A4", "C#3")
@@ -353,6 +365,60 @@ export class AudioUtilities {
     const cFreq = AudioUtilities.noteNameToFrequency(`C${octave}`);
     const bFreq = AudioUtilities.noteNameToFrequency(`B${octave}`);
     return { min: cFreq, max: bFreq };
+  }
+
+  /**
+   * Format array of MIDI notes as chord string
+   * @param {Array<number>} midiNotes - Array of MIDI note numbers
+   * @param {string} separator - Separator between notes (default: ", ")
+   * @returns {string} Formatted chord string (e.g., "C4, E4, G4")
+   */
+  static formatMidiChord(midiNotes, separator = ", ") {
+    if (!Array.isArray(midiNotes) || midiNotes.length === 0) {
+      return "";
+    }
+    return midiNotes
+      .map(note => AudioUtilities.midiToNoteName(note))
+      .join(separator);
+  }
+
+  /**
+   * Format array of frequencies as chord string
+   * @param {Array<number>} frequencies - Array of frequencies in Hz
+   * @param {string} separator - Separator between notes (default: ", ")
+   * @returns {string} Formatted chord string (e.g., "C4, E4, G4")
+   */
+  static formatFrequencyChord(frequencies, separator = ", ") {
+    if (!Array.isArray(frequencies) || frequencies.length === 0) {
+      return "";
+    }
+    return frequencies
+      .map(freq => AudioUtilities.frequencyToNoteName(freq))
+      .join(separator);
+  }
+
+  /**
+   * Convert array of MIDI notes to array of note names
+   * @param {Array<number>} midiNotes - Array of MIDI note numbers
+   * @returns {Array<string>} Array of note names
+   */
+  static midiArrayToNoteNames(midiNotes) {
+    if (!Array.isArray(midiNotes)) {
+      return [];
+    }
+    return midiNotes.map(note => AudioUtilities.midiToNoteName(note));
+  }
+
+  /**
+   * Convert array of frequencies to array of note names
+   * @param {Array<number>} frequencies - Array of frequencies in Hz
+   * @returns {Array<string>} Array of note names
+   */
+  static frequencyArrayToNoteNames(frequencies) {
+    if (!Array.isArray(frequencies)) {
+      return [];
+    }
+    return frequencies.map(freq => AudioUtilities.frequencyToNoteName(freq));
   }
 }
 

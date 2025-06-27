@@ -288,6 +288,15 @@ export class ParameterControls {
     const currentProgram = this.appState.get("currentProgram") || {};
     currentProgram[paramId] = value;
     this.appState.set("currentProgram", currentProgram);
+    
+    // Mark this parameter as changed
+    this.markParameterChanged(paramId);
+    this.appState.markParameterChanged(paramId);
+    
+    // Update sync status
+    if (window.updateSyncStatus) {
+      window.updateSyncStatus();
+    }
 
     if (window.Logger) {
       window.Logger.log(

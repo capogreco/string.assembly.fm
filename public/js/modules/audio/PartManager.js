@@ -117,6 +117,14 @@ export class PartManager {
     // Update expressions in app state for UI visibility
     const expressionsObj = Object.fromEntries(this.noteExpressions);
     this.appState.set("expressions", expressionsObj);
+    
+    // Mark as changed for sync tracking
+    this.appState.markParameterChanged("chord");
+    
+    // Update sync status
+    if (window.updateSyncStatus) {
+      window.updateSyncStatus();
+    }
 
     // Redistribute if we have synths
     this.redistributeToSynths();
@@ -140,6 +148,14 @@ export class PartManager {
     // Update AppState expressions for UI visibility
     const expressionsObj = Object.fromEntries(this.noteExpressions);
     this.appState.set("expressions", expressionsObj);
+    
+    // Mark as changed for sync tracking
+    this.appState.markParameterChanged(`expression_${noteName}`);
+    
+    // Update sync status
+    if (window.updateSyncStatus) {
+      window.updateSyncStatus();
+    }
 
     Logger.log(
       `Expression set: ${noteName} -> ${expression?.type || "none"}`,
@@ -321,20 +337,16 @@ export class PartManager {
    * @param {Object} options - Transition options
    */
   async sendCurrentPart(options = {}) {
-    Logger.log("DEBUG: Starting sendCurrentPart", "debug");
-
     const networkCoordinator = this.appState.get("networkCoordinator");
     if (!networkCoordinator) {
       throw new Error("Network coordinator not available");
     }
-    Logger.log("DEBUG: Network coordinator found", "debug");
 
     // Get base program parameters
     const parameterControls = this.appState.get("parameterControls");
     if (!parameterControls) {
       throw new Error("Parameter controls not available");
     }
-    Logger.log("DEBUG: Parameter controls found", "debug");
 
     const baseProgram = parameterControls.getAllParameterValues();
 
@@ -356,56 +368,24 @@ export class PartManager {
       "parts",
     );
 
-    // Debug: Log raw parameter values
-    Logger.log(
-      `DEBUG: Base program parameters: ${JSON.stringify(baseProgram)}`,
-      "debug",
-    );
 
     // Send to each synth
     let successCount = 0;
     const synthIds = Array.from(this.synthAssignments.keys());
 
-    Logger.log(`DEBUG: Found ${synthIds.length} synth assignments`, "debug");
-    Logger.log(
-      `DEBUG: Current chord: ${this.currentChord.length} notes`,
-      "debug",
-    );
-    Logger.log(
-      `DEBUG: Note expressions: ${this.noteExpressions.size} expressions`,
-      "debug",
-    );
-    
-    // Log all expressions
-    for (const [note, expr] of this.noteExpressions) {
-      Logger.log(
-        `DEBUG: Expression for ${note}: ${JSON.stringify(expr)}`,
-        "debug",
-      );
-    }
 
     for (let i = 0; i < synthIds.length; i++) {
       const synthId = synthIds[i];
       const assignment = this.synthAssignments.get(synthId);
 
       if (!assignment) {
-        Logger.log(`DEBUG: No assignment for synth ${synthId}`, "debug");
         continue;
       }
-      Logger.log(
-        `DEBUG: Processing synth ${synthId}: ${assignment.frequency.toFixed(1)}Hz`,
-        "debug",
-      );
 
       // Create synth-specific program
       const synthProgram = { ...baseProgram };
       synthProgram.fundamentalFrequency = assignment.frequency;
 
-      // Debug log the expression
-      Logger.log(
-        `DEBUG: Assignment for ${synthId}: freq=${assignment.frequency.toFixed(1)}Hz, expression=${JSON.stringify(assignment.expression)}`,
-        "debug",
-      );
 
       // Apply expression parameters
       let targetExpression = "NONE";
@@ -424,10 +404,6 @@ export class PartManager {
         i,
       );
 
-      Logger.log(
-        `DEBUG: Synth ${i} (${synthId}) timing: delay=${transitionTiming.delay?.toFixed(3)}s, duration=${transitionTiming.duration?.toFixed(3)}s`,
-        "debug",
-      );
 
       try {
         // Send program
@@ -439,7 +415,6 @@ export class PartManager {
 
         if (success) {
           successCount++;
-          Logger.log(`DEBUG: Successfully sent to ${synthId}`, "debug");
 
           Logger.log(
             `Sent to ${synthId}: ${assignment.frequency.toFixed(1)}Hz, expression type: ${assignment.expression.type || 'MISSING'}`,
@@ -447,18 +422,12 @@ export class PartManager {
           );
           
         } else {
-          Logger.log(`DEBUG: Failed to send program to ${synthId}`, "debug");
         }
       } catch (error) {
         Logger.log(`Failed to send to ${synthId}: ${error.message}`, "error");
-        Logger.log(`DEBUG: Send error for ${synthId}: ${error.stack}`, "debug");
       }
     }
 
-    Logger.log(
-      `DEBUG: Send complete. Success count: ${successCount}/${synthIds.length}`,
-      "debug",
-    );
 
     if (successCount === 0) {
       throw new Error("Failed to send to any synths");
@@ -609,14 +578,12 @@ export class PartManager {
    * @private
    */
   handleProgramRequest(synthId) {
-    Logger.log(`Program request from ${synthId}`, "debug");
 
     // If we have a current chord, send the current part to this synth
     if (this.currentChord.length > 0) {
       // Trigger redistribution which will assign this synth and send program
       this.redistributeToSynths();
     } else {
-      Logger.log(`No current chord to send to ${synthId}`, "debug");
     }
   }
 

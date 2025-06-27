@@ -1,6 +1,5 @@
 // Mark that modular system is loading to prevent legacy system from running
 window.__modularSystemActive = true;
-console.log("[MODULAR] Setting modular system active flag");
 
 /**
  * String Assembly FM Controller - Modular Version
@@ -23,186 +22,6 @@ import { partManager } from "./modules/audio/PartManager.js";
 import "./modules/ui/HarmonicRatioSelector.js";
 import { AudioUtilities } from "./modules/utils/AudioUtilities.js";
 
-// ========== WebSocket Debugging ==========
-// Monitor WebSocket creation and messages to debug connection issues
-(() => {
-  console.log("[WEBSOCKET-DEBUG] Installing WebSocket monitor...");
-  // Wrap WebSocket constructor
-  let wsCount = 0;
-  let activeWebSockets = 0;
-  const allWebSockets = new Map();
-  const OriginalWebSocket = window.WebSocket;
-  window.WebSocket = function (...args) {
-    wsCount++;
-    activeWebSockets++;
-    const wsId = wsCount;
-    console.log(`[WEBSOCKET-DEBUG] Creating WebSocket #${wsCount}:`, args[0]);
-    console.log(
-      `[WEBSOCKET-DEBUG] Active WebSocket count: ${activeWebSockets}`,
-    );
-    const ws = new OriginalWebSocket(...args);
-
-    // Store WebSocket info
-    allWebSockets.set(wsId, {
-      url: args[0],
-      messageCount: 0,
-      handlers: [],
-    });
-
-    // Track all message handlers
-    const messageHandlers = [];
-
-    // Monitor message events
-    const originalAddEventListener = ws.addEventListener;
-    ws.addEventListener = function (type, listener, options) {
-      if (type === "message") {
-        console.log(
-          `[WEBSOCKET-DEBUG] Message listener added to WebSocket #${wsCount}`,
-        );
-        messageHandlers.push({
-          type: "addEventListener",
-          listener: listener.toString().substring(0, 100) + "...",
-          stack: new Error().stack,
-        });
-        console.log(
-          `[WEBSOCKET-DEBUG] Total message handlers: ${messageHandlers.length}`,
-        );
-      }
-      return originalAddEventListener.call(this, type, listener, options);
-    };
-
-    // Monitor actual messages
-    ws.addEventListener("message", function (event) {
-      const wsInfo = allWebSockets.get(wsId);
-      if (wsInfo) wsInfo.messageCount++;
-
-      const preview = event.data.substring(0, 200);
-      console.log(`[WEBSOCKET-DEBUG] WebSocket #${wsId} received:`, preview);
-      console.log(
-        `[WEBSOCKET-DEBUG] Total messages on WS #${wsId}: ${wsInfo?.messageCount}`,
-      );
-
-      // Try to parse and log message type
-      try {
-        const msg = JSON.parse(event.data);
-        console.log(
-          `[WEBSOCKET-DEBUG] WS #${wsId} - Message type: ${msg.type}, source: ${msg.source || "N/A"}`,
-        );
-
-        // Special tracking for offer messages
-        if (msg.type === "offer") {
-          console.log(
-            `[WEBSOCKET-DEBUG] *** OFFER MESSAGE DETECTED ON WS #${wsId} ***`,
-          );
-          console.log(`[WEBSOCKET-DEBUG] Offer from: ${msg.source}`);
-          console.log(`[WEBSOCKET-DEBUG] Offer to: ${msg.target}`);
-          console.log(
-            `[WEBSOCKET-DEBUG] Message handlers registered: ${messageHandlers.length}`,
-          );
-          console.log(`[WEBSOCKET-DEBUG] All active WebSockets:`);
-          allWebSockets.forEach((info, id) => {
-            console.log(
-              `[WEBSOCKET-DEBUG]   WS #${id}: ${info.url}, messages: ${info.messageCount}, handlers: ${info.handlers.length}`,
-            );
-          });
-          messageHandlers.forEach((handler, index) => {
-            console.log(
-              `[WEBSOCKET-DEBUG] Handler #${index + 1}: ${handler.type}`,
-            );
-          });
-        }
-      } catch (e) {
-        // Not JSON
-      }
-    });
-
-    // Intercept onmessage property
-    let _onmessage = null;
-    Object.defineProperty(ws, "onmessage", {
-      get() {
-        return _onmessage;
-      },
-      set(handler) {
-        console.log(
-          `[WEBSOCKET-DEBUG] WebSocket #${wsCount} onmessage handler set`,
-        );
-        _onmessage = function (event) {
-          console.log(
-            `[WEBSOCKET-DEBUG] WebSocket #${wsCount} onmessage triggered:`,
-            event.data.substring(0, 100),
-          );
-          return handler.call(this, event);
-        };
-      },
-    });
-
-    // Monitor open events
-    ws.addEventListener("open", function (event) {
-      console.log(
-        `[WEBSOCKET-DEBUG] WebSocket #${wsId} OPENED - readyState: ${ws.readyState}`,
-      );
-    });
-
-    // Monitor close events
-    ws.addEventListener("close", function (event) {
-      activeWebSockets--;
-      console.log(
-        `[WEBSOCKET-DEBUG] WebSocket #${wsId} closed. Code: ${event.code}, Reason: ${event.reason}`,
-      );
-      console.log(
-        `[WEBSOCKET-DEBUG] Active WebSocket count: ${activeWebSockets}`,
-      );
-      allWebSockets.delete(wsId);
-    });
-
-    // Monitor error events
-    ws.addEventListener("error", function (event) {
-      console.log(
-        `[WEBSOCKET-DEBUG] WebSocket #${wsCount} ERROR:`,
-        event.error || "Unknown error",
-      );
-    });
-
-    // Monitor readyState changes
-    const checkReadyState = () => {
-      console.log(
-        `[WEBSOCKET-DEBUG] WebSocket #${wsCount} readyState: ${ws.readyState} (0=CONNECTING, 1=OPEN, 2=CLOSING, 3=CLOSED)`,
-      );
-    };
-
-    // Check initial state
-    checkReadyState();
-
-    // Also log when properties are accessed
-    // Monitor send
-    const originalSend = ws.send;
-    ws.send = function (data) {
-      console.log(
-        `[WEBSOCKET-DEBUG] WebSocket #${wsId} sending data, readyState: ${this.readyState}`,
-      );
-      try {
-        const msg = JSON.parse(data);
-        if (msg.type === "offer" || msg.type === "answer") {
-          console.log(
-            `[WEBSOCKET-DEBUG] WS #${wsId} sending ${msg.type} to ${msg.target}`,
-          );
-        }
-      } catch (e) {
-        // Not JSON
-      }
-      return originalSend.call(this, data);
-    };
-
-    return ws;
-  };
-
-  console.log("[WEBSOCKET-DEBUG] WebSocket monitor installed");
-
-  // Add global function to check WebSocket count
-  window.getActiveWebSocketCount = () => activeWebSockets;
-})();
-// ========== End WebSocket Debugging ==========/
-
 /**
  * Initialize the modular application
  */
@@ -218,7 +37,6 @@ async function initializeApp() {
       await initializeCore();
     } catch (error) {
       Logger.log(`Failed to initialize core systems: ${error}`, "error");
-      console.error("Core initialization error:", error);
       throw error;
     }
 
@@ -227,7 +45,6 @@ async function initializeApp() {
       initializeState();
     } catch (error) {
       Logger.log(`Failed to initialize state management: ${error}`, "error");
-      console.error("State initialization error:", error);
       throw error;
     }
 
@@ -236,7 +53,6 @@ async function initializeApp() {
       initializeProgramManager();
     } catch (error) {
       Logger.log(`Failed to initialize program management: ${error}`, "error");
-      console.error("Program manager initialization error:", error);
       throw error;
     }
 
@@ -245,7 +61,6 @@ async function initializeApp() {
       await initializeNetwork();
     } catch (error) {
       Logger.log(`Failed to initialize network layer: ${error}`, "error");
-      console.error("Network initialization error:", error);
       throw error;
     }
 
@@ -254,7 +69,6 @@ async function initializeApp() {
       await initializeUI();
     } catch (error) {
       Logger.log(`Failed to initialize UI: ${error}`, "error");
-      console.error("UI initialization error:", error);
       throw error;
     }
 
@@ -263,7 +77,6 @@ async function initializeApp() {
       await initializeAudio();
     } catch (error) {
       Logger.log(`Failed to initialize audio system: ${error}`, "error");
-      console.error("Audio initialization error:", error);
       throw error;
     }
 
@@ -284,7 +97,6 @@ async function initializeApp() {
 
     // Set global flag to indicate modular system is fully loaded
     window.__modularSystemLoaded = true;
-    console.log("[MODULAR] Modular system fully loaded and initialized");
   } catch (error) {
     Logger.log(`Failed to initialize application: ${error}`, "error");
     throw error;
@@ -345,7 +157,19 @@ function initializeProgramManager() {
   // Load saved banks from storage
   programManager.loadBanksFromStorage();
 
-  // Subscribe to program events
+  // Basic program event handlers that don't need network
+  eventBus.on("program:cleared", (data) => {
+    Logger.log(`Bank ${data.bankId} cleared`, "lifecycle");
+  });
+
+  Logger.log("Program management initialized", "lifecycle");
+}
+
+/**
+ * Set up program network event handlers (called after network init)
+ */
+function setupProgramNetworkHandlers() {
+  // Subscribe to program events that need network
   eventBus.on("program:saved", (data) => {
     Logger.log(`Program saved to Bank ${data.bankId}`, "lifecycle");
     
@@ -357,7 +181,7 @@ function initializeProgramManager() {
     });
   });
 
-  eventBus.on("program:loaded", (data) => {
+  eventBus.on("program:loaded", async (data) => {
     Logger.log(`Program loaded from Bank ${data.bankId}`, "lifecycle");
     
     // Get current transition parameters
@@ -370,24 +194,29 @@ function initializeProgramManager() {
     
     Logger.log(`Transition config: duration=${transitionConfig.duration.toFixed(2)}s, stagger=${transitionConfig.stagger.toFixed(2)}, spread=${transitionConfig.durationSpread.toFixed(2)}`, "messages");
     
-    // Send load command with transition data
-    // Synths will load their local bank values or request from controller if needed
-    const command = {
-      type: "command",
-      name: "load",
-      bank: data.bankId,
-      transition: transitionConfig
-    };
-    
-    Logger.log(`Broadcasting load command with transitions to synths: Bank ${data.bankId}`, "messages");
-    networkCoordinator.broadcastCommand(command);
+    // Send the loaded program to synths
+    try {
+      const result = await partManager.sendCurrentPart({ transition: transitionConfig });
+      Logger.log(`Program sent to ${result.successCount}/${result.totalSynths} synths`, "messages");
+      
+      // Set the loaded program as the active program
+      if (result.successCount > 0 && data.program) {
+        appState.setActiveProgram(data.program);
+        
+        // Mark all parameters as sent
+        if (parameterControls.markAllParametersSent) {
+          parameterControls.markAllParametersSent();
+        }
+        
+        // Update sync status
+        updateSyncStatus();
+      }
+    } catch (error) {
+      Logger.log(`Failed to send loaded program: ${error.message}`, "error");
+    }
   });
-
-  eventBus.on("program:cleared", (data) => {
-    Logger.log(`Bank ${data.bankId} cleared`, "lifecycle");
-  });
-
-  Logger.log("Program management initialized", "lifecycle");
+  
+  Logger.log("Program network handlers initialized", "lifecycle");
 }
 
 /**
@@ -401,6 +230,9 @@ async function initializeNetwork() {
 
   // Set up network event handlers
   setupNetworkEventHandlers();
+  
+  // Set up program network handlers now that network is ready
+  setupProgramNetworkHandlers();
 
   // Connect to WebSocket server
   try {
@@ -433,6 +265,9 @@ async function initializeUI() {
 
   // Set up UI event handlers
   setupUIEventHandlers();
+  
+  // Initialize sync status
+  updateSyncStatus();
 
   Logger.log("UI layer initialized", "lifecycle");
 }
@@ -549,6 +384,9 @@ function setupBankControls() {
       // Save to bank
       programManager.saveToBank(bankId, currentProgram);
       
+      // Update bank display
+      updateBankDisplay();
+      
       // Visual feedback
       e.target.classList.add("success");
       e.target.textContent = "✓ Saved";
@@ -567,6 +405,9 @@ function setupBankControls() {
       const success = programManager.loadFromBank(bankId);
       
       if (success) {
+        // Update bank display
+        updateBankDisplay();
+        
         // Visual feedback
         e.target.classList.add("success");
         e.target.textContent = "✓ Loaded";
@@ -597,6 +438,7 @@ function setupBankControls() {
 function updateBankDisplay() {
   const banks = programManager.getSavedBanks();
   const selector = document.getElementById("bank_selector");
+  const savedBanksDisplay = document.getElementById("saved-banks-display");
   
   if (selector) {
     banks.forEach(bank => {
@@ -605,6 +447,75 @@ function updateBankDisplay() {
         option.textContent = bank.saved ? `Bank ${bank.id} ●` : `Bank ${bank.id} ⚪`;
       }
     });
+  }
+  
+  // Update saved banks display in sidebar
+  if (savedBanksDisplay) {
+    const savedBanks = banks.filter(bank => bank.saved);
+    const clearButton = document.getElementById('clear-banks-btn');
+    
+    if (savedBanks.length === 0) {
+      savedBanksDisplay.innerHTML = '<div style="color: #666; text-align: center; padding: 20px;">No banks saved yet</div>';
+      if (clearButton) clearButton.style.display = 'none';
+    } else {
+      if (clearButton) clearButton.style.display = 'block';
+      savedBanksDisplay.innerHTML = savedBanks.map(bank => {
+        const program = bank.program;
+        let chordDisplay = 'No chord';
+        
+        if (program && program.chordNotes && program.chordNotes.length > 0) {
+          // Convert frequencies to note names with expressions
+          const noteStrings = program.chordNotes.map(freq => {
+            const noteName = AudioUtilities.frequencyToNoteName(freq);
+            
+            // Check if this note has an expression
+            if (program.noteExpressions && program.noteExpressions[noteName]) {
+              const expr = program.noteExpressions[noteName];
+              switch (expr.type) {
+                case 'vibrato':
+                  return `${noteName}v${Math.round(expr.depth * 100)}`;
+                case 'tremolo':
+                  return `${noteName}t${Math.round(expr.articulation * 100)}`;
+                case 'trill':
+                  const trillNote = AudioUtilities.frequencyToNoteName(freq * Math.pow(2, expr.interval / 12));
+                  return `${noteName}(→${trillNote})`;
+                default:
+                  return noteName;
+              }
+            }
+            return noteName;
+          });
+          
+          chordDisplay = noteStrings.join(' ');
+        }
+        
+        const isActive = parseInt(selector?.value) === bank.id;
+        
+        return `
+          <div class="bank-item ${isActive ? 'active' : ''}" data-bank-id="${bank.id}">
+            <span class="bank-number">Bank ${bank.id}:</span>
+            <span class="bank-chord">${chordDisplay}</span>
+          </div>
+        `;
+      }).join('');
+      
+      // Add click handlers to bank items
+      savedBanksDisplay.querySelectorAll('.bank-item').forEach(item => {
+        item.addEventListener('click', () => {
+          const bankId = parseInt(item.dataset.bankId);
+          programManager.loadFromBank(bankId);
+        });
+      });
+    }
+    
+    // Add click handler for clear button (only if not already attached)
+    if (clearButton && !clearButton.hasAttribute('data-handler-attached')) {
+      clearButton.setAttribute('data-handler-attached', 'true');
+      clearButton.addEventListener('click', () => {
+        programManager.clearAllBanks();
+        updateBankDisplay();
+      });
+    }
   }
 }
 
@@ -743,6 +654,122 @@ function setupGlobalEventListeners() {
     Logger.log(`Application ${visible ? "visible" : "hidden"}`, "lifecycle");
   });
 
+  // Handle keyboard shortcuts for bank save/load
+  document.addEventListener("keydown", (event) => {
+    console.log(`[KEYBOARD DEBUG] Key pressed: ${event.key}, Shift: ${event.shiftKey}, Target: ${event.target.tagName}`);
+    
+    // Ignore if user is typing in an input field
+    const activeElement = document.activeElement;
+    if (activeElement && (
+      activeElement.tagName === "INPUT" || 
+      activeElement.tagName === "TEXTAREA" ||
+      activeElement.tagName === "SELECT" ||
+      activeElement.isContentEditable
+    )) {
+      console.log(`[KEYBOARD DEBUG] Ignoring - user is in ${activeElement.tagName}`);
+      return;
+    }
+    
+    // Check if it's a number key (1-9 or 0)
+    // Use event.code which is consistent regardless of shift state
+    const code = event.code;
+    const key = event.key;
+    
+    // Check for Digit1-Digit9 or Digit0
+    if (code && code.startsWith("Digit")) {
+      const digit = code.substring(5); // Extract the digit from "DigitX"
+      
+      // Debug log
+      if (event.shiftKey) {
+        Logger.log(`Shift+${digit} pressed`, "lifecycle");
+        console.log(`[KEYBOARD] Shift+${digit} pressed - saving to bank`);
+      }
+      
+      // Map 0 to bank 10, 1-9 to banks 1-9
+      const bankId = digit === "0" ? 10 : parseInt(digit);
+      
+      if (event.shiftKey) {
+        // Shift + number = Save active program to bank
+        event.preventDefault();
+        event.stopPropagation();
+        
+        // Get the active program (last synced state)
+        const activeProgram = appState.getActiveProgram();
+        
+        if (!activeProgram) {
+          // No active program yet - need to send first
+          uiManager.showNotification(
+            `No active program to save. Send to synths first!`,
+            "warning",
+            2000
+          );
+          Logger.log(`No active program to save to Bank ${bankId}`, "warning");
+          return;
+        }
+        
+        // Create a proper save state from the active program
+        const saveState = {
+          ...activeProgram.parameters,  // All parameter values
+          chordNotes: activeProgram.chordNotes || [],
+          noteExpressions: activeProgram.noteExpressions || {},
+          harmonicSelections: activeProgram.harmonicSelections || {},
+          selectedExpression: activeProgram.selectedExpression || 'none',
+          powerOn: activeProgram.powerOn,
+          timestamp: Date.now(),
+          version: '1.0',
+          name: `Bank ${bankId}`
+        };
+        
+        // Save the active program
+        programManager.saveToBank(bankId, saveState);
+        
+        // Update bank selector to show current bank
+        const bankSelector = document.getElementById("bank_selector");
+        if (bankSelector) {
+          bankSelector.value = bankId;
+        }
+        
+        // Update bank display
+        updateBankDisplay();
+        
+        // Visual feedback
+        uiManager.showNotification(
+          `Saved active program to Bank ${bankId} (Shift+${key})`,
+          "success",
+          1500
+        );
+        
+        Logger.log(`Keyboard shortcut: Saved active program to Bank ${bankId}`, "lifecycle");
+      } else {
+        // Just number = Load from bank
+        event.preventDefault();
+        event.stopPropagation();
+        
+        const success = programManager.loadFromBank(bankId);
+        
+        if (success) {
+          // Visual feedback
+          uiManager.showNotification(
+            `Loaded Bank ${bankId} (${key})`,
+            "info",
+            1500
+          );
+          Logger.log(`Keyboard shortcut: Loaded Bank ${bankId}`, "lifecycle");
+          
+          // Update bank display
+          updateBankDisplay();
+        } else {
+          // No data in bank
+          uiManager.showNotification(
+            `Bank ${bankId} is empty`,
+            "warning",
+            1500
+          );
+        }
+      }
+    }
+  });
+
   Logger.log("Global event listeners set up", "lifecycle");
 }
 
@@ -757,6 +784,9 @@ function setupProgramSendButton() {
     Logger.log("Send Current Program button not found", "error");
     return;
   }
+
+  // Enable the button once everything is set up
+  sendButton.disabled = false;
 
   sendButton.addEventListener("click", async () => {
     try {
@@ -791,15 +821,55 @@ function setupProgramSendButton() {
 // Global function for button handlers
 window.sendCurrentProgram = async () => {
   try {
+    // Capture the current program state before sending
+    const currentProgram = {
+      // Get all parameter values
+      parameters: parameterControls.getAllParameterValues(),
+      
+      // Get current chord (as frequencies)
+      chordNotes: [...partManager.currentChord],
+      
+      // Get note expressions
+      noteExpressions: Object.fromEntries(partManager.noteExpressions),
+      
+      // Get harmonic selections
+      harmonicSelections: {
+        'vibrato-numerator': Array.from(appState.get('harmonicSelections')['vibrato-numerator'] || []),
+        'vibrato-denominator': Array.from(appState.get('harmonicSelections')['vibrato-denominator'] || []),
+        'trill-numerator': Array.from(appState.get('harmonicSelections')['trill-numerator'] || []),
+        'trill-denominator': Array.from(appState.get('harmonicSelections')['trill-denominator'] || []),
+        'tremolo-numerator': Array.from(appState.get('harmonicSelections')['tremolo-numerator'] || []),
+        'tremolo-denominator': Array.from(appState.get('harmonicSelections')['tremolo-denominator'] || [])
+      },
+      
+      // Get selected expression type
+      selectedExpression: appState.get('selectedExpression'),
+      
+      // Add power state
+      powerOn: document.getElementById("power")?.checked || false,
+      
+      // Metadata
+      timestamp: Date.now(),
+      version: '1.0'
+    };
+    
     const result = await partManager.sendCurrentPart();
     Logger.log(
       `Program sent successfully to ${result.successCount}/${result.totalSynths} synths`,
       "messages",
     );
 
-    // Mark parameters as sent
-    if (parameterControls.markAllParametersSent) {
-      parameterControls.markAllParametersSent();
+    // Store as active program only if send was successful
+    if (result.successCount > 0) {
+      appState.setActiveProgram(currentProgram);
+      
+      // Mark parameters as sent
+      if (parameterControls.markAllParametersSent) {
+        parameterControls.markAllParametersSent();
+      }
+      
+      // Update status badge to show synced
+      updateSyncStatus();
     }
 
     return result;
@@ -808,6 +878,27 @@ window.sendCurrentProgram = async () => {
     throw error;
   }
 };
+
+/**
+ * Update sync status indicator
+ */
+function updateSyncStatus() {
+  const statusBadge = document.getElementById("status_badge");
+  if (!statusBadge) return;
+  
+  const hasChanges = appState.hasUnsyncedChanges();
+  
+  if (hasChanges) {
+    statusBadge.textContent = "● Changes Pending";
+    statusBadge.className = "status-badge pending";
+  } else {
+    statusBadge.textContent = "✓ Synced";
+    statusBadge.className = "status-badge synced";
+  }
+}
+
+// Make it globally available
+window.updateSyncStatus = updateSyncStatus;
 
 /**
  * Send current program to all connected synths
@@ -1025,34 +1116,6 @@ if (Config.DEBUG.ENABLED) {
 
 // Debug helper to check what's loaded
 function debugModuleLoading() {
-  console.log("=== Module Loading Debug ===");
-  console.log("Logger:", typeof Logger !== "undefined" ? "✓" : "✗");
-  console.log("Config:", typeof Config !== "undefined" ? "✓" : "✗");
-  console.log("eventBus:", typeof eventBus !== "undefined" ? "✓" : "✗");
-  console.log("appState:", typeof appState !== "undefined" ? "✓" : "✗");
-  console.log(
-    "programManager:",
-    typeof programManager !== "undefined" ? "✓" : "✗",
-  );
-  console.log(
-    "networkCoordinator:",
-    typeof networkCoordinator !== "undefined" ? "✓" : "✗",
-  );
-  console.log("uiManager:", typeof uiManager !== "undefined" ? "✓" : "✗");
-  console.log(
-    "parameterControls:",
-    typeof parameterControls !== "undefined" ? "✓" : "✗",
-  );
-  console.log(
-    "pianoKeyboard:",
-    typeof pianoKeyboard !== "undefined" ? "✓" : "✗",
-  );
-  console.log("partManager:", typeof partManager !== "undefined" ? "✓" : "✗");
-  console.log(
-    "AudioUtilities:",
-    typeof AudioUtilities !== "undefined" ? "✓" : "✗",
-  );
-  console.log("=== End Debug ===");
 }
 
 // Enhanced error handling
@@ -1068,22 +1131,14 @@ window.addEventListener("unhandledrejection", (event) => {
 // Start the application with better error handling
 async function startApp() {
   try {
-    console.log("Starting modular app...");
     debugModuleLoading();
 
     setupCompatibilityLayer();
     await initializeApp();
 
-    console.log("Modular app started successfully!");
   } catch (error) {
-    console.error("Failed to start modular application:", error);
-    console.error("Stack trace:", error.stack);
 
     // Don't fall back to legacy system - we need to fix the modular system
-    console.error("CRITICAL: Modular system failed to start");
-    console.error(
-      "Not falling back to legacy system - please fix the error above",
-    );
   }
 }
 
@@ -1161,15 +1216,3 @@ window.debugWebRTC = {
   },
 };
 
-console.log("WebRTC debugging commands available:");
-console.log(
-  "- debugWebRTC.testICE(peerId, mode) - Test ICE with 'stun-only', 'turn-only', or 'all'",
-);
-console.log("- debugWebRTC.refreshICE() - Force refresh ICE servers");
-console.log("- debugWebRTC.getPeerInfo(peerId) - Get detailed info for a peer");
-console.log("- debugWebRTC.getAllPeers() - List all connected peers");
-console.log(
-  "- debugWebRTC.getICEStats(peerId) - Get ICE candidate pair statistics",
-);
-console.log("- debugWebRTC.disconnect(peerId) - Force disconnect a peer");
-console.log("- debugWebRTC.getConfig() - View current RTC configuration");

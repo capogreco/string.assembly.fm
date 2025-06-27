@@ -36,19 +36,7 @@
 
   // Log loading status
   function log(message, type = "info") {
-    const timestamp = new Date().toLocaleTimeString();
-    const prefix = `[${timestamp}] [MODULE-LOADER]`;
-
-    switch (type) {
-      case "error":
-        console.error(`${prefix} ${message}`);
-        break;
-      case "warn":
-        console.warn(`${prefix} ${message}`);
-        break;
-      default:
-        console.log(`${prefix} ${message}`);
-    }
+    // Disabled - too noisy
   }
 
   // Load modular system
@@ -70,15 +58,10 @@
     script.onload = function () {
       log("Modular system loaded successfully");
       document.body.classList.add("modular-loaded");
-      console.log(
-        "[MODULE-LOADER] app.js loaded successfully - modular system active",
-      );
     };
 
     script.onerror = function (error) {
       log("Failed to load modular system - NO FALLBACK", "error");
-      console.error("[MODULE-LOADER] app.js failed to load:", error);
-      console.error("Full error details:", error);
       showErrorMessage();
     };
 
@@ -227,15 +210,9 @@
     // Check browser capabilities
     if (supportsES6Modules() && supportsRequiredFeatures()) {
       log("Browser supports ES6 modules, loading modular system");
-      console.log(
-        "[MODULE-LOADER] ES6 modules supported, calling loadModularSystem()",
-      );
       loadModularSystem();
     } else {
       log("Browser does not support ES6 modules, loading legacy system");
-      console.log(
-        "[MODULE-LOADER] ES6 modules NOT supported, calling loadLegacySystem()",
-      );
       loadLegacySystem();
     }
   }

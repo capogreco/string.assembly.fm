@@ -21,13 +21,107 @@
                 text-shadow: none;
             }
 
-            .container {
-                max-width: 800px;
+            .main-wrapper {
+                max-width: 1200px;
                 margin: 0 auto;
+                display: flex;
+                gap: 20px;
+                align-items: flex-start;
+            }
+
+            .container {
+                flex: 1;
                 background: white;
                 border-radius: 12px;
                 padding: 30px;
                 box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            }
+            
+            .transition-sidebar {
+                width: 300px;
+                background: white;
+                border-radius: 12px;
+                padding: 20px;
+                box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+                position: sticky;
+                top: 20px;
+                max-height: calc(100vh - 40px);
+                overflow-y: auto;
+            }
+            
+            .transition-sidebar .section {
+                margin-bottom: 0;
+                background: #fff5f5;
+                border-left-color: #ff6b6b;
+            }
+            
+            .transition-sidebar .section-title {
+                color: #c92a2a;
+                border-bottom-color: #ffe0e0;
+                font-size: 1.1em;
+            }
+            
+            .transition-sidebar .control-group label {
+                color: #495057;
+                font-weight: 500;
+            }
+            
+            .transition-sidebar input[type="range"] {
+                background: #ffe0e0;
+            }
+            
+            .transition-sidebar input[type="range"]::-webkit-slider-thumb {
+                background: #ff6b6b;
+            }
+            
+            .transition-sidebar input[type="range"]::-moz-range-thumb {
+                background: #ff6b6b;
+            }
+            
+            /* Saved Banks Display */
+            .bank-item {
+                padding: 8px 12px;
+                margin: 4px 0;
+                background: white;
+                border-radius: 4px;
+                border: 1px solid #e0e0e0;
+                cursor: pointer;
+                transition: all 0.2s;
+            }
+            
+            .bank-item:hover {
+                background: #f8f9fa;
+                border-color: #4169e1;
+            }
+            
+            .bank-item .bank-number {
+                font-weight: bold;
+                color: #1e3a8a;
+                margin-right: 8px;
+            }
+            
+            .bank-item .bank-chord {
+                color: #495057;
+                font-family: monospace;
+            }
+            
+            .bank-item.active {
+                background: #e6f2ff;
+                border-color: #4169e1;
+            }
+            
+            /* Responsive design */
+            @media (max-width: 1024px) {
+                .main-wrapper {
+                    flex-direction: column;
+                }
+                
+                .transition-sidebar {
+                    width: 100%;
+                    position: relative;
+                    top: 0;
+                    margin-top: 20px;
+                }
             }
 
             .section {
@@ -592,8 +686,9 @@
         </style>
     </head>
     <body>
-        <div class="container">
-            <h1>String Assembly FM - Controller</h1>
+        <div class="main-wrapper">
+            <div class="container">
+                <h1>String Assembly FM - Controller</h1>
 
             <div id="status">Disconnected</div>
 
@@ -631,7 +726,7 @@
             </div>
 
             <div class="program-controls">
-                <button id="send_current_program">Send Current Program</button>
+                <button id="send_current_program" disabled>Send Current Program</button>
                 <span id="status_badge" class="status-badge synced"
                     >✓ Synced</span
                 >
@@ -1295,58 +1390,6 @@
             </div>
 
             <div class="section">
-                <div class="section-title">Transition Control</div>
-                <div class="controls">
-                    <div class="control-group">
-                        <label for="transitionDuration">Duration</label>
-                        <input
-                            type="range"
-                            id="transitionDuration"
-                            value="39"
-                            min="0"
-                            max="100"
-                            step="1"
-                        />
-                        <span id="transitionDurationValue" class="value-display"
-                            >1.0s</span
-                        >
-                    </div>
-                    <div class="control-group">
-                        <label for="transitionDurationSpread"
-                            >Duration Spread</label
-                        >
-                        <input
-                            type="range"
-                            id="transitionDurationSpread"
-                            value="0"
-                            min="0"
-                            max="100"
-                            step="5"
-                        />
-                        <span
-                            id="transitionDurationSpreadValue"
-                            class="value-display"
-                            >0%</span
-                        >
-                    </div>
-                    <div class="control-group">
-                        <label for="transitionStagger">Stagger</label>
-                        <input
-                            type="range"
-                            id="transitionStagger"
-                            value="0"
-                            min="0"
-                            max="100"
-                            step="5"
-                        />
-                        <span id="transitionStaggerValue" class="value-display"
-                            >0%</span
-                        >
-                    </div>
-                </div>
-            </div>
-
-            <div class="section">
                 <div class="section-title">Instrument</div>
                 <div class="controls">
                     <div class="control-group">
@@ -1495,6 +1538,9 @@
 
             <div class="section">
                 <div class="section-title">Program Banking</div>
+                <div style="font-size: 0.8em; color: #666; margin-bottom: 10px; padding: 8px; background: #f0f0f0; border-radius: 4px;">
+                    💡 <strong>Shift+1-9</strong> to save, <strong>1-9</strong> to load (0 = Bank 10)
+                </div>
                 <div class="banking-controls">
                     <label for="bank_selector">Bank:</label>
                     <select id="bank_selector">
@@ -1517,6 +1563,81 @@
                 <h3>Connected Synths</h3>
                 <div id="synth_list">None connected</div>
             </div>
+        </div>
+        
+        <div class="transition-sidebar">
+            <div class="section">
+                <div class="section-title">Transition Control</div>
+                <div style="font-size: 0.85em; color: #666; margin-bottom: 15px; padding: 10px; background: #fee; border-radius: 5px;">
+                    Controls how parameter changes are applied to synths
+                </div>
+                <div class="controls">
+                    <div class="control-group">
+                        <label for="transitionDuration">Duration</label>
+                        <input
+                            type="range"
+                            id="transitionDuration"
+                            value="39"
+                            min="0"
+                            max="100"
+                            step="1"
+                        />
+                        <span id="transitionDurationValue" class="value-display"
+                            >1.0s</span
+                        >
+                    </div>
+                    <div class="control-group">
+                        <label for="transitionDurationSpread"
+                            >Duration Spread</label
+                        >
+                        <input
+                            type="range"
+                            id="transitionDurationSpread"
+                            value="0"
+                            min="0"
+                            max="100"
+                            step="5"
+                        />
+                        <span
+                            id="transitionDurationSpreadValue"
+                            class="value-display"
+                            >0%</span
+                        >
+                    </div>
+                    <div class="control-group">
+                        <label for="transitionStagger">Stagger</label>
+                        <input
+                            type="range"
+                            id="transitionStagger"
+                            value="0"
+                            min="0"
+                            max="100"
+                            step="5"
+                        />
+                        <span id="transitionStaggerValue" class="value-display"
+                            >0%</span
+                        >
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Saved Banks Display -->
+            <div class="section" style="margin-top: 20px; background: #f0f8ff; border-left-color: #4169e1;">
+                <div class="section-title" style="color: #1e3a8a; border-bottom-color: #d0e0ff; position: relative;">
+                    Saved Banks
+                    <button id="clear-banks-btn" class="btn-small" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); padding: 2px 8px; font-size: 0.8em; background: #ff6b6b; color: white; border: none; border-radius: 3px; cursor: pointer; display: none; transition: background 0.2s;" 
+                            onmouseover="this.style.background='#ff5252'" 
+                            onmouseout="this.style.background='#ff6b6b'">
+                        Clear All
+                    </button>
+                </div>
+                <div id="saved-banks-display" style="font-size: 0.9em;">
+                    <div style="color: #666; text-align: center; padding: 20px;">
+                        No banks saved yet
+                    </div>
+                </div>
+            </div>
+        </div>
         </div>
 
         <!-- Load the module loader (handles modular vs legacy) -->

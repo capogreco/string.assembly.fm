@@ -129,7 +129,6 @@ export async function fetchIceServers() {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     const data = await response.json();
-    console.log("[CONFIG-DEBUG] Data received from /ice-servers:", data); // Log the actual fetched data
 
     if (data.ice_servers && Array.isArray(data.ice_servers)) {
       // Standardize ICE server objects to only use 'urls'
@@ -150,11 +149,6 @@ export async function fetchIceServers() {
           "connections",
         );
       }
-      console.log(
-        // Correctly reference Config.RTC_CONFIG
-        "[CONFIG-DEBUG] Successfully updated Config.RTC_CONFIG.iceServers:",
-        JSON.stringify(Config.RTC_CONFIG.iceServers, null, 2),
-      );
     } else {
       console.warn(
         "[CONFIG-DEBUG] Fetched data.ice_servers is missing or not an array:",
@@ -180,12 +174,6 @@ export async function fetchIceServers() {
     }
     // Keep default servers (Config.RTC_CONFIG.iceServers remains unchanged from its initial state)
   }
-  // This log will now show the state after attempt to fetch,
-  // which might be the defaults if fetch failed, or the new ones if successful.
-  console.log(
-    "[CONFIG-DEBUG] Final Config.RTC_CONFIG.iceServers after fetchIceServers call:",
-    JSON.stringify(Config.RTC_CONFIG.iceServers, null, 2),
-  );
 }
 
 /**

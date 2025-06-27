@@ -5,11 +5,13 @@
 
 import { appState } from './AppState.js';
 import { Config } from '../core/Config.js';
+import { eventBus } from '../core/EventBus.js';
 
 export class ProgramManager {
-  constructor(state = appState, storage = localStorage) {
+  constructor(state = appState, storage = localStorage, eventBusInstance = eventBus) {
     this.state = state;
     this.storage = storage;
+    this.eventBus = eventBusInstance;
     this.storageKey = Config.STORAGE_KEYS.BANKS;
     this.isApplyingProgram = false; // Prevent recursive updates
   }
@@ -480,6 +482,46 @@ export class ProgramManager {
     } catch (error) {
       if (window.Logger) {
         window.Logger.log(`Failed to clear bank ${bankId}: ${error}`, 'error');
+      }
+      return false;
+    }
+  }
+
+  /**
+   * Clear all saved banks
+   * @returns {boolean} Success status
+   */
+  clearAllBanks() {
+    try {
+      if (window.Logger) {
+        window.Logger.log('Clearing all saved banks...', 'lifecycle');
+      }
+
+      // Create a new empty Map for program banks
+      const emptyBanks = new Map();
+      this.state.set('programBanks', emptyBanks);
+      
+      // Save to localStorage
+      this.saveBanksToStorage();
+      
+      // Also explicitly clear the localStorage to be sure
+      if (this.storage) {
+        this.storage.removeItem(this.storageKey);
+      }
+      
+      // Emit event
+      this.eventBus.emit('programManager:allBanksCleared', {
+        timestamp: Date.now()
+      });
+
+      if (window.Logger) {
+        window.Logger.log('All banks cleared successfully', 'lifecycle');
+      }
+
+      return true;
+    } catch (error) {
+      if (window.Logger) {
+        window.Logger.log(`Failed to clear all banks: ${error}`, 'error');
       }
       return false;
     }

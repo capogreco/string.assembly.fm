@@ -10,6 +10,10 @@ export class AppState {
     this.#state = {
       // Current program state
       currentProgram: null,
+      
+      // Active program (last synced to synths)
+      activeProgram: null,
+      activeProgramTimestamp: null,
 
       // Chord and expression state
       currentChordState: null,
@@ -340,6 +344,22 @@ export class AppState {
 
   clearParameterChanges() {
     this.set('parametersChanged', new Set());
+  }
+  
+  // Active program tracking
+  setActiveProgram(program) {
+    this.set('activeProgram', program);
+    this.set('activeProgramTimestamp', Date.now());
+    this.clearParameterChanges();
+  }
+  
+  getActiveProgram() {
+    return this.get('activeProgram');
+  }
+  
+  hasUnsyncedChanges() {
+    const parametersChanged = this.get('parametersChanged');
+    return parametersChanged && parametersChanged.size > 0;
   }
 
   // Connection state helpers
