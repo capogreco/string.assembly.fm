@@ -389,8 +389,31 @@ function setupBankControls() {
       const success = programState.saveToBank(bankId);
       
       if (success) {
+        // Also tell all synths to save to this bank
+        const connectedSynths = appState.get("connectedSynths");
+        if (connectedSynths && connectedSynths.size > 0) {
+          const synthIds = Array.from(connectedSynths.keys());
+          let saveCount = 0;
+          
+          for (const synthId of synthIds) {
+            const message = {
+              type: "command",
+              name: "save",
+              value: bankId
+            };
+            
+            const saveSuccess = networkCoordinator.sendCommandToSynth(synthId, message);
+            if (saveSuccess) {
+              saveCount++;
+            }
+          }
+          
+          Logger.log(`Bank ${bankId} save command sent to ${saveCount}/${synthIds.length} synths`, "messages");
+        }
+        
         // Update bank display
         updateBankDisplay();
+        updateActiveProgramDisplay();
         
         // Visual feedback
         e.target.classList.add("success");
@@ -426,10 +449,24 @@ function setupBankControls() {
       
       if (success) {
         // Tell synths to load their stored bank
-        await sendBankLoadMessage(bankId);
+        const result = await sendBankLoadMessage(bankId);
+        
+        // Set as active program if successfully sent to synths
+        if (result.successCount > 0) {
+          programState.setActiveProgram();
+          
+          // Mark all parameters as sent since we just loaded and sent them
+          if (parameterControls.markAllParametersSent) {
+            parameterControls.markAllParametersSent();
+          }
+          
+          // Update sync status
+          updateSyncStatus();
+        }
         
         // Update bank display
         updateBankDisplay();
+        updateActiveProgramDisplay();
         
         // Visual feedback
         e.target.classList.add("success");
@@ -453,6 +490,60 @@ function setupBankControls() {
   
   // Update bank display on load
   updateBankDisplay();
+  updateActiveProgramDisplay();
+}
+
+/**
+ * Update active program display
+ */
+function updateActiveProgramDisplay() {
+  const activeProgramDisplay = document.getElementById('active-program-display');
+  if (!activeProgramDisplay) return;
+  
+  const activeProgram = programState.activeProgram;
+  
+  if (!activeProgram) {
+    activeProgramDisplay.innerHTML = '<span style="color: #64748b;">No active program</span>';
+    return;
+  }
+  
+  // Define expression colors locally (optimized for dark mode)
+  const EXPRESSION_COLORS = {
+    none: "#60a5fa",      // Light blue
+    vibrato: "#f87171",   // Light red
+    tremolo: "#4ade80",   // Light green
+    trill: "#fbbf24"      // Amber (instead of yellow for better visibility)
+  };
+  
+  let chordDisplay = '<span style="color: #64748b;">No chord</span>';
+  
+  if (activeProgram.chord && activeProgram.chord.frequencies && activeProgram.chord.frequencies.length > 0) {
+    // Convert frequencies to note names with expressions
+    const noteStrings = activeProgram.chord.frequencies.map(freq => {
+      const noteName = AudioUtilities.frequencyToNoteName(freq);
+      
+      // Check if this note has an expression
+      if (activeProgram.chord.expressions && activeProgram.chord.expressions[noteName]) {
+        const expr = activeProgram.chord.expressions[noteName];
+        switch (expr.type) {
+          case 'vibrato':
+            return `<span style="color: ${EXPRESSION_COLORS.vibrato};">${noteName}v${Math.round(expr.depth * 100)}</span>`;
+          case 'tremolo':
+            return `<span style="color: ${EXPRESSION_COLORS.tremolo};">${noteName}t${Math.round(expr.articulation * 100)}</span>`;
+          case 'trill':
+            const trillNote = AudioUtilities.frequencyToNoteName(freq * Math.pow(2, expr.interval / 12));
+            return `<span style="color: ${EXPRESSION_COLORS.trill};">${noteName}(→${trillNote})</span>`;
+          default:
+            return `<span style="color: ${EXPRESSION_COLORS.none};">${noteName}</span>`;
+        }
+      }
+      return `<span style="color: ${EXPRESSION_COLORS.none};">${noteName}</span>`;
+    });
+    
+    chordDisplay = noteStrings.join(' ');
+  }
+  
+  activeProgramDisplay.innerHTML = chordDisplay;
 }
 
 /**
@@ -478,7 +569,7 @@ function updateBankDisplay() {
     const clearButton = document.getElementById('clear-banks-btn');
     
     if (savedBanks.length === 0) {
-      savedBanksDisplay.innerHTML = '<div style="color: #666; text-align: center; padding: 20px;">No banks saved yet</div>';
+      savedBanksDisplay.innerHTML = '<div style="color: #64748b; text-align: center; padding: 20px;">No banks saved yet</div>';
       if (clearButton) clearButton.style.display = 'none';
     } else {
       if (clearButton) clearButton.style.display = 'block';
@@ -527,8 +618,31 @@ function updateBankDisplay() {
         item.addEventListener('click', async () => {
           const bankId = parseInt(item.dataset.bankId);
           if (programState.loadFromBank(bankId)) {
+            // Update bank selector
+            const bankSelector = document.getElementById("bank_selector");
+            if (bankSelector) {
+              bankSelector.value = bankId;
+            }
+            
             // Tell synths to load their stored bank
-            await sendBankLoadMessage(bankId);
+            const result = await sendBankLoadMessage(bankId);
+            
+            // Set as active program if successfully sent to synths
+            if (result.successCount > 0) {
+              programState.setActiveProgram();
+              
+              // Mark all parameters as sent since we just loaded and sent them
+              if (parameterControls.markAllParametersSent) {
+                parameterControls.markAllParametersSent();
+              }
+              
+              // Update sync status
+              updateSyncStatus();
+            }
+            
+            // Update displays
+            updateBankDisplay();
+            updateActiveProgramDisplay();
           }
         });
       });
@@ -595,7 +709,12 @@ function setupNetworkEventHandlers() {
   
   // Handle bank program requests from synths
   eventBus.on("network:bankProgramRequested", (data) => {
-    Logger.log(`Bank ${data.bankId} program requested by: ${data.synthId}`, "messages");
+    Logger.log(`Bank ${data.bankId} requested by ${data.synthId}`, "messages");
+    
+    // This is called when a synth needs the controller to send it a bank program
+    // This happens when:
+    // 1. A new synth joins and needs to catch up
+    // 2. A synth doesn't have the bank saved locally
     
     // Get the saved program from programState
     const banks = programState.getSavedBanks();
@@ -608,26 +727,48 @@ function setupNetworkEventHandlers() {
     
     const savedProgram = bank.program;
     
-    // Temporarily update PartManager's state to match the saved bank
-    // This ensures the correct chord/expressions are used for stochastic resolution
-    if (savedProgram.chord && savedProgram.chord.frequencies.length > 0) {
-      // Update PartManager's internal state (but don't trigger events)
-      partManager.currentChord = [...savedProgram.chord.frequencies];
-      
-      // Clear and set expressions
-      partManager.noteExpressions.clear();
-      if (savedProgram.chord.expressions) {
-        Object.entries(savedProgram.chord.expressions).forEach(([noteName, expression]) => {
-          partManager.noteExpressions.set(noteName, expression);
-        });
-      }
+    // Get or create assignment for this synth
+    let assignment = partManager.synthAssignments.get(data.synthId);
+    
+    if (!assignment && savedProgram.chord && savedProgram.chord.frequencies.length > 0) {
+      // Assign based on saved chord
+      const synthIndex = partManager.synthAssignments.size;
+      const frequency = savedProgram.chord.frequencies[synthIndex % savedProgram.chord.frequencies.length];
+      const noteName = partManager.frequencyToNoteName(frequency);
+      const expression = savedProgram.chord.expressions[noteName] || { type: "none" };
+      assignment = { frequency, expression };
+      partManager.synthAssignments.set(data.synthId, assignment);
     }
     
-    // Send the program with stochastic resolution to this specific synth
-    // PartManager will resolve expression parameters (trill intervals, vibrato rates, etc.)
-    partManager.sendProgramToSpecificSynth(data.synthId, data.transition || {});
+    if (!assignment) {
+      Logger.log(`No assignment available for ${data.synthId}`, "error");
+      return;
+    }
     
-    Logger.log(`Sent bank ${data.bankId} program to ${data.synthId} with stochastic resolution`, "messages");
+    // Create synth program with saved parameters
+    const synthProgram = {
+      ...savedProgram.parameters,
+      powerOn: savedProgram.powerOn,
+      fundamentalFrequency: assignment.frequency
+    };
+    
+    // IMPORTANT: For bank loads, we need to apply expression with HRG resolution
+    // The controller's saved program doesn't have the resolved expression values
+    // Each synth needs its own unique HRG-resolved values
+    partManager.applyExpressionToProgram(synthProgram, assignment.expression);
+    
+    Logger.log(`Sending newly resolved program to ${data.synthId}: freq=${assignment.frequency.toFixed(1)}Hz, expr=${assignment.expression.type}`, "messages");
+    
+    // Send with transition
+    const success = networkCoordinator.sendProgramToSynth(
+      data.synthId,
+      synthProgram,
+      data.transition || {}
+    );
+    
+    if (!success) {
+      Logger.log(`Failed to send bank program to ${data.synthId}`, "error");
+    }
   });
 
   // Handle controller kick events
@@ -664,6 +805,12 @@ function setupGlobalEventListeners() {
   eventBus.on("app:reset", () => {
     Logger.log("Resetting application state...", "lifecycle");
     appState.reset();
+  });
+  
+  // Listen for active program changes
+  eventBus.on("programState:synced", (data) => {
+    Logger.log("Active program synced", "lifecycle");
+    updateActiveProgramDisplay();
   });
 
   // Handle page unload
@@ -733,6 +880,29 @@ function setupGlobalEventListeners() {
           return;
         }
         
+        // Also tell all synths to save to this bank
+        const connectedSynths = appState.get("connectedSynths");
+        if (connectedSynths && connectedSynths.size > 0) {
+          const synthIds = Array.from(connectedSynths.keys());
+          let saveCount = 0;
+          
+          for (const synthId of synthIds) {
+            const message = {
+              type: "command",
+              name: "save",
+              value: bankId
+            };
+            
+            const saveSuccess = networkCoordinator.sendCommandToSynth(synthId, message);
+            if (saveSuccess) {
+              saveCount++;
+              Logger.log(`Sent save command for bank ${bankId} to ${synthId}`, "messages");
+            }
+          }
+          
+          Logger.log(`Bank ${bankId} save command sent to ${saveCount}/${synthIds.length} synths`, "messages");
+        }
+        
         // Update bank selector to show current bank
         const bankSelector = document.getElementById("bank_selector");
         if (bankSelector) {
@@ -741,6 +911,7 @@ function setupGlobalEventListeners() {
         
         // Update bank display
         updateBankDisplay();
+        updateActiveProgramDisplay();
         
         // Visual feedback
         uiManager.showNotification(
@@ -758,9 +929,28 @@ function setupGlobalEventListeners() {
         const success = programState.loadFromBank(bankId);
         
         if (success) {
+          // Update bank selector to show current bank
+          const bankSelector = document.getElementById("bank_selector");
+          if (bankSelector) {
+            bankSelector.value = bankId;
+          }
+          
           // Program loaded and applied to UI
           // Now tell synths to load their stored bank
-          sendBankLoadMessage(bankId).then(() => {
+          sendBankLoadMessage(bankId).then((result) => {
+            // Set as active program if successfully sent to synths
+            if (result.successCount > 0) {
+              programState.setActiveProgram();
+              
+              // Mark all parameters as sent since we just loaded and sent them
+              if (parameterControls.markAllParametersSent) {
+                parameterControls.markAllParametersSent();
+              }
+              
+              // Update sync status
+              updateSyncStatus();
+            }
+            
             // Visual feedback
             uiManager.showNotification(
               `Loaded Bank ${bankId} (${key})`,
@@ -771,6 +961,7 @@ function setupGlobalEventListeners() {
             
             // Update bank display
             updateBankDisplay();
+            updateActiveProgramDisplay();
           });
         } else {
           // No data in bank
@@ -849,6 +1040,26 @@ async function sendBankLoadMessage(bankId) {
     let successCount = 0;
     const synthIds = Array.from(connectedSynths.keys());
     
+    // Get current transition parameters from UI
+    const transitionParams = parameterControls.getAllParameterValues();
+    
+    // Direct debugging - let's see what we actually get
+    console.log('[TRANSITION DEBUG] getAllParameterValues returned:', transitionParams);
+    console.log('[TRANSITION DEBUG] transitionDuration value:', transitionParams.transitionDuration);
+    
+    // Also check the DOM directly
+    const durationElement = document.getElementById('transitionDuration');
+    console.log('[TRANSITION DEBUG] Direct DOM check - transitionDuration element:', durationElement);
+    console.log('[TRANSITION DEBUG] Direct DOM value:', durationElement?.value);
+    
+    const transitionConfig = {
+      duration: transitionParams.transitionDuration,
+      stagger: transitionParams.transitionStagger,
+      durationSpread: transitionParams.transitionDurationSpread,
+    };
+    
+    Logger.log(`Using transition config: duration=${transitionConfig.duration}s, stagger=${transitionConfig.stagger}, spread=${transitionConfig.durationSpread}`, "messages");
+    
     // Send load command to each synth
     for (const synthId of synthIds) {
       const message = {
@@ -856,11 +1067,7 @@ async function sendBankLoadMessage(bankId) {
         name: "load",
         value: {
           bank: bankId,
-          transition: {
-            duration: 0.5,  // Default transition
-            stagger: 0,
-            durationSpread: 0
-          }
+          transition: transitionConfig
         }
       };
       

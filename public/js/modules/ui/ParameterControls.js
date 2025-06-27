@@ -102,12 +102,6 @@ export class ParameterControls {
           max: parseFloat(input.max) || 1,
           step: parseFloat(input.step) || 0.01,
         });
-        if (window.Logger) {
-          window.Logger.log(
-            `Cached transition parameter: ${paramId} = ${input.value}, display element: ${valueDisplay ? 'found' : 'NOT FOUND'}`,
-            "debug",
-          );
-        }
         
         // Initialize display value
         const initialValue = this.parseParameterValue(
@@ -251,6 +245,7 @@ export class ParameterControls {
     if (!element) return;
 
     const value = this.parseParameterValue(element, event.target.value);
+    
 
     // Update display value immediately
     this.updateDisplayValue(paramId, value);
@@ -618,12 +613,15 @@ export class ParameterControls {
    */
   getAllParameterValues() {
     const values = {};
+    
     this.paramElements.forEach((element, paramId) => {
       if (element.input) {
-        values[paramId] = this.parseParameterValue(
+        const rawValue = element.input.value;
+        const parsedValue = this.parseParameterValue(
           element,
-          element.input.value,
+          rawValue,
         );
+        values[paramId] = parsedValue;
       }
     });
 
@@ -635,6 +633,7 @@ export class ParameterControls {
         "transitionSpread",
         "transitionStagger",
         "transitionVariance",
+        "transitionDurationSpread"
       ].forEach((param) => {
         if (values[param] !== undefined) {
           transitionValues[param] = values[param];

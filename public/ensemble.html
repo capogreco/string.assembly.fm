@@ -470,6 +470,11 @@
                         "info",
                     );
 
+                    // Debug log expression parameters being applied
+                    if (program.trillEnabled) {
+                        log(`[${this.id}] Applying trill: speed=${program.trillSpeed}, interval=${program.trillInterval}`, "info");
+                    }
+
                     if (transition) {
                         log(
                             `[${this.id}] Transition data: delay=${transition.delay?.toFixed(3)}s, duration=${transition.duration?.toFixed(3)}s`,
@@ -582,17 +587,50 @@
                 }
 
                 handleSaveCommand(bankId) {
-                    // In ensemble mode, we don't save locally - controller handles all state
-                    log(
-                        `[${this.id}] Save command received for bank ${bankId} - controller handles storage`,
-                        "info",
-                    );
+                    // Save current program to memory (not localStorage)
+                    if (this.synthCore && this.synthCore.currentProgram) {
+                        // Log the FULL program being saved
+                        log(`[${this.id}] Saving to bank ${bankId} - FULL PROGRAM:`, "info");
+                        console.log(`[${this.id}] Bank ${bankId} save:`, JSON.parse(JSON.stringify(this.synthCore.currentProgram)));
+                        
+                        // Store in synthCore's memory map
+                        this.synthCore.synthBanks.set(bankId, JSON.parse(JSON.stringify(this.synthCore.currentProgram)));
+                        log(`[${this.id}] Saved current program to bank ${bankId} (in memory)`, "info");
+                    }
                 }
 
                 handleLoadCommand(bankId, transition, fallbackProgram) {
-                    // Always request from controller, ignore local storage
-                    log(`[${this.id}] Requesting bank ${bankId} from controller`, "info");
-                    this.requestProgramForBank(bankId, transition);
+                    // Check memory first
+                    if (this.synthCore && this.synthCore.synthBanks.has(bankId)) {
+                        const savedProgram = this.synthCore.synthBanks.get(bankId);
+                        log(`[${this.id}] Loading bank ${bankId} from memory`, "info");
+                        
+                        // Comprehensive debug logging
+                        console.log(`[${this.id}] Bank ${bankId} load - FULL SAVED PROGRAM:`, JSON.parse(JSON.stringify(savedProgram)));
+                        
+                        // Debug log expression parameters in saved program
+                        if (savedProgram.trillEnabled) {
+                            log(`[${this.id}] Saved program has trill: enabled=${savedProgram.trillEnabled}, speed=${savedProgram.trillSpeed}, interval=${savedProgram.trillInterval}, articulation=${savedProgram.trillArticulation}`, "info");
+                        }
+                        if (savedProgram.vibratoEnabled) {
+                            log(`[${this.id}] Saved program has vibrato: enabled=${savedProgram.vibratoEnabled}, rate=${savedProgram.vibratoRate}, depth=${savedProgram.vibratoDepth}`, "info");
+                        }
+                        if (savedProgram.tremoloEnabled) {
+                            log(`[${this.id}] Saved program has tremolo: enabled=${savedProgram.tremoloEnabled}, speed=${savedProgram.tremoloSpeed}, depth=${savedProgram.tremoloDepth}, articulation=${savedProgram.tremoloArticulation}`, "info");
+                        }
+                        
+                        // Apply with transition if specified
+                        if (transition) {
+                            const calculatedTransition = this.calculateTransitionTiming(transition);
+                            this.applyProgram(savedProgram, calculatedTransition);
+                        } else {
+                            this.applyProgram(savedProgram);
+                        }
+                    } else {
+                        // Bank not found in memory - request from controller
+                        log(`[${this.id}] Bank ${bankId} not found in memory, requesting from controller`, "info");
+                        this.requestProgramForBank(bankId, transition);
+                    }
                 }
 
                 calculateTransitionTiming(config, synthIndex = 0) {

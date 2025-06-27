@@ -67,7 +67,15 @@ export class PartManager {
   setupEventListeners() {
     // Listen for chord changes from piano
     this.eventBus.on("chord:changed", (data) => {
-      this.setChord(data.frequencies);
+      // Don't automatically redistribute when loading from banks
+      // The synths will load their saved programs with correct values
+      if (!data.fromBankLoad) {
+        this.setChord(data.frequencies);
+      } else {
+        // Just update internal state without sending to synths
+        this.currentChord = [...data.frequencies];
+        Logger.log(`Updated chord from bank load: ${data.frequencies.length} notes (not redistributing)`, "parts");
+      }
     });
 
     // Listen for expression changes from piano
@@ -360,6 +368,9 @@ export class PartManager {
     }
 
     const baseProgram = parameterControls.getAllParameterValues();
+    
+    Logger.log(`BaseProgram keys: ${Object.keys(baseProgram).join(', ')}`, "parts");
+    Logger.log(`transitionDuration in baseProgram: ${baseProgram.transitionDuration}`, "parts");
 
     // Add power state
     const powerCheckbox = document.getElementById("power");
@@ -369,10 +380,15 @@ export class PartManager {
 
     // Get transition configuration
     const transitionConfig = {
-      duration: parseFloat(baseProgram.transitionDuration) || 1.0,
-      stagger: parseFloat(baseProgram.transitionStagger) || 0.0,
-      durationSpread: parseFloat(baseProgram.transitionDurationSpread) || 0.0,
+      duration: baseProgram.transitionDuration,
+      stagger: baseProgram.transitionStagger,
+      durationSpread: baseProgram.transitionDurationSpread,
     };
+
+    // Check if transition values are valid
+    if (transitionConfig.duration === undefined || transitionConfig.duration === null) {
+      Logger.log(`WARNING: transitionDuration is ${transitionConfig.duration}`, "parts");
+    }
 
     Logger.log(
       `Sending part with transition config: ${JSON.stringify(transitionConfig)}`,
@@ -431,8 +447,8 @@ export class PartManager {
             `Sent to ${synthId}: ${assignment.frequency.toFixed(1)}Hz, expression type: ${assignment.expression.type || 'MISSING'}`,
             "parts",
           );
-          
         } else {
+          Logger.log(`Failed to send to ${synthId}`, "error");
         }
       } catch (error) {
         Logger.log(`Failed to send to ${synthId}: ${error.message}`, "error");
@@ -479,9 +495,7 @@ export class PartManager {
         synthProgram.vibratoDepth =
           expression.depth || synthProgram.vibratoDepth || 0.01;
         const vibratoRatio = this.getRandomHarmonicRatio("vibrato");
-        // Use expression rate as base, not the slider value
-        const baseVibratoRate =
-          expression.rate || synthProgram.vibratoRate || 5;
+        const baseVibratoRate = synthProgram.vibratoRate || 5;
         synthProgram.vibratoRate = baseVibratoRate * vibratoRatio;
         break;
 
@@ -492,9 +506,7 @@ export class PartManager {
         synthProgram.tremoloArticulation =
           expression.articulation || synthProgram.tremoloArticulation || 0.8;
         const tremoloRatio = this.getRandomHarmonicRatio("tremolo");
-        // Use expression speed as base, not the slider value
-        const baseTremoloSpeed =
-          expression.speed || synthProgram.tremoloSpeed || 10;
+        const baseTremoloSpeed = synthProgram.tremoloSpeed || 10;
         synthProgram.tremoloSpeed = baseTremoloSpeed * tremoloRatio;
         break;
 
@@ -505,9 +517,9 @@ export class PartManager {
         synthProgram.trillArticulation =
           expression.articulation || synthProgram.trillArticulation || 0.7;
         const trillRatio = this.getRandomHarmonicRatio("trill");
-        // Use expression speed as base, not the slider value
-        const baseTrillSpeed = expression.speed || synthProgram.trillSpeed || 8;
+        const baseTrillSpeed = synthProgram.trillSpeed || 8;
         synthProgram.trillSpeed = baseTrillSpeed * trillRatio;
+        Logger.log(`Trill: base=${baseTrillSpeed}, ratio=${trillRatio}, final=${synthProgram.trillSpeed}`, "parts");
         break;
     }
   }

@@ -21,14 +21,14 @@ class Program {
       expressions: {} // noteName -> expression data
     };
     
-    // Harmonic selections for expressions
+    // Harmonic selections for expressions (default to [1])
     this.harmonicSelections = {
-      'vibrato-numerator': [],
-      'vibrato-denominator': [],
-      'trill-numerator': [],
-      'trill-denominator': [],
-      'tremolo-numerator': [],
-      'tremolo-denominator': []
+      'vibrato-numerator': [1],
+      'vibrato-denominator': [1],
+      'trill-numerator': [1],
+      'trill-denominator': [1],
+      'tremolo-numerator': [1],
+      'tremolo-denominator': [1]
     };
     
     // UI state
@@ -111,6 +111,9 @@ export class ProgramState {
     Config.PARAM_IDS.forEach(paramId => {
       this.currentProgram.parameters[paramId] = Config.DEFAULT_PROGRAM?.[paramId] ?? 0.5;
     });
+    
+    // Log what defaults are being set
+    Logger.log(`Initialized defaults for parameters: ${Object.keys(this.currentProgram.parameters).join(', ')}`, 'lifecycle');
   }
   
   /**
@@ -210,13 +213,17 @@ export class ProgramState {
    * Apply harmonic selections to UI
    */
   applyHarmonicSelectionsToUI(selections) {
+    Logger.log(`Applying harmonic selections to UI: ${JSON.stringify(selections)}`, 'lifecycle');
+    
     Object.entries(selections).forEach(([key, values]) => {
       const [expression, type] = key.split('-');
       
-      // Clear existing selections
+      // Find buttons within the correct harmonic-selector and harmonic-row
       const buttons = document.querySelectorAll(
-        `.harmonic-selector[data-expression="${expression}"][data-type="${type}"] .harmonic-button`
+        `.harmonic-selector[data-expression="${expression}"] .harmonic-row[data-type="${type}"] .harmonic-button`
       );
+      
+      Logger.log(`Found ${buttons.length} buttons for ${expression}-${type}`, 'lifecycle');
       
       buttons.forEach(button => {
         const value = parseInt(button.dataset.value);
@@ -340,6 +347,11 @@ export class ProgramState {
     this.activeProgram = program ? program.clone() : this.currentProgram.clone();
     this.activeProgram.metadata.timestamp = Date.now();
     
+    // Debug log what we're setting as active
+    if (this.activeProgram.parameters.trillEnabled) {
+      Logger.log(`Set active program with trill: speed=${this.activeProgram.parameters.trillSpeed}`, 'lifecycle');
+    }
+    
     eventBus.emit('programState:synced', {
       program: this.activeProgram
     });
@@ -359,6 +371,7 @@ export class ProgramState {
     };
   }
   
+  
   /**
    * Save current program to bank
    */
@@ -371,6 +384,13 @@ export class ProgramState {
     const programToSave = this.activeProgram.clone();
     programToSave.metadata.timestamp = Date.now();
     programToSave.metadata.name = `Bank ${bankId}`;
+    
+    // Debug log what we're saving
+    if (programToSave.parameters.trillEnabled) {
+      Logger.log(`Saving to bank ${bankId} with trill: speed=${programToSave.parameters.trillSpeed}`, 'lifecycle');
+    } else {
+      Logger.log(`Saving to bank ${bankId} (no trill enabled)`, 'lifecycle');
+    }
     
     this.banks.set(bankId, programToSave);
     this.saveBanksToStorage();
@@ -397,7 +417,9 @@ export class ProgramState {
     // Set as current program
     this.currentProgram = program.clone();
     
-    // Apply to UI
+    Logger.log(`Loading program from bank ${bankId} with harmonic selections: ${JSON.stringify(this.currentProgram.harmonicSelections)}`, 'lifecycle');
+    
+    // Apply to UI (transition parameters will be skipped)
     this.applyToUI();
     
     // Emit events for both new and old systems during migration
@@ -431,10 +453,11 @@ export class ProgramState {
       });
     }
     
-    // Emit chord:changed event for piano keyboard
+    // Emit chord:changed event for piano keyboard with flag to indicate bank load
     eventBus.emit('chord:changed', {
       frequencies: this.currentProgram.chord.frequencies,
-      noteNames: this.currentProgram.chord.frequencies.map(f => this.frequencyToNoteName(f))
+      noteNames: this.currentProgram.chord.frequencies.map(f => this.frequencyToNoteName(f)),
+      fromBankLoad: true  // Flag to prevent automatic redistribution
     });
     
     // Restore expressions to PianoKeyboard - need slight delay to ensure chord is processed
@@ -506,6 +529,29 @@ export class ProgramState {
         Object.entries(data).forEach(([bankId, program]) => {
           const prog = new Program();
           Object.assign(prog, program);
+          
+          // Ensure harmonic selections exist with defaults
+          if (!prog.harmonicSelections || Object.keys(prog.harmonicSelections).length === 0) {
+            prog.harmonicSelections = {
+              'vibrato-numerator': [1],
+              'vibrato-denominator': [1],
+              'trill-numerator': [1],
+              'trill-denominator': [1],
+              'tremolo-numerator': [1],
+              'tremolo-denominator': [1]
+            };
+          } else {
+            // Ensure each key has at least [1] if empty
+            ['vibrato', 'trill', 'tremolo'].forEach(expr => {
+              ['numerator', 'denominator'].forEach(type => {
+                const key = `${expr}-${type}`;
+                if (!prog.harmonicSelections[key] || prog.harmonicSelections[key].length === 0) {
+                  prog.harmonicSelections[key] = [1];
+                }
+              });
+            });
+          }
+          
           this.banks.set(parseInt(bankId), prog);
         });
         

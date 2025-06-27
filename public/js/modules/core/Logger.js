@@ -10,9 +10,10 @@ export class Logger {
     parameters: false, // Parameter changes
     expressions: false, // Chord and expression changes
     performance: false, // Latency, pings
-    lifecycle: false, // Important state changes (now off by default)
+    lifecycle: true, // Important state changes - ENABLED FOR DEBUGGING
     errors: true, // Always on
     debug: false, // Debug messages
+    parts: true, // Part manager operations - ENABLED FOR DEBUGGING
   };
 
   /**

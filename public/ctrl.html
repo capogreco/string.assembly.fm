@@ -7,18 +7,18 @@
         <style>
             body {
                 font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                background: #0f0f0f;
                 margin: 0;
                 padding: 20px;
                 min-height: 100vh;
-                color: #333;
+                color: #e2e8f0;
             }
 
             h1 {
                 text-align: center;
-                color: #2c3e50;
+                color: #f1f5f9;
                 margin-bottom: 30px;
-                text-shadow: none;
+                text-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
             }
 
             .main-wrapper {
@@ -31,38 +31,40 @@
 
             .container {
                 flex: 1;
-                background: white;
+                background: #1a1a1a;
                 border-radius: 12px;
                 padding: 30px;
-                box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+                box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+                border: 1px solid #2d3748;
             }
             
             .transition-sidebar {
                 width: 300px;
-                background: white;
+                background: #1a1a1a;
                 border-radius: 12px;
                 padding: 20px;
-                box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+                box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
                 position: sticky;
                 top: 20px;
                 max-height: calc(100vh - 40px);
                 overflow-y: auto;
+                border: 1px solid #2d3748;
             }
             
             .transition-sidebar .section {
                 margin-bottom: 0;
-                background: #fff5f5;
-                border-left-color: #ff6b6b;
+                background: #262626;
+                border-left-color: #ef4444;
             }
             
             .transition-sidebar .section-title {
-                color: #c92a2a;
-                border-bottom-color: #ffe0e0;
+                color: #f87171;
+                border-bottom-color: #374151;
                 font-size: 1.1em;
             }
             
             .transition-sidebar .control-group label {
-                color: #495057;
+                color: #e5e7eb;
                 font-weight: 500;
             }
             
@@ -82,32 +84,32 @@
             .bank-item {
                 padding: 8px 12px;
                 margin: 4px 0;
-                background: white;
+                background: #2d2d2d;
                 border-radius: 4px;
-                border: 1px solid #e0e0e0;
+                border: 1px solid #404040;
                 cursor: pointer;
                 transition: all 0.2s;
             }
             
             .bank-item:hover {
-                background: #f8f9fa;
-                border-color: #4169e1;
+                background: #383838;
+                border-color: #3b82f6;
             }
             
             .bank-item .bank-number {
                 font-weight: bold;
-                color: #1e3a8a;
+                color: #60a5fa;
                 margin-right: 8px;
             }
             
             .bank-item .bank-chord {
-                color: #495057;
+                color: #e5e7eb;
                 font-family: monospace;
             }
             
             .bank-item.active {
-                background: #e6f2ff;
-                border-color: #4169e1;
+                background: #1e3a8a;
+                border-color: #3b82f6;
             }
             
             /* Responsive design */
@@ -127,17 +129,17 @@
             .section {
                 margin-bottom: 25px;
                 padding: 20px;
-                background: #f8f9fa;
+                background: #262626;
                 border-radius: 8px;
-                border-left: 4px solid #667eea;
+                border-left: 4px solid #6366f1;
             }
 
             .section-title {
                 font-size: 1.2em;
                 font-weight: bold;
                 margin-bottom: 15px;
-                color: #2c3e50;
-                border-bottom: 2px solid #ecf0f1;
+                color: #f1f5f9;
+                border-bottom: 2px solid #374151;
                 padding-bottom: 8px;
             }
 
@@ -156,7 +158,7 @@
 
             label {
                 font-weight: 500;
-                color: #34495e;
+                color: #e5e7eb;
             }
 
             input[type="range"] {
@@ -237,24 +239,41 @@
             #status.connected {
                 background: #27ae60;
             }
+            
+            #status.ready {
+                background: #f39c12;
+            }
 
             #stats {
                 display: flex;
-                justify-content: space-around;
-                margin-bottom: 20px;
+                justify-content: space-between;
                 padding: 15px;
-                background: #ecf0f1;
+                background: #262626;
                 border-radius: 6px;
+                border: 1px solid #374151;
             }
 
             .stat {
                 text-align: center;
+                flex: 1;
             }
 
             .stat strong {
                 display: block;
-                font-size: 1.2em;
-                color: #2c3e50;
+                font-size: 2.2em;
+                color: #60a5fa;
+                font-weight: 700;
+                line-height: 1;
+                margin-bottom: 4px;
+            }
+            
+            .stat span {
+                display: block;
+                color: #9ca3af;
+                font-size: 0.75em;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+                font-weight: 500;
             }
 
             hr.separator {
@@ -272,9 +291,10 @@
             .expression-group {
                 margin-top: 15px;
                 padding: 15px;
-                background: #f8f9fa;
+                background: #262626;
                 border-radius: 8px;
                 border-left: 4px solid #3498db;
+                border: 1px solid #374151;
                 display: none;
             }
 
@@ -297,19 +317,19 @@
             .expression-group-title {
                 font-weight: bold;
                 margin-bottom: 10px;
-                color: #2c3e50;
+                color: #f1f5f9;
             }
 
             .expression-group.vibrato .expression-group-title {
-                color: #e74c3c;
+                color: #f87171;
             }
 
             .expression-group.trill .expression-group-title {
-                color: #3498db;
+                color: #60a5fa;
             }
 
             .expression-group.tremolo .expression-group-title {
-                color: #f39c12;
+                color: #fbbf24;
             }
 
             .program-controls {
@@ -383,23 +403,25 @@
             }
 
             #synths {
-                background: #f8f9fa;
+                background: #262626;
                 border-radius: 6px;
                 padding: 15px;
                 margin-top: 20px;
+                border: 1px solid #374151;
             }
 
             #synths h3 {
                 margin-top: 0;
-                color: #2c3e50;
+                color: #f1f5f9;
             }
 
             .synth {
                 padding: 8px 12px;
                 margin: 5px 0;
-                background: white;
+                background: #1a1a1a;
                 border-radius: 4px;
-                border-left: 4px solid #27ae60;
+                border-left: 4px solid #4ade80;
+                color: #e5e7eb;
             }
 
             .synth.connecting {
@@ -594,27 +616,27 @@
             }
 
             .note-expression.vibrato {
-                background: #f8d7da;
-                color: #842029;
-                border: 1px solid #f5c2c7;
+                background: rgba(248, 113, 113, 0.2);
+                color: #fca5a5;
+                border: 1px solid #ef4444;
             }
 
             .note-expression.tremolo {
-                background: #fff3cd;
-                color: #664d03;
-                border: 1px solid #ffecb5;
+                background: rgba(74, 222, 128, 0.2);
+                color: #86efac;
+                border: 1px solid #22c55e;
             }
 
             .note-expression.trill {
-                background: #cfe2ff;
-                color: #0842a0;
-                border: 1px solid #b6d4fe;
+                background: rgba(251, 191, 36, 0.2);
+                color: #fde047;
+                border: 1px solid #f59e0b;
             }
 
             .note-expression.none {
-                background: #e8daef;
-                color: #6c3483;
-                border: 1px solid #d2b4de;
+                background: rgba(96, 165, 250, 0.2);
+                color: #93c5fd;
+                border: 1px solid #3b82f6;
             }
 
             /* Harmonic Ratio Selector Styles */
@@ -633,9 +655,10 @@
                 height: 28px;
                 text-align: center;
                 line-height: 28px;
-                border: 1px solid #ddd;
+                border: 1px solid #4b5563;
                 border-radius: 4px;
-                background: white;
+                background: #1f2937;
+                color: #e5e7eb;
                 cursor: pointer;
                 font-size: 0.9em;
                 user-select: none;
@@ -644,7 +667,7 @@
 
             .harmonic-button:hover {
                 border-color: #667eea;
-                background: #f0f4ff;
+                background: #374151;
             }
 
             .harmonic-button.selected {
@@ -654,7 +677,8 @@
             }
 
             .harmonic-button.selecting {
-                background: #b3c6f7;
+                background: #4c5fa8;
+                color: white;
                 border-color: #667eea;
             }
 
@@ -688,20 +712,7 @@
     <body>
         <div class="main-wrapper">
             <div class="container">
-                <h1>String Assembly FM - Controller</h1>
-
             <div id="status">Disconnected</div>
-
-            <div id="stats">
-                <div class="stat">
-                    <strong id="connected_count">0</strong>
-                    <span>Connected</span>
-                </div>
-                <div class="stat">
-                    <strong id="avg_latency">-</strong>
-                    <span>Avg Latency</span>
-                </div>
-            </div>
 
             <div id="controller_warning" class="warning">
                 ⚠️ Controller conflict detected - multiple controllers detected!
@@ -740,12 +751,13 @@
                     style="
                         margin-bottom: 15px;
                         padding: 10px;
-                        background: #f8f9fa;
+                        background: #262626;
                         border-radius: 8px;
+                        border: 1px solid #374151;
                     "
                 >
-                    <strong>Current Chord: </strong
-                    ><span id="chord-display" style="color: #667eea">None</span>
+                    <strong style="color: #f1f5f9;">Current Chord: </strong
+                    ><span id="chord-display" style="color: #60a5fa">None</span>
                     <button
                         id="clear-chord"
                         style="
@@ -768,16 +780,16 @@
                     style="
                         margin-top: 15px;
                         padding: 15px;
-                        background: #f8f9fa;
+                        background: #262626;
                         border-radius: 8px;
-                        border: 1px solid #dee2e6;
+                        border: 1px solid #374151;
                     "
                 >
-                    <strong>Expression Display:</strong>
+                    <strong style="color: #f1f5f9;">Expression Display:</strong>
                     <div
                         style="
                             margin-top: 10px;
-                            color: #666;
+                            color: #9ca3af;
                             font-style: italic;
                         "
                     >
@@ -1566,11 +1578,19 @@
         </div>
         
         <div class="transition-sidebar">
+            <div id="stats" style="margin-bottom: 15px;">
+                <div class="stat" style="display: flex; flex-direction: column; align-items: center;">
+                    <strong id="connected_count" style="display: block; order: 1;">0</strong>
+                    <span style="display: block; order: 2;">Connected</span>
+                </div>
+                <div class="stat" style="display: flex; flex-direction: column; align-items: center;">
+                    <strong id="avg_latency" style="display: block; order: 1;">-</strong>
+                    <span style="display: block; order: 2;">Avg Latency</span>
+                </div>
+            </div>
+            
             <div class="section">
                 <div class="section-title">Transition Control</div>
-                <div style="font-size: 0.85em; color: #666; margin-bottom: 15px; padding: 10px; background: #fee; border-radius: 5px;">
-                    Controls how parameter changes are applied to synths
-                </div>
                 <div class="controls">
                     <div class="control-group">
                         <label for="transitionDuration">Duration</label>
@@ -1621,9 +1641,19 @@
                 </div>
             </div>
             
+            <!-- Active Program Display -->
+            <div class="section" style="margin-top: 20px; background: #1a1a1a; border-left-color: #4ade80;">
+                <div class="section-title" style="color: #4ade80; border-bottom-color: #2d3748; font-size: 1em;">
+                    Active Program
+                </div>
+                <div id="active-program-display" style="padding: 10px; text-align: center; font-family: monospace; font-size: 1.1em; color: #e2e8f0;">
+                    <span style="color: #64748b;">No active program</span>
+                </div>
+            </div>
+            
             <!-- Saved Banks Display -->
-            <div class="section" style="margin-top: 20px; background: #f0f8ff; border-left-color: #4169e1;">
-                <div class="section-title" style="color: #1e3a8a; border-bottom-color: #d0e0ff; position: relative;">
+            <div class="section" style="margin-top: 20px; background: #1a1a1a; border-left-color: #3b82f6;">
+                <div class="section-title" style="color: #60a5fa; border-bottom-color: #2d3748; position: relative;">
                     Saved Banks
                     <button id="clear-banks-btn" class="btn-small" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); padding: 2px 8px; font-size: 0.8em; background: #ff6b6b; color: white; border: none; border-radius: 3px; cursor: pointer; display: none; transition: background 0.2s;" 
                             onmouseover="this.style.background='#ff5252'" 
@@ -1632,7 +1662,7 @@
                     </button>
                 </div>
                 <div id="saved-banks-display" style="font-size: 0.9em;">
-                    <div style="color: #666; text-align: center; padding: 20px;">
+                    <div style="color: #64748b; text-align: center; padding: 20px;">
                         No banks saved yet
                     </div>
                 </div>

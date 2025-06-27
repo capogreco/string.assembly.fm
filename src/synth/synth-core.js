@@ -79,8 +79,7 @@ export class SynthCore {
       // Create audio node chain
       await this.createAudioNodes(destination);
 
-      // Load saved banks from storage
-      this.loadBanksFromStorage();
+      // Don't load from localStorage - keep banks in memory only
 
       this.isInitialized = true;
       this.log("Core synth initialized successfully");
@@ -208,6 +207,18 @@ export class SynthCore {
     }
 
     this.currentProgram = { ...program };
+    
+    // Debug log trill parameters if enabled
+    if (program.trillEnabled) {
+      this.log(`Applying program with trill: speed=${program.trillSpeed}, interval=${program.trillInterval}, articulation=${program.trillArticulation}`);
+    }
+    
+    // Debug log transition data
+    if (transitionData) {
+      this.log(`Applying program with transition: duration=${transitionData.duration}, delay=${transitionData.delay}, stagger=${transitionData.stagger}, spread=${transitionData.durationSpread}`);
+    } else {
+      this.log("Applying program with no transition (immediate)");
+    }
 
     // Determine if we should apply immediately or with transition
     const applyTime =
@@ -427,10 +438,13 @@ export class SynthCore {
 
     // Store deep copy of current program
     const savedProgram = JSON.parse(JSON.stringify(this.currentProgram));
+    
+    // Debug logging
+    this.log(`Saving to bank ${bankId} - currentProgram trill: enabled=${this.currentProgram.trillEnabled}, speed=${this.currentProgram.trillSpeed}`);
+    
     this.synthBanks.set(bankId, savedProgram);
 
-    // Persist to localStorage
-    this.saveBanksToStorage();
+    // Don't persist to localStorage - keep in memory only
 
     this.log(`Saved program to bank ${bankId}`);
     return true;
@@ -441,6 +455,10 @@ export class SynthCore {
     if (this.synthBanks.has(bankId)) {
       // Load saved program
       const savedProgram = this.synthBanks.get(bankId);
+      
+      // Debug logging
+      this.log(`Loading from bank ${bankId} - saved trill: enabled=${savedProgram.trillEnabled}, speed=${savedProgram.trillSpeed}`);
+      
       this.applyProgram(savedProgram);
       this.log(`Loaded program from bank ${bankId}`);
       return true;
