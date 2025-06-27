@@ -8,6 +8,7 @@ class HarmonicRatioSelector {
     this.expression = expression;
     this.appState = appState;
     this.eventBus = eventBus || (globalThis.eventBus ? globalThis.eventBus : null);
+    this.programState = globalThis.programState || null;
 
     // Drag state
     this.isDragging = false;
@@ -33,8 +34,12 @@ class HarmonicRatioSelector {
 
   renderButtons(type) {
     const selectorKey = `${this.expression}-${type}`;
-    const harmonicSelections = this.appState.get('harmonicSelections');
-    const currentSelection = harmonicSelections[selectorKey] || new Set([1]);
+    const harmonicSelections = this.programState 
+      ? this.programState.currentProgram.harmonicSelections 
+      : this.appState.get('harmonicSelections');
+    const currentSelection = harmonicSelections[selectorKey] 
+      ? new Set(harmonicSelections[selectorKey]) 
+      : new Set([1]);
 
     return Array.from({ length: 12 }, (_, i) => {
       const value = i + 1;
@@ -169,6 +174,15 @@ class HarmonicRatioSelector {
   }
 
   updateState(harmonicSelections) {
+    // Update ProgramState if available
+    if (this.programState) {
+      // Update each harmonic selection in ProgramState
+      Object.entries(harmonicSelections).forEach(([key, valueSet]) => {
+        this.programState.updateHarmonicSelection(key, Array.from(valueSet));
+      });
+    }
+    
+    // Update appState for compatibility
     this.appState.set('harmonicSelections', harmonicSelections);
 
     // Mark parameter as changed
@@ -198,8 +212,12 @@ class HarmonicRatioSelector {
 
   updateVisualState(type) {
     const selectorKey = `${this.expression}-${type}`;
-    const harmonicSelections = this.appState.get('harmonicSelections');
-    const currentSelection = harmonicSelections[selectorKey];
+    const harmonicSelections = this.programState 
+      ? this.programState.currentProgram.harmonicSelections 
+      : this.appState.get('harmonicSelections');
+    const currentSelection = harmonicSelections[selectorKey] 
+      ? new Set(harmonicSelections[selectorKey]) 
+      : null;
 
     if (!currentSelection) return;
 
@@ -224,6 +242,11 @@ class HarmonicRatioSelector {
     // Update app state
     if (this.appState.markParameterChanged) {
       this.appState.markParameterChanged('harmonicRatios');
+    }
+    
+    // Update sync status if programState is available
+    if (this.programState) {
+      this.programState.markChanged();
     }
   }
 

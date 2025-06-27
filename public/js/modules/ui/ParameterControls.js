@@ -6,6 +6,7 @@
 import { eventBus } from "../core/EventBus.js";
 import { appState } from "../state/AppState.js";
 import { Config } from "../core/Config.js";
+import { programState } from "../state/ProgramState.js";
 
 export class ParameterControls {
   constructor() {
@@ -277,14 +278,25 @@ export class ParameterControls {
 
     const value = this.parseParameterValue(element, event.target.value);
 
-    // Emit parameter change event
+    // Update ProgramState instead of AppState
+    programState.currentProgram.parameters[paramId] = value;
+    programState.markChanged();
+    
+    // Emit new programState event
+    this.eventBus.emit("programState:parameterChanged", {
+      paramId,
+      value,
+      timestamp: Date.now(),
+    });
+
+    // Keep old event for compatibility during migration
     this.eventBus.emit("parameter:changed", {
       paramId,
       value,
       timestamp: Date.now(),
     });
 
-    // Update current program in app state
+    // Update current program in app state for compatibility
     const currentProgram = this.appState.get("currentProgram") || {};
     currentProgram[paramId] = value;
     this.appState.set("currentProgram", currentProgram);
@@ -346,10 +358,22 @@ export class ParameterControls {
    * @private
    */
   handleExpressionChange(expression) {
+    // Update ProgramState
+    programState.currentProgram.selectedExpression = expression;
+    programState.markChanged();
+    
+    // Update appState for compatibility
     this.appState.set("selectedExpression", expression);
 
     // Don't show/hide expression groups here - let updateExpressionParameterVisibility handle it based on actual assignments
 
+    // Emit new programState event
+    this.eventBus.emit("programState:expressionChanged", {
+      expression,
+      timestamp: Date.now(),
+    });
+    
+    // Keep old event for compatibility
     this.eventBus.emit("expression:changed", {
       expression,
       timestamp: Date.now(),

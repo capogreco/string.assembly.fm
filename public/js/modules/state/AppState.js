@@ -8,21 +8,13 @@ import { eventBus } from '../core/EventBus.js';
 export class AppState {
   constructor() {
     this.#state = {
-      // Current program state
-      currentProgram: null,
+      // NOTE: Program-related state has been moved to ProgramState
+      // Keeping minimal state here for compatibility during migration
       
-      // Active program (last synced to synths)
-      activeProgram: null,
-      activeProgramTimestamp: null,
-
-      // Chord and expression state
-      currentChordState: null,
+      // Chord state - kept for compatibility
       currentChord: [],
 
-      // Program banks storage
-      programBanks: new Map(),
-
-      // Harmonic ratio selections
+      // Harmonic selections - kept for compatibility  
       harmonicSelections: {
         'vibrato-numerator': new Set([1]),
         'vibrato-denominator': new Set([1]),
@@ -31,7 +23,7 @@ export class AppState {
         'tremolo-numerator': new Set([1]),
         'tremolo-denominator': new Set([1])
       },
-
+      
       // Connection state
       connectionStatus: 'disconnected',
       connectedSynths: new Map(),
@@ -42,7 +34,12 @@ export class AppState {
 
       // Performance state
       averageLatency: 0,
-      lastHeartbeat: null
+      lastHeartbeat: null,
+      
+      // Legacy compatibility
+      currentProgram: null,
+      activeProgram: null,
+      programBanks: new Map()
     };
 
     this.#subscribers = new Map();
@@ -195,10 +192,13 @@ export class AppState {
     const oldState = this.getState();
 
     this.#state = {
-      currentProgram: null,
-      currentChordState: null,
+      // NOTE: Program-related state has been moved to ProgramState
+      // Keeping minimal state here for compatibility during migration
+      
+      // Chord state - kept for compatibility
       currentChord: [],
-      programBanks: new Map(),
+
+      // Harmonic selections - kept for compatibility  
       harmonicSelections: {
         'vibrato-numerator': new Set([1]),
         'vibrato-denominator': new Set([1]),
@@ -207,12 +207,23 @@ export class AppState {
         'tremolo-numerator': new Set([1]),
         'tremolo-denominator': new Set([1])
       },
+      
+      // Connection state
       connectionStatus: 'disconnected',
       connectedSynths: new Map(),
+
+      // UI state
       selectedExpression: 'none',
       parametersChanged: new Set(),
+
+      // Performance state
       averageLatency: 0,
-      lastHeartbeat: null
+      lastHeartbeat: null,
+      
+      // Legacy compatibility
+      currentProgram: null,
+      activeProgram: null,
+      programBanks: new Map()
     };
 
     this.#history = [];
@@ -336,27 +347,42 @@ export class AppState {
   }
 
   // Parameter change tracking
+  /**
+   * @deprecated Use programState.markChanged() instead
+   */
   markParameterChanged(paramId) {
     const changed = new Set(this.get('parametersChanged'));
     changed.add(paramId);
     this.set('parametersChanged', changed);
   }
 
+  /**
+   * @deprecated Use programState methods instead
+   */
   clearParameterChanges() {
     this.set('parametersChanged', new Set());
   }
   
   // Active program tracking
+  /**
+   * @deprecated Use programState.setActiveProgram() instead
+   */
   setActiveProgram(program) {
     this.set('activeProgram', program);
     this.set('activeProgramTimestamp', Date.now());
     this.clearParameterChanges();
   }
   
+  /**
+   * @deprecated Use programState.activeProgram instead
+   */
   getActiveProgram() {
     return this.get('activeProgram');
   }
   
+  /**
+   * @deprecated Use programState.isInSync() instead
+   */
   hasUnsyncedChanges() {
     const parametersChanged = this.get('parametersChanged');
     return parametersChanged && parametersChanged.size > 0;

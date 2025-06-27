@@ -396,12 +396,28 @@ export class NetworkCoordinator {
    * @returns {boolean} Success status
    */
   sendCommandToSynth(synthId, command) {
+    // Add detailed logging for bank load commands
+    if (command.type === "command" && command.name === "load") {
+      if (window.Logger) {
+        window.Logger.log(
+          `[BANK LOAD] Sending load command to ${synthId}: bank=${command.value.bank}`,
+          "messages",
+        );
+      }
+      console.log(`[NetworkCoordinator] Sending bank load to ${synthId}:`, command);
+    }
+    
     const success = this.webRTC.sendDataMessage(synthId, command);
 
     if (success && window.Logger) {
       window.Logger.log(
-        `Sent command to ${synthId}: ${command.type}`,
+        `Sent command to ${synthId}: ${command.type}${command.name ? ` (${command.name})` : ''}`,
         "messages",
+      );
+    } else if (!success && window.Logger) {
+      window.Logger.log(
+        `Failed to send command to ${synthId}: ${command.type}${command.name ? ` (${command.name})` : ''}`,
+        "error",
       );
     }
 

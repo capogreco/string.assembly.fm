@@ -453,10 +453,12 @@
                         } else if (data.name === "save") {
                             this.handleSaveCommand(data.bank || data.value);
                         } else if (data.name === "load") {
+                            // Extract bank ID and transition from value object
+                            const loadData = data.value || {};
                             this.handleLoadCommand(
-                                data.bank,
-                                data.transition,
-                                data.fallbackProgram,
+                                loadData.bank,
+                                loadData.transition,
+                                loadData.fallbackProgram,
                             );
                         }
                     }

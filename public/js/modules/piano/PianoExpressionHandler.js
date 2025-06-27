@@ -1395,11 +1395,27 @@ export class PianoExpressionHandler {
     });
     this.indicators.clear();
     
+    // Update chord notes from current piano keyboard state
+    this.chordNotes.clear();
+    if (this.pianoKeyboard.currentChord) {
+      this.pianoKeyboard.currentChord.forEach(freq => {
+        const noteName = this.pianoKeyboard.frequencyToNoteName(freq);
+        if (noteName) {
+          this.chordNotes.add(noteName);
+        }
+      });
+    }
+    
     // Restore each expression
     if (expressionsObj) {
       Object.entries(expressionsObj).forEach(([note, expression]) => {
         if (expression && expression.type !== "none") {
           this.expressions.set(note, expression);
+          
+          // Also ensure the note is in the chord
+          if (!this.chordNotes.has(note)) {
+            this.chordNotes.add(note);
+          }
           
           // Emit event so PartManager gets updated
           this.pianoKeyboard.eventBus.emit("expression:changed", {
@@ -1422,6 +1438,9 @@ export class PianoExpressionHandler {
     // Update visuals
     this.updateKeyVisuals();
     this.updateChordDisplay();
+    
+    // Render canvas overlay to show expression indicators
+    this.render();
   }
 }
 

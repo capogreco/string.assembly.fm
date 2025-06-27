@@ -121,6 +121,33 @@ export class UIManager {
     this.eventBus.on("program:loaded", (data) => {
       this.showProgramLoadedFeedback(data.bankId);
     });
+    
+    // New ProgramState events
+    this.eventBus.on('programState:changed', (data) => {
+      // Update sync status badge
+      const badge = document.getElementById('status_badge');
+      if (badge) {
+        if (data.hasChanges) {
+          badge.textContent = '● Changes Pending';
+          badge.className = 'status-badge pending';
+        } else {
+          badge.textContent = '✓ Synced';
+          badge.className = 'status-badge synced';
+        }
+      }
+    });
+
+    this.eventBus.on('programState:synced', () => {
+      // Clear all parameter changed indicators
+      this.clearAllParameterChanges();
+      
+      // Update sync status badge
+      const badge = document.getElementById('status_badge');
+      if (badge) {
+        badge.textContent = '✓ Synced';
+        badge.className = 'status-badge synced';
+      }
+    });
   }
 
   /**
@@ -498,8 +525,10 @@ export class UIManager {
 
     // Add change indicators for modified parameters
     changedParams.forEach((paramId) => {
+      // Escape special characters in the paramId for querySelector
+      const escapedId = CSS.escape(paramId);
       const controlGroup = document
-        .querySelector(`#${paramId}`)
+        .querySelector(`#${escapedId}`)
         ?.closest(".control-group");
       if (controlGroup) {
         controlGroup.classList.add("changed");
@@ -518,6 +547,16 @@ export class UIManager {
 
     // Clear the changed parameters set
     this.appState.clearParameterChanges();
+  }
+  
+  /**
+   * Clear all parameter changed indicators
+   */
+  clearAllParameterChanges() {
+    document.querySelectorAll(".control-group").forEach((group) => {
+      group.classList.remove("changed");
+      group.classList.remove("sent");
+    });
   }
 
   /**

@@ -6,6 +6,7 @@
 import { eventBus } from "../core/EventBus.js";
 import { appState } from "../state/AppState.js";
 import { Config } from "../core/Config.js";
+import { programState } from "../state/ProgramState.js";
 import { PianoExpressionHandler } from "../piano/PianoExpressionHandler.js";
 
 export class PianoKeyboard {
@@ -14,6 +15,7 @@ export class PianoKeyboard {
     this.appState = appState;
     this.pianoElement = null;
     this.keys = new Map();
+    this.currentChord = new Set(); // Initialize the chord set
     this.isInitialized = false;
     this.keyWidth = 20;
     this.whiteKeyHeight = 60;
@@ -367,6 +369,28 @@ export class PianoKeyboard {
         this.clearChord();
       });
     }
+    
+    // Listen for chord changes (e.g., from loading banks)
+    this.eventBus.on("chord:changed", (data) => {
+      if (window.Logger) {
+        window.Logger.log(`PianoKeyboard received chord:changed event with ${data.frequencies?.length || 0} notes`, "lifecycle");
+      }
+      
+      // Clear current chord
+      this.currentChord.clear();
+      
+      // Add new frequencies
+      if (data.frequencies && Array.isArray(data.frequencies)) {
+        data.frequencies.forEach(freq => {
+          this.currentChord.add(freq);
+        });
+      }
+      
+      // Update the visual display
+      if (this.expressionHandler) {
+        this.expressionHandler.updateKeyVisuals();
+      }
+    });
   }
 
   /**
@@ -535,7 +559,7 @@ export class PianoKeyboard {
    * @param {number} frequency - Frequency to add
    */
   addNoteToChord(frequency) {
-    const currentChord = [...(this.appState.get("currentChord") || [])];
+    const currentChord = [...(programState.currentProgram.chord.frequencies || [])];
 
     if (!currentChord.includes(frequency)) {
       currentChord.push(frequency);
@@ -549,7 +573,7 @@ export class PianoKeyboard {
    * @param {number} frequency - Frequency to remove
    */
   removeNoteFromChord(frequency) {
-    const currentChord = this.appState.get("currentChord") || [];
+    const currentChord = programState.currentProgram.chord.frequencies || [];
     const newChord = currentChord.filter((f) => f !== frequency);
     this.setChord(newChord);
   }
@@ -559,7 +583,7 @@ export class PianoKeyboard {
    * @param {number} frequency - Frequency to toggle
    */
   toggleNoteInChord(frequency) {
-    const currentChord = this.appState.get("currentChord") || [];
+    const currentChord = programState.currentProgram.chord.frequencies || [];
 
     if (currentChord.includes(frequency)) {
       this.removeNoteFromChord(frequency);
@@ -573,6 +597,10 @@ export class PianoKeyboard {
    * @param {Array} frequencies - Array of frequencies
    */
   setChord(frequencies) {
+    // Update ProgramState
+    programState.updateChord(frequencies);
+    
+    // Update appState for compatibility
     this.appState.set("currentChord", frequencies);
 
     // Emit chord change event
@@ -645,7 +673,7 @@ export class PianoKeyboard {
    * @private
    */
   isKeyActive(frequency) {
-    const currentChord = this.appState.get("currentChord") || [];
+    const currentChord = programState.currentProgram.chord.frequencies || [];
     return currentChord.includes(frequency);
   }
 

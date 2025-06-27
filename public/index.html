@@ -569,6 +569,11 @@
 
             // handle data messages from controllers
             function handle_data_message(data) {
+                // Debug logging for incoming messages
+                if (data.type === "command") {
+                    console.log(`[SYNTH] Received command message:`, data);
+                }
+                
                 if (data.type === "param") {
                     console.log(`param ${data.name} = ${data.value}`);
                     if (data.name === "volume") {
@@ -688,8 +693,10 @@
                         is_powered_on = command_data;
                     }
                 } else if (command_name === "load") {
-                    const bank_id = command_data.bank || command_data.bank_id || command_data;
+                    const bank_id = command_data.bank || command_data.bank_id;
                     const transition = command_data.transition;
+                    
+                    console.log(`[SYNTH] Load command received with bank_id: ${bank_id}, command_data:`, command_data);
                     
                     if (synthCore && typeof bank_id === "number") {
                         // Check if we have this bank saved locally
@@ -736,7 +743,6 @@
                             }
                         }
                     }
-                }
                 } else if (command_name === "save") {
                     const bank_id = command_data.bank || command_data.bank_id || command_data;
                     if (synthCore && typeof bank_id === "number") {

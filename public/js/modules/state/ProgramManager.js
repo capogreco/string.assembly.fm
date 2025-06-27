@@ -6,6 +6,7 @@
 import { appState } from './AppState.js';
 import { Config } from '../core/Config.js';
 import { eventBus } from '../core/EventBus.js';
+import { programState } from './ProgramState.js';
 
 export class ProgramManager {
   constructor(state = appState, storage = localStorage, eventBusInstance = eventBus) {
@@ -14,306 +15,71 @@ export class ProgramManager {
     this.eventBus = eventBusInstance;
     this.storageKey = Config.STORAGE_KEYS.BANKS;
     this.isApplyingProgram = false; // Prevent recursive updates
+    
+    // This is now a compatibility wrapper around ProgramState
+    this.programState = programState;
   }
 
   /**
    * Load saved banks from localStorage
+   * @deprecated Use programState.loadBanksFromStorage() instead
    */
   loadBanksFromStorage() {
-    try {
-      const saved = this.storage.getItem(this.storageKey);
-      if (saved) {
-        const banksData = JSON.parse(saved);
-        const programBanks = new Map();
-
-        Object.entries(banksData).forEach(([bankId, program]) => {
-          programBanks.set(parseInt(bankId), program);
-        });
-
-        this.state.set('programBanks', programBanks);
-
-        if (window.Logger) {
-          window.Logger.log(
-            `Loaded ${programBanks.size} banks from storage`,
-            'lifecycle'
-          );
-        }
-
-        return true;
+    // Delegate to ProgramState
+    this.programState.loadBanksFromStorage();
+    
+    // Keep appState in sync for compatibility
+    const banks = this.programState.getSavedBanks();
+    const programBanks = new Map();
+    banks.forEach(bank => {
+      if (bank.saved) {
+        programBanks.set(bank.id, bank.program);
       }
-    } catch (e) {
-      if (window.Logger) {
-        window.Logger.log(`Failed to load banks from storage: ${e}`, 'error');
-      }
-      return false;
-    }
-
-    return false;
+    });
+    this.state.set('programBanks', programBanks);
+    
+    return true;
   }
 
   /**
    * Save banks to localStorage
+   * @deprecated Use programState.saveBanksToStorage() instead
    */
   saveBanksToStorage() {
-    try {
-      const programBanks = this.state.get('programBanks');
-      const banksData = {};
-
-      programBanks.forEach((program, bankId) => {
-        banksData[bankId] = program;
-      });
-
-      const dataToSave = JSON.stringify(banksData);
-      const dataSize = new Blob([dataToSave]).size;
-      
-      this.storage.setItem(this.storageKey, dataToSave);
-
-      if (window.Logger) {
-        window.Logger.log(`Saved ${Object.keys(banksData).length} banks to storage (${(dataSize/1024).toFixed(2)}KB)`, 'lifecycle');
-      }
-
-      return true;
-    } catch (e) {
-      if (window.Logger) {
-        window.Logger.log(`Failed to save banks to storage: ${e}`, 'error');
-      }
-      return false;
-    }
+    // Delegate to ProgramState
+    this.programState.saveBanksToStorage();
+    return true;
   }
 
   /**
    * Save current program to specified bank
    * @param {number} bankId - Bank ID (1-16)
    * @param {Object} programData - Program data to save
+   * @deprecated Use programState.saveToBank() instead
    */
   saveToBank(bankId, programData = null) {
-    try {
-      // Get current program data if not provided
-      const program = programData || this.getCurrentProgram();
-
-      if (!program) {
-        if (window.Logger) {
-          window.Logger.log('No program data to save', 'error');
-        }
-        return false;
-      }
-
-      // Store harmonic selections (convert Sets to Arrays for JSON serialization)
-      const harmonicSelections = this.state.get('harmonicSelections');
-      const harmonicSelectionsForSave = {};
-
-      Object.keys(harmonicSelections).forEach((key) => {
-        harmonicSelectionsForSave[key] = Array.from(harmonicSelections[key]);
-      });
-
-      // Get note expressions from PianoKeyboard
-      let noteExpressions = {};
-      const pianoKeyboard = this.state.get('pianoKeyboard');
-      if (pianoKeyboard && pianoKeyboard.expressionHandler) {
-        noteExpressions = pianoKeyboard.expressionHandler.getAllExpressions();
-      }
-
-      // Get current chord
-      const currentChord = this.state.get('currentChord') || [];
-      
-      // Log what we're saving
-      console.log(`CONTROLLER SAVING to Bank ${bankId}:`);
-      console.log(`- Chord: ${currentChord.length > 0 ? currentChord.map(f => f.toFixed(1)).join(', ') + ' Hz' : 'EMPTY'}`);
-      console.log(`- Expressions: ${JSON.stringify(noteExpressions)}`);
-
-      // Create complete controller state
-      const controllerState = {
-        ...program,
-        chordNotes: [...currentChord],
-        noteExpressions: noteExpressions,
-        selectedExpression: this.state.get('selectedExpression'),
-        harmonicSelections: harmonicSelectionsForSave,
-        timestamp: Date.now(),
-        version: '1.0'
-      };
-      
-
-      // Update program banks
-      const programBanks = new Map(this.state.get('programBanks'));
-      const isOverwrite = programBanks.has(bankId);
-      programBanks.set(bankId, controllerState);
-      this.state.set('programBanks', programBanks);
-
-      // Save to storage
-      this.saveBanksToStorage();
-      
+    // For compatibility: if programData is provided, we need to convert it
+    // to the format expected by ProgramState
+    if (programData) {
+      // This is being called with old-style program data
+      // We should save the active program instead
       if (window.Logger) {
-        window.Logger.log(`${isOverwrite ? 'Overwrote' : 'Saved to'} Bank ${bankId}`, 'lifecycle');
+        window.Logger.log('ProgramManager.saveToBank called with programData - saving active program instead', 'warning');
       }
-
-      // Emit save event
-      if (window.eventBus) {
-        window.eventBus.emit('program:saved', {
-          bankId,
-          program: controllerState,
-          timestamp: Date.now()
-        });
-      }
-
-      if (window.Logger) {
-        window.Logger.log(`Program saved to Bank ${bankId}`, 'lifecycle');
-      }
-
-      return true;
-    } catch (error) {
-      if (window.Logger) {
-        window.Logger.log(`Failed to save to bank ${bankId}: ${error}`, 'error');
-      }
-      return false;
     }
+    
+    // Delegate to ProgramState to save the active program
+    return this.programState.saveToBank(bankId);
   }
 
   /**
    * Load program from specified bank
    * @param {number} bankId - Bank ID to load from
+   * @deprecated Use programState.loadFromBank() instead
    */
   loadFromBank(bankId) {
-    // Prevent recursive loads
-    if (this.isLoadingBank) {
-      console.warn(`[ProgramManager] Prevented recursive load of bank ${bankId}`);
-      return false;
-    }
-    
-    this.isLoadingBank = true;
-    
-    try {
-      if (window.Logger) {
-        window.Logger.log(`Loading from bank ${bankId}...`, 'lifecycle');
-      }
-
-      const programBanks = this.state.get('programBanks');
-
-      if (!programBanks.has(bankId)) {
-        if (window.Logger) {
-          window.Logger.log(`Bank ${bankId} not found`, 'error');
-        }
-        return false;
-      }
-
-      const savedState = programBanks.get(bankId);
-
-      if (!savedState) {
-        if (window.Logger) {
-          window.Logger.log(`Bank ${bankId} has no data`, 'error');
-        }
-        return false;
-      }
-      
-      // Restore UI parameter values
-      this.applyProgramToUI(savedState);
-
-      // Restore harmonic selections
-      if (savedState.harmonicSelections) {
-        const harmonicSelections = this.state.get('harmonicSelections');
-
-        for (const key in savedState.harmonicSelections) {
-          if (harmonicSelections[key]) {
-            harmonicSelections[key].clear();
-            savedState.harmonicSelections[key].forEach(value => {
-              harmonicSelections[key].add(value);
-            });
-          }
-        }
-
-        this.state.set('harmonicSelections', harmonicSelections);
-        this.applyHarmonicSelectionsToUI(harmonicSelections);
-      }
-
-      // Log what we're loading
-      try {
-        console.log(`CONTROLLER LOADING from Bank ${bankId}:`);
-        const chordString = savedState.chordNotes && savedState.chordNotes.length > 0 
-          ? savedState.chordNotes.map(f => f.toFixed(1)).join(', ') + ' Hz' 
-          : 'EMPTY';
-        console.log(`- Chord: ${chordString}`);
-        console.log(`- Expressions: ${JSON.stringify(savedState.noteExpressions || {})}`);
-      } catch (e) {
-        console.error('Error logging load data:', e);
-      }
-
-      // Restore chord and expressions
-      if (savedState.chordNotes && Array.isArray(savedState.chordNotes)) {
-        console.log(`- Restoring chord with ${savedState.chordNotes.length} notes`);
-        
-        // Clear existing chord first
-        this.state.set('currentChord', []);
-        
-        // Set new chord
-        this.state.set('currentChord', [...savedState.chordNotes]);
-
-        // Update global compatibility
-        if (window.currentChord) {
-          window.currentChord = [...savedState.chordNotes];
-        }
-        
-        // Emit chord change event for PianoKeyboard
-        if (window.eventBus) {
-          window.eventBus.emit('chord:changed', {
-            frequencies: [...savedState.chordNotes],
-            timestamp: Date.now()
-          });
-        }
-        
-        console.log(`- Chord restored and events emitted`);
-      } else {
-        console.log(`- No chord to restore`);
-      }
-
-      // Restore note expressions
-      if (savedState.noteExpressions) {
-        const pianoKeyboard = this.state.get('pianoKeyboard');
-        if (pianoKeyboard && pianoKeyboard.expressionHandler) {
-          pianoKeyboard.expressionHandler.restoreExpressions(savedState.noteExpressions);
-        }
-      }
-
-      // Restore selected expression
-      if (savedState.selectedExpression) {
-        this.state.set('selectedExpression', savedState.selectedExpression);
-        this.applyExpressionToUI(savedState.selectedExpression);
-      }
-
-      // Update current program state
-      this.state.set('currentProgram', savedState);
-
-      // Update global compatibility
-      if (window.current_program) {
-        window.current_program = savedState;
-      }
-
-      // Update bank selector to reflect loaded bank
-      const bankSelector = document.getElementById('bank_selector');
-      if (bankSelector) {
-        bankSelector.value = bankId;
-      }
-
-      // Emit load event
-      if (window.eventBus) {
-        window.eventBus.emit('program:loaded', {
-          bankId,
-          program: savedState,
-          timestamp: Date.now()
-        });
-      }
-
-      if (window.Logger) {
-        window.Logger.log(`Successfully loaded Bank ${bankId}`, 'lifecycle');
-      }
-
-      return true;
-    } catch (error) {
-      if (window.Logger) {
-        window.Logger.log(`Failed to load from bank ${bankId}: ${error}`, 'error');
-      }
-      return false;
-    } finally {
-      this.isLoadingBank = false;
-    }
+    // Delegate to ProgramState
+    return this.programState.loadFromBank(bankId);
   }
 
   /**
@@ -431,23 +197,11 @@ export class ProgramManager {
   /**
    * Get list of all saved banks
    * @returns {Array} Array of bank info objects
+   * @deprecated Use programState.getSavedBanks() instead
    */
   getSavedBanks() {
-    const programBanks = this.state.get('programBanks');
-    const banks = [];
-
-    for (let i = 1; i <= Config.UI.BANK_COUNT; i++) {
-      const program = programBanks.get(i);
-      banks.push({
-        id: i,
-        saved: !!program,
-        name: program?.name || `Bank ${i}`,
-        timestamp: program?.timestamp || null,
-        program: program || null
-      });
-    }
-
-    return banks;
+    // Delegate to ProgramState
+    return this.programState.getSavedBanks();
   }
 
   /**
@@ -492,39 +246,15 @@ export class ProgramManager {
    * @returns {boolean} Success status
    */
   clearAllBanks() {
-    try {
-      if (window.Logger) {
-        window.Logger.log('Clearing all saved banks...', 'lifecycle');
-      }
-
-      // Create a new empty Map for program banks
-      const emptyBanks = new Map();
-      this.state.set('programBanks', emptyBanks);
-      
-      // Save to localStorage
-      this.saveBanksToStorage();
-      
-      // Also explicitly clear the localStorage to be sure
-      if (this.storage) {
-        this.storage.removeItem(this.storageKey);
-      }
-      
-      // Emit event
-      this.eventBus.emit('programManager:allBanksCleared', {
-        timestamp: Date.now()
-      });
-
-      if (window.Logger) {
-        window.Logger.log('All banks cleared successfully', 'lifecycle');
-      }
-
-      return true;
-    } catch (error) {
-      if (window.Logger) {
-        window.Logger.log(`Failed to clear all banks: ${error}`, 'error');
-      }
-      return false;
-    }
+    // Delegate to ProgramState
+    this.programState.clearAllBanks();
+    
+    // Emit compatibility event
+    this.eventBus.emit('programManager:allBanksCleared', {
+      timestamp: Date.now()
+    });
+    
+    return true;
   }
 
   /**

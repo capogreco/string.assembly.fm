@@ -11,6 +11,7 @@
 import { eventBus } from "../core/EventBus.js";
 import { appState } from "../state/AppState.js";
 import { Logger } from "../core/Logger.js";
+import { programState } from "../state/ProgramState.js";
 
 export class PartManager {
   constructor() {
@@ -111,7 +112,10 @@ export class PartManager {
       }
     }
 
-    // Update app state
+    // Update ProgramState
+    programState.updateChord(frequencies, Object.fromEntries(this.noteExpressions));
+    
+    // Update app state for compatibility
     this.appState.set("currentChord", this.currentChord);
     
     // Update expressions in app state for UI visibility
@@ -145,7 +149,10 @@ export class PartManager {
       this.noteExpressions.delete(noteName);
     }
 
-    // Update AppState expressions for UI visibility
+    // Update ProgramState
+    programState.updateNoteExpression(noteName, expression);
+    
+    // Update AppState expressions for UI visibility (compatibility)
     const expressionsObj = Object.fromEntries(this.noteExpressions);
     this.appState.set("expressions", expressionsObj);
     
@@ -171,6 +178,10 @@ export class PartManager {
     const key = `${data.expression}-${data.type}`;
     if (this.harmonicSelections[key]) {
       this.harmonicSelections[key] = new Set(data.selection);
+      
+      // Update ProgramState
+      programState.updateHarmonicSelection(key, Array.from(data.selection));
+      
       Logger.log(`Harmonic selection updated: ${key}`, "expressions");
     }
   }

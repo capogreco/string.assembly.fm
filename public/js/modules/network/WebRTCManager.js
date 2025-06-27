@@ -1473,6 +1473,17 @@ export class WebRTCManager {
     const peerData = this.peers.get(peerId);
     const channel = peerData?.dataChannel || peerData?.paramChannel;
     
+    // Debug logging for bank load commands
+    if (message.type === "command" && message.name === "load") {
+      console.log(`[WebRTCManager] Attempting to send bank load to ${peerId}:`, {
+        hasPeerData: !!peerData,
+        hasDataChannel: !!peerData?.dataChannel,
+        hasParamChannel: !!peerData?.paramChannel,
+        channelState: channel?.readyState,
+        message: message
+      });
+    }
+    
     if (!channel || channel.readyState !== "open") {
       if (window.Logger) {
         window.Logger.log(
@@ -1484,11 +1495,17 @@ export class WebRTCManager {
     }
 
     try {
-      channel.send(JSON.stringify(message));
+      const messageStr = JSON.stringify(message);
+      channel.send(messageStr);
+
+      // Extra logging for bank load commands
+      if (message.type === "command" && message.name === "load") {
+        console.log(`[WebRTCManager] Successfully sent bank load to ${peerId}`, messageStr);
+      }
 
       if (window.Logger) {
         window.Logger.log(
-          `Sent data message to ${peerId}: ${message.type}`,
+          `Sent data message to ${peerId}: ${message.type}${message.name ? ` (${message.name})` : ''}`,
           "messages",
         );
       }
