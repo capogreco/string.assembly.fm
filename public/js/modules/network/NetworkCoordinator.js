@@ -377,7 +377,7 @@ export class NetworkCoordinator {
     const message = {
       type: "program",
       program,
-      ...(transition && { transition }),
+      ...(transition !== null && { transition }),
     };
 
     const success = this.webRTC.sendDataMessage(synthId, message);
