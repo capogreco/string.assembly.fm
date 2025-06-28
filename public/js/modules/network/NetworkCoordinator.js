@@ -395,7 +395,7 @@ export class NetworkCoordinator {
     
     // Debug log transition
     if (window.Logger) {
-      window.Logger.log(`Sending to ${synthId} with transition: ${JSON.stringify(transition)}`, "messages");
+      // window.Logger.log(`Sending to ${synthId} with transition: ${JSON.stringify(transition)}`, "messages");
     }
 
     const success = this.webRTC.sendDataMessage(synthId, message);

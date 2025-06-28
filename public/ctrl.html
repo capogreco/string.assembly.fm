@@ -70,25 +70,6 @@
                     </button>
                 </div>
 
-                <div
-                    id="expression-display"
-                    style="
-                        margin-top: 15px;
-                        padding: 15px;
-                        background: #262626;
-                        border-radius: 8px;
-                        border: 1px solid #374151;
-                    "
-                >
-                    <div
-                        id="expression-content"
-                        style="
-                            color: #9ca3af;
-                        "
-                    >
-                    </div>
-                </div>
-
                 <div id="piano-container" style="margin: 10px 0">
                     <svg
                         id="piano"
@@ -696,24 +677,26 @@
             <div class="section">
                 <div class="section-title">Instrument</div>
                 <div class="controls">
-                    <div class="control-group">
-                        <label for="bodyType">Body Type</label>
-                        <select id="bodyType">
-                            <option value="0">Violin</option>
-                            <option value="1">Viola</option>
-                            <option value="2">Cello</option>
-                            <option value="3">Guitar</option>
-                            <option value="4">None</option>
-                        </select>
-                    </div>
-                    <div class="control-group">
-                        <label for="stringMaterial">Material</label>
-                        <select id="stringMaterial">
-                            <option value="0">Steel</option>
-                            <option value="1">Gut</option>
-                            <option value="2">Nylon</option>
-                            <option value="3">Wound</option>
-                        </select>
+                    <div style="display: flex; gap: 15px;">
+                        <div class="control-group" style="flex: 1;">
+                            <label for="bodyType">Body Type</label>
+                            <select id="bodyType" style="width: 100%;">
+                                <option value="0">Violin</option>
+                                <option value="1">Viola</option>
+                                <option value="2">Cello</option>
+                                <option value="3">Guitar</option>
+                                <option value="4">None</option>
+                            </select>
+                        </div>
+                        <div class="control-group" style="flex: 1;">
+                            <label for="stringMaterial">Material</label>
+                            <select id="stringMaterial" style="width: 100%;">
+                                <option value="0">Steel</option>
+                                <option value="1">Gut</option>
+                                <option value="2">Nylon</option>
+                                <option value="3">Wound</option>
+                            </select>
+                        </div>
                     </div>
                     <div class="control-group">
                         <label for="stringDamping">Damping</label>
@@ -904,14 +887,12 @@
                         >
                     </div>
                     <div class="control-group">
-                        <label for="glissando">
-                            <input
-                                type="checkbox"
-                                id="glissando"
-                                checked
-                            />
-                            Glissando
-                        </label>
+                        <label for="glissando">Glissando</label>
+                        <input
+                            type="checkbox"
+                            id="glissando"
+                            checked
+                        />
                     </div>
                 </div>
             </div>

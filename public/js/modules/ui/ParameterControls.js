@@ -48,6 +48,20 @@ export class ParameterControls {
     // Set up state subscriptions
     this.setupStateSubscriptions();
 
+    // Listen for HRG changes to update UI
+    this.eventBus.on('ui:hrgChanged', (data) => {
+        if (data.expression) {
+            const selector = document.querySelector(`.harmonic-selector[data-expression="${data.expression}"]`);
+            if (selector) {
+                const group = selector.closest('.control-group');
+                if (group) {
+                    group.classList.remove('sent');
+                    group.classList.add('changed');
+                }
+            }
+        }
+    });
+
     this.isInitialized = true;
 
     if (window.Logger) {
@@ -160,7 +174,7 @@ export class ParameterControls {
         this.handleParameterChange(paramId, e);
         // Debug log for glissando changes
         if (paramId === 'glissando') {
-          console.log(`Glissando changed: ${e.target.checked}`);
+          // console.log(`Glissando changed: ${e.target.checked}`);
         }
       });
 
@@ -268,12 +282,13 @@ export class ParameterControls {
 
     const value = this.parseParameterValue(element, event.target.value);
     
-
     // Update display value immediately
     this.updateDisplayValue(paramId, value);
 
-    // Mark parameter as changed
-    this.markParameterChanged(paramId);
+    // Only mark program parameters as changed
+    if (Config.PROGRAM_PARAMS.includes(paramId)) {
+      this.markParameterChanged(paramId);
+    }
 
     // Debounce the change notification
     this.debounceParameterChange(paramId, value);
@@ -295,32 +310,32 @@ export class ParameterControls {
 
     const value = this.parseParameterValue(element, event.target.value);
 
-    // Update ProgramState instead of AppState
-    programState.currentProgram.parameters[paramId] = value;
-    programState.markChanged();
-    
-    // Emit new programState event
+    if (Config.PROGRAM_PARAMS.includes(paramId)) {
+      // This is a normal, syncable parameter
+      programState.currentProgram.parameters[paramId] = value;
+      programState.markChanged();
+      
+      // Mark this parameter as changed visually
+      this.markParameterChanged(paramId);
+      this.appState.markParameterChanged(paramId); // for compatibility
+      
+      // Update current program in app state for compatibility
+      const currentProgram = this.appState.get("currentProgram") || {};
+      currentProgram[paramId] = value;
+      this.appState.set("currentProgram", currentProgram);
+    }
+
+    // Always emit events so other systems can react if needed
     this.eventBus.emit("programState:parameterChanged", {
       paramId,
       value,
       timestamp: Date.now(),
     });
-
-    // Keep old event for compatibility during migration
-    this.eventBus.emit("parameter:changed", {
+    this.eventBus.emit("parameter:changed", { // legacy
       paramId,
       value,
       timestamp: Date.now(),
     });
-
-    // Update current program in app state for compatibility
-    const currentProgram = this.appState.get("currentProgram") || {};
-    currentProgram[paramId] = value;
-    this.appState.set("currentProgram", currentProgram);
-    
-    // Mark this parameter as changed
-    this.markParameterChanged(paramId);
-    this.appState.markParameterChanged(paramId);
     
     // Update sync status
     if (window.updateSyncStatus) {
@@ -487,6 +502,28 @@ export class ParameterControls {
    * @param {string} paramId - Parameter ID
    */
   markParameterChanged(paramId) {
+    // Skip transition parameters
+    const transitionParams = ['transitionDuration', 'transitionStagger', 'transitionDurationSpread', 'glissando'];
+    if (transitionParams.includes(paramId)) {
+      return;
+    }
+    
+    // Find all harmonic selector control groups
+    if (paramId === "harmonicRatios") {
+      const selectors = document.querySelectorAll(".harmonic-selector");
+      selectors.forEach((selector) => {
+        const group = selector.closest(".control-group");
+        if (group) {
+          group.classList.remove("sent");
+          group.classList.add("changed");
+        }
+      });
+      // Still update app state for harmonic ratios
+      this.appState.markParameterChanged(paramId);
+      return;
+    }
+    
+    // Handle regular parameters
     const element = this.paramElements.get(paramId);
     if (element?.controlGroup) {
       element.controlGroup.classList.remove("sent");
@@ -511,35 +548,6 @@ export class ParameterControls {
 
   // Visual state updates now handled by HarmonicRatioSelector components
 
-  /**
-   * Mark parameter as changed
-   * @param {string} paramId - Parameter ID
-   * @private
-   */
-  markParameterChanged(paramId) {
-    // Find all harmonic selector control groups
-    if (paramId === "harmonicRatios") {
-      const selectors = document.querySelectorAll(".harmonic-selector");
-      selectors.forEach((selector) => {
-        const group = selector.closest(".control-group");
-        if (group) {
-          group.classList.remove("sent");
-          group.classList.add("changed");
-        }
-      });
-      return;
-    }
-
-    // Handle regular parameters
-    const element = this.paramElements.get(paramId);
-    if (element?.controlGroup) {
-      element.controlGroup.classList.remove("sent");
-      element.controlGroup.classList.add("changed");
-    }
-
-    // Update app state
-    this.appState.markParameterChanged(paramId);
-  }
 
   /**
    * Debounce parameter change notifications
@@ -649,7 +657,7 @@ export class ParameterControls {
         
         // Debug log for glissando
         if (paramId === 'glissando') {
-          console.log(`Glissando parameter: rawValue=${rawValue}, parsedValue=${parsedValue}`);
+          // console.log(`Glissando parameter: rawValue=${rawValue}, parsedValue=${parsedValue}`);
         }
       }
     });

@@ -51,7 +51,7 @@ export class PartManager {
     const savedSelections = this.appState.get("harmonicSelections");
     if (savedSelections) {
       this.harmonicSelections = savedSelections;
-      Logger.log("Loaded harmonic selections from AppState", "parts");
+      // Logger.log("Loaded harmonic selections from AppState", "parts");
     }
 
     this.setupEventListeners();
@@ -74,7 +74,7 @@ export class PartManager {
       } else {
         // Just update internal state without sending to synths
         this.currentChord = [...data.frequencies];
-        Logger.log(`Updated chord from bank load: ${data.frequencies.length} notes (not redistributing)`, "parts");
+        // Logger.log(`Updated chord from bank load: ${data.frequencies.length} notes (not redistributing)`, "parts");
       }
     });
 
@@ -141,7 +141,7 @@ export class PartManager {
     // Redistribute if we have synths
     this.redistributeToSynths();
 
-    Logger.log(`Chord set: ${frequencies.length} notes`, "parts");
+    // Logger.log(`Chord set: ${frequencies.length} notes`, "parts");
   }
 
   /**
@@ -338,10 +338,10 @@ export class PartManager {
     );
     
     if (success) {
-      Logger.log(
-        `Sent to ${synthId}: ${assignment.frequency.toFixed(1)}Hz, expression: ${assignment.expression.type || 'none'}`,
-        "parts"
-      );
+      // Logger.log(
+      //   `Sent to ${synthId}: ${assignment.frequency.toFixed(1)}Hz, expression: ${assignment.expression.type || 'none'}`,
+      //   "parts"
+      // );
     } else {
       Logger.log(`Failed to send program to ${synthId}`, "error");
     }
@@ -527,7 +527,7 @@ export class PartManager {
         const trillRatio = this.getRandomHarmonicRatio("trill");
         const baseTrillSpeed = synthProgram.trillSpeed || 8;
         synthProgram.trillSpeed = baseTrillSpeed * trillRatio;
-        Logger.log(`Trill: base=${baseTrillSpeed}, ratio=${trillRatio}, final=${synthProgram.trillSpeed}`, "parts");
+        // Logger.log(`Trill: base=${baseTrillSpeed}, ratio=${trillRatio}, final=${synthProgram.trillSpeed}`, "parts");
         break;
     }
   }
@@ -622,7 +622,7 @@ export class PartManager {
             durationSpread: 0
           });
           
-          Logger.log(`Sent program to ${synthId}: ${assignment.frequency.toFixed(1)}Hz, expression: ${assignment.expression?.type || 'none'}`, "parts");
+          // Logger.log(`Sent program to ${synthId}: ${assignment.frequency.toFixed(1)}Hz, expression: ${assignment.expression?.type || 'none'}`, "parts");
         }
       }
     } else {

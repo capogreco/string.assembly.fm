@@ -424,17 +424,24 @@ export class WebSocketManager {
   startHeartbeat() {
     this.clearHeartbeat();
 
-    // Send the first ping immediately
-    if (this.isConnected) {
+    // Send the first heartbeat immediately (for controller registration)
+    if (this.isConnected && this.clientId?.startsWith("ctrl-")) {
       this.send({
-        type: "ping",
+        type: "heartbeat",
         timestamp: Date.now(),
-        target: "server",
       });
     }
 
     this.heartbeatInterval = setInterval(() => {
       if (this.isConnected) {
+        // Send heartbeat for controllers to maintain registration
+        if (this.clientId?.startsWith("ctrl-")) {
+          this.send({
+            type: "heartbeat",
+            timestamp: Date.now(),
+          });
+        }
+        // Also send ping for general connection health
         this.send({
           type: "ping",
           timestamp: Date.now(),

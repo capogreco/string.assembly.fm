@@ -68,7 +68,6 @@ export class UIManager {
       connectedCount: document.getElementById("connected_count"),
       avgLatency: document.getElementById("avg_latency"),
       chordDisplay: document.getElementById("chord-display"),
-      expressionDisplay: document.getElementById("expression-display"),
       otherControllers: document.getElementById("other_controllers"),
       kickButton: document.getElementById("kick_others"),
     };

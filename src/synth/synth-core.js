@@ -24,6 +24,7 @@ export class SynthCore {
     this.isInitialized = false;
     this.isCalibrating = false;
     this.isBowing = false;
+    this.hasReceivedProgram = false;
 
     // Banking
     this.synthBanks = new Map();
@@ -85,6 +86,9 @@ export class SynthCore {
       
       // Set the initial program state to defaults without applying it
       this.currentProgram = { ...this.defaultParameters };
+      
+      // Mark that we haven't received a program from controller yet
+      this.hasReceivedProgram = false;
       
     } catch (error) {
       this.log(`Failed to initialize synth core: ${error.message}`, "error");
@@ -207,6 +211,8 @@ export class SynthCore {
 
     this.currentProgram = { ...program };
     
+    // Mark that we've received a program
+    this.hasReceivedProgram = true;
     
 
     // Determine if we should apply immediately or with transition
@@ -243,15 +249,11 @@ export class SynthCore {
             : "NONE";
 
       // Schedule expression change
-      setTimeout(
-        () => {
-          this.bowedStringNode.port.postMessage({
-            type: "setExpression",
-            expression: targetExpression,
-          });
-        },
-        (transitionData.delay || 0) * 1000,
-      );
+      this.bowedStringNode.port.postMessage({
+        type: "setExpression",
+        expression: targetExpression,
+        startTime: applyTime,
+      });
     } else {
       // No transition data - apply expression immediately
       const hasVibrato =
@@ -271,6 +273,7 @@ export class SynthCore {
       this.bowedStringNode.port.postMessage({
         type: "setExpression",
         expression: targetExpression,
+        startTime: applyTime,
       });
     }
 
@@ -278,35 +281,24 @@ export class SynthCore {
     for (const [param, value] of Object.entries(program)) {
       if (this.bowedStringNode.parameters.has(param)) {
         const audioParam = this.bowedStringNode.parameters.get(param);
-        const glissandoEnabled = !transitionData || transitionData.glissando !== false; // default true
 
-        if (transitionData && transitionData.duration) {
-          // Debug log for frequency parameter
-          if (param === 'fundamentalFrequency') {
-            this.log(`Frequency transition: glissando=${transitionData.glissando}, glissandoEnabled=${glissandoEnabled}, from=${audioParam.value} to=${value}`);
-          }
-          if (param === 'fundamentalFrequency' && !glissandoEnabled) {
-            // Non-glissando: hold current frequency until midpoint, then instant change
-            const midpointTime = applyTime + (transitionData.duration / 2);
-            
-            audioParam.setValueAtTime(audioParam.value, applyTime);
-            audioParam.setValueAtTime(audioParam.value, midpointTime);
-            audioParam.setValueAtTime(value, midpointTime);
-          } else if (param === 'fundamentalFrequency' && glissandoEnabled) {
-            // Glissando: exponential ramp for natural pitch slide
-            audioParam.setValueAtTime(audioParam.value || 0.001, applyTime);
-            audioParam.exponentialRampToValueAtTime(
-              Math.max(0.001, value),
-              applyTime + transitionData.duration
-            );
-          } else {
-            // Other parameters: always use linear ramp
-            audioParam.setValueAtTime(audioParam.value, applyTime);
-            audioParam.linearRampToValueAtTime(
-              value,
-              applyTime + transitionData.duration
-            );
-          }
+        if (param === 'fundamentalFrequency' && transitionData && transitionData.duration) {
+          // Handle frequency ramp via message for sample-accurate sync with expressions
+          this.bowedStringNode.port.postMessage({
+            type: 'rampFrequency',
+            target: value,
+            duration: transitionData.duration,
+            startTime: applyTime
+          });
+          // Also set the final value on the AudioParam for consistency
+          audioParam.setValueAtTime(value, applyTime + transitionData.duration);
+        } else if (transitionData && transitionData.duration) {
+          // Use smooth transition for other parameters
+          audioParam.setValueAtTime(audioParam.value, applyTime);
+          audioParam.linearRampToValueAtTime(
+            value,
+            applyTime + transitionData.duration,
+          );
         } else {
           // Immediate change
           audioParam.setValueAtTime(value, applyTime);
@@ -316,7 +308,8 @@ export class SynthCore {
 
     // Handle special parameters
     if (program.masterGain !== undefined) {
-      const targetGain = program.masterGain * (this.isPoweredOn ? 1 : 0);
+      // If calibrating, keep gain at 0 regardless of program settings
+      const targetGain = this.isCalibrating ? 0 : (program.masterGain * (this.isPoweredOn ? 1 : 0));
       const glissandoEnabled = !transitionData || transitionData.glissando !== false;
       
       this.log(`Gain transition: glissando=${transitionData?.glissando}, glissandoEnabled=${glissandoEnabled}, crossfade=${!glissandoEnabled}`);
@@ -351,31 +344,25 @@ export class SynthCore {
 
     // Handle bowing state changes
     const shouldBow =
-      program.fundamentalFrequency && program.fundamentalFrequency > 0;
+      program.fundamentalFrequency && program.fundamentalFrequency > 0 && this.hasReceivedProgram;
 
     if (this.isCalibrating) {
     } else if (shouldBow && !this.isBowing) {
       // Start bowing
-      if (transitionData && transitionData.delay) {
-        setTimeout(() => {
-          this.bowedStringNode.port.postMessage({
-            type: "setBowing",
-            value: true,
-          });
-          this.isBowing = true;
-        }, transitionData.delay * 1000);
-      } else {
-        this.bowedStringNode.port.postMessage({
-          type: "setBowing",
-          value: true,
-        });
-        this.isBowing = true;
-      }
+      this.log(`Starting bowing (freq=${program.fundamentalFrequency}, delay=${transitionData?.delay || 0})`);
+      this.bowedStringNode.port.postMessage({
+        type: "setBowing",
+        value: true,
+        startTime: applyTime,
+      });
+      this.isBowing = true;
     } else if (!shouldBow && this.isBowing) {
       // Stop bowing
+      this.log(`Stopping bowing (freq=${program.fundamentalFrequency})`);
       this.bowedStringNode.port.postMessage({
         type: "setBowing",
         value: false,
+        startTime: applyTime,
       });
       this.isBowing = false;
     } else {
@@ -407,19 +394,39 @@ export class SynthCore {
 
     this.isPoweredOn = powerOn;
 
-    if (this.gainNode) {
-      const targetGain = powerOn
-        ? this.currentProgram?.masterGain || this.defaultParameters.masterGain
-        : 0;
-
+    if (powerOn) {
+      // Power ON: Restore gain and start bowing if we have a frequency
+      if (this.gainNode) {
+        const targetGain = this.currentProgram?.masterGain || this.defaultParameters.masterGain;
+        this.gainNode.gain.linearRampToValueAtTime(
+          targetGain,
+          this.audioContext.currentTime + 0.1,
+        );
+      }
       
-      this.gainNode.gain.linearRampToValueAtTime(
-        targetGain,
-        this.audioContext.currentTime + 0.1,
-      );
+      // Start bowing if we have a valid frequency and have received a program from controller
+      if (this.currentProgram?.fundamentalFrequency > 0 && this.bowedStringNode && !this.isBowing && this.hasReceivedProgram && !this.isCalibrating) {
+        this.bowedStringNode.port.postMessage({
+          type: "setBowing",
+          value: true,
+          startTime: this.audioContext.currentTime,
+        });
+        this.isBowing = true;
+      }
+    } else {
+      // Power OFF: Stop bowing and let resonance decay naturally
+      // Keep gain at current level to allow natural decay
+      if (this.bowedStringNode && this.isBowing) {
+        this.bowedStringNode.port.postMessage({
+          type: "setBowing",
+          value: false,
+          startTime: this.audioContext.currentTime,
+        });
+        this.isBowing = false;
+      }
     }
 
-    this.log(`Power ${powerOn ? "ON" : "OFF"}`);
+    // this.log(`Power ${powerOn ? "ON" : "OFF"}`);
   }
 
   // Set pan position (-1 to 1)
@@ -620,6 +627,8 @@ export class SynthCore {
 
     // Mute synthesis path
     if (this.gainNode) {
+      // this.log(`Muting synthesis gain node for calibration (current: ${this.gainNode.gain.value} → 0)`);
+      this.gainNode.gain.cancelScheduledValues(this.audioContext.currentTime);
       this.gainNode.gain.setValueAtTime(0, this.audioContext.currentTime);
     }
 
@@ -631,9 +640,22 @@ export class SynthCore {
       this.bowedStringNode.port.postMessage({
         type: "setBowing",
         value: false,
+        startTime: this.audioContext.currentTime,
       });
       // Reset bowing state
       this.isBowing = false;
+    }
+    
+    // Disconnect synthesis path from gain node during calibration
+    try {
+      if (this.reverbNode) {
+        this.reverbNode.disconnect(this.gainNode);
+      } else {
+        this.bowedStringNode.disconnect(this.gainNode);
+      }
+      // this.log("Disconnected synthesis path for calibration");
+    } catch (e) {
+      this.log("Error disconnecting synthesis path: " + e.message, "warn");
     }
 
     // Connect and activate calibration path
@@ -671,6 +693,18 @@ export class SynthCore {
     }
 
     this.isCalibrating = false;
+    
+    // Reconnect synthesis path
+    try {
+      if (this.reverbNode) {
+        this.reverbNode.connect(this.gainNode);
+      } else {
+        this.bowedStringNode.connect(this.gainNode);
+      }
+      // this.log("Reconnected synthesis path after calibration");
+    } catch (e) {
+      this.log("Error reconnecting synthesis path: " + e.message, "warn");
+    }
     this.calibrationGainNode.gain.setValueAtTime(
       0,
       this.audioContext.currentTime,

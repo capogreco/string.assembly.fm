@@ -296,6 +296,14 @@ class ContinuousExcitationProcessor extends AudioWorkletProcessor {
     // For debugging
     this.debugCounter = 0;
     this.currentFrame = 0;
+    this.scheduledMessages = []; // Message queue for sample-accurate scheduling
+
+    // Frequency ramping state
+    this.isRampingFrequency = false;
+    this.freqRampStartValue = 0;
+    this.freqRampTargetValue = 0;
+    this.freqRampProgress = 0; // 0 to 1
+    this.freqRampIncrement = 0;
 
     // Flags for discrete parameter changes needing coefficient updates
     this._stringCoefficientsNeedRecalculation = false;
@@ -373,80 +381,62 @@ class ContinuousExcitationProcessor extends AudioWorkletProcessor {
     const data = event.data;
     if (!data) return;
 
+    if (data.startTime && data.startTime > currentTime) {
+      // This is a scheduled message, queue it
+      this.scheduledMessages.push(data);
+      return;
+    }
+
+    // Process immediate messages
+    this._processMessage(data);
+  }
+
+  _processMessage(data) {
     if (data.type === "setBowing") {
       this.isBowing = data.value;
       this.bowEnvelopeTarget = data.value ? 1.0 : 0.0;
       if (this.isBowing) {
-        // When starting to bow, optionally reset states for cleaner attack
         this._resetStringModeStates();
         this._resetLpfState();
         this._resetBodyModeStates();
       }
+    } else if (data.type === "rampFrequency") {
+      this.isRampingFrequency = true;
+      this.freqRampStartValue = this._cachedFundamentalFrequency;
+      this.freqRampTargetValue = data.target;
+      this.freqRampProgress = 0;
+      const rampDurationInSamples = data.duration * this.sampleRate;
+      this.freqRampIncrement = rampDurationInSamples > 0 ? 1.0 / rampDurationInSamples : 1.0;
     } else if (data.type === "setExpression") {
-      // New message type for expression changes
       const validExpressions = ["NONE", "VIBRATO", "TREMOLO", "TRILL"];
       if (validExpressions.includes(data.expression)) {
         const newTarget = data.expression;
         const state = this.expressionState;
-
-        // Hub-and-spoke enforcement
-        if (
-          state.current !== "NONE" &&
-          newTarget !== "NONE" &&
-          state.current !== newTarget
-        ) {
-          // Must go through NONE first
+        if (state.current !== "NONE" && newTarget !== "NONE" && state.current !== newTarget) {
           state.target = "NONE";
           state.finalTarget = newTarget;
         } else {
           state.target = newTarget;
           state.finalTarget = null;
         }
-      } else if (data.type === "setTransitionConfig") {
-        // Update transition configuration
-        if (data.config) {
-          if (data.config.duration !== undefined) {
-            this.transitionSettings.duration = Math.max(
-              0.5,
-              Math.min(5.0, data.config.duration),
-            );
-          }
-          if (data.config.spread !== undefined) {
-            this.transitionSettings.spread = Math.max(
-              0.0,
-              Math.min(1.0, data.config.spread),
-            );
-          }
-          if (
-            data.config.stagger !== undefined &&
-            ["sync", "cascade", "random"].includes(data.config.stagger)
-          ) {
-            this.transitionSettings.stagger = data.config.stagger;
-          }
-          if (data.config.variance !== undefined) {
-            this.transitionSettings.variance = Math.max(
-              0.0,
-              Math.min(1.0, data.config.variance),
-            );
-          }
-          // Update rates after config change
-          this._updateTransitionRates();
-        }
+      }
+    } else if (data.type === "setTransitionConfig") {
+      if (data.config) {
+        if (data.config.duration !== undefined) this.transitionSettings.duration = Math.max(0.5, Math.min(5.0, data.config.duration));
+        if (data.config.spread !== undefined) this.transitionSettings.spread = Math.max(0.0, Math.min(1.0, data.config.spread));
+        if (data.config.stagger !== undefined && ["sync", "cascade", "random"].includes(data.config.stagger)) this.transitionSettings.stagger = data.config.stagger;
+        if (data.config.variance !== undefined) this.transitionSettings.variance = Math.max(0.0, Math.min(1.0, data.config.variance));
+        this._updateTransitionRates();
       }
     } else if (data.type === "setStringMaterial") {
-      if (
-        data.value !== undefined &&
-        data.value !== this._cachedStringMaterial
-      ) {
+      if (data.value !== undefined && data.value !== this._cachedStringMaterial) {
         this._cachedStringMaterial = data.value;
         this._stringCoefficientsNeedRecalculation = true;
-        // console.log(`[WORKLET] setStringMaterial: ${data.value}, will recalc`);
       }
     } else if (data.type === "setBodyType") {
       if (data.value !== undefined && data.value !== this._cachedBodyType) {
         this._cachedBodyType = data.value;
         this._bodyCoefficientsNeedRecalculation = true;
-        // console.log(`[WORKLET] setBodyType: ${data.value}, will recalc`);
       }
     }
   }
@@ -953,6 +943,15 @@ class ContinuousExcitationProcessor extends AudioWorkletProcessor {
   }
 
   process(inputs, outputs, parameters) {
+    // Process scheduled messages
+    for (let i = this.scheduledMessages.length - 1; i >= 0; i--) {
+      const msg = this.scheduledMessages[i];
+      if (msg.startTime <= currentTime) {
+        this._processMessage(msg);
+        this.scheduledMessages.splice(i, 1);
+      }
+    }
+
     // Track current frame for stagger timing
     this.currentFrame++;
 
@@ -1287,13 +1286,22 @@ class ContinuousExcitationProcessor extends AudioWorkletProcessor {
       let excitationSignal = 0.0;
 
       if (this.bowEnvelope > 0.001) {
-        const fundamental =
-          parameters.fundamentalFrequency.length > 1
+        let fundamental;
+        if (this.isRampingFrequency) {
+          this.freqRampProgress += this.freqRampIncrement;
+          if (this.freqRampProgress >= 1.0) {
+            this.freqRampProgress = 1.0;
+            this.isRampingFrequency = false;
+          }
+          fundamental = this.freqRampStartValue + (this.freqRampTargetValue - this.freqRampStartValue) * this.freqRampProgress;
+        } else {
+          fundamental = parameters.fundamentalFrequency.length > 1
             ? parameters.fundamentalFrequency[i]
             : parameters.fundamentalFrequency[0];
+        }
 
-        // Apply pitch vibrato to fundamental
-        const vibratoFundamental = fundamental * pitchModulation;
+        // Apply pitch vibrato only when not ramping frequency
+        const vibratoFundamental = this.isRampingFrequency ? fundamental : fundamental * pitchModulation;
 
         // Sawtooth wave
         const sawIncrement = vibratoFundamental / this.sampleRate;

@@ -199,8 +199,13 @@ class HarmonicRatioSelector {
     // Update appState for compatibility
     this.appState.set('harmonicSelections', harmonicSelections);
 
-    // Mark parameter as changed
-    this.markParameterChanged();
+    // Emit UI event for ParameterControls to handle visual feedback
+    if (this.eventBus) {
+        this.eventBus.emit('ui:hrgChanged', {
+            expression: this.expression,
+            timestamp: Date.now()
+        });
+    }
 
     // Log the change
     const selectorKey = `${this.expression}-${this.dragStart?.type || 'unknown'}`;

@@ -19,6 +19,26 @@ export const Config = {
   },
 
   // Parameter Configuration
+  PROGRAM_PARAMS: [
+    "stringMaterial",
+    "stringDamping",
+    "bowPosition",
+    "bowSpeed",
+    "bowForce",
+    "brightness",
+    "vibratoRate",
+    "trillSpeed",
+    "trillArticulation",
+    "tremoloSpeed",
+    "tremoloArticulation",
+  ],
+  UI_PARAMS: [
+    "masterGain",
+    "power",
+    "transitionDuration",
+    "transitionStagger",
+    "transitionDurationSpread",
+  ],
   PARAM_IDS: [
     "stringMaterial",
     "stringDamping",
@@ -32,7 +52,10 @@ export const Config = {
     "tremoloSpeed",
     "tremoloArticulation",
     "masterGain",
-    // Transition parameters removed - they should always use current GUI values
+    "power",
+    "transitionDuration",
+    "transitionStagger",
+    "transitionDurationSpread",
   ],
 
   // Expression Types

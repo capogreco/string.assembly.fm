@@ -73,14 +73,20 @@
             const join_button = document.getElementById("join_instrument");
             const calibration_phase =
                 document.getElementById("calibration_phase");
+            const calibration_content = 
+                document.getElementById("calibration_content");
             const join_phase = document.getElementById("join_phase");
 
             const canvas = document.getElementById("visualizer");
             const ctx = canvas.getContext("2d");
 
-            // set canvas size
-            canvas.width = canvas.offsetWidth;
-            canvas.height = canvas.offsetHeight;
+            // set canvas size to full window
+            function resizeCanvas() {
+                canvas.width = window.innerWidth;
+                canvas.height = window.innerHeight;
+            }
+            resizeCanvas();
+            window.addEventListener('resize', resizeCanvas);
 
             // connect to websocket for signaling (restored for controller discovery)
             function connect_websocket() {
@@ -307,10 +313,9 @@
                         console.error("Failed to start pink noise calibration");
                     }
 
-                    // Update UI
-                    calibration_phase.style.display = "block";
+                    // Update UI - hide calibration content, show join phase
+                    calibration_content.style.display = "none";
                     join_phase.style.display = "block";
-                    calibration_button.style.display = "none"; // Hide calibrate button
                     document
                         .getElementById("visualizer")
                         .classList.remove("dimmed");
@@ -338,28 +343,31 @@
 
             // Activate synthesis mode
             async function join_instrument() {
-                // Request current program
-                if (
-                    !current_program ||
-                    Object.keys(current_program).length === 0
-                ) {
-                    request_current_program();
-                }
-
                 in_calibration_mode = false;
+                // console.log(
+                //     "Exiting calibration mode, entering synthesis mode...",
+                // );
 
                 if (synthCore && synthCore.isInitialized) {
                     // Stop calibration noise using SynthCore method
                     synthCore.stopCalibrationNoise();
-    
+                    // console.log("SynthCore stopped calibration noise.");
+
                     // Ensure synthesis path is active by calling setPower
-                    // This opens the gain node to allow audio through
                     await synthCore.setPower(true);
 
-                    // Re-apply current program to restart bowing
-                    // This is needed because calibration mode stops the bowing
+                    // Apply the program that was received during calibration
                     if (current_program) {
+                        // console.log(
+                        //     "Applying stored program after calibration:",
+                        //     current_program,
+                        // );
                         synthCore.applyProgram(current_program);
+                    } else {
+                        // console.log(
+                        //     "No program received during calibration, requesting now.",
+                        // );
+                        request_current_program();
                     }
                 } else {
                     console.error(
@@ -372,6 +380,7 @@
                 join_phase.style.display = "none";
                 calibration_button.style.display = "block"; // Show calibrate button again
 
+                // console.log("Joined instrument in synthesis mode.");
 
                 // request wake lock to prevent device sleep
                 request_wake_lock();
@@ -388,34 +397,65 @@
                         : analyser;
                 if (!activeAnalyser) return;
 
-                const buffer_length = activeAnalyser.frequencyBinCount;
-                const data_array = new Uint8Array(buffer_length);
-                activeAnalyser.getByteFrequencyData(data_array);
+                // Get time domain data for waveform
+                const bufferLength = activeAnalyser.fftSize;
+                const dataArray = new Float32Array(bufferLength);
+                activeAnalyser.getFloatTimeDomainData(dataArray);
 
-                ctx.fillStyle = "rgb(0, 0, 0)";
+                // Clear canvas completely (no ghosting)
+                ctx.fillStyle = "rgba(0, 0, 0, 1)";
                 ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-                const bar_width = (canvas.width / buffer_length) * 2.5;
-                let bar_height;
-                let x = 0;
-
-                for (let i = 0; i < buffer_length; i++) {
-                    bar_height = (data_array[i] / 255) * canvas.height;
-
-                    ctx.fillStyle = `rgb(${bar_height + 100}, 50, 50)`;
-                    ctx.fillRect(
-                        x,
-                        canvas.height - bar_height,
-                        bar_width,
-                        bar_height,
-                    );
-
-                    x += bar_width + 1;
+                // Set up drawing style
+                ctx.lineWidth = 6;
+                ctx.strokeStyle = "#ffffff";
+                ctx.lineCap = "round";
+                ctx.lineJoin = "round";
+                
+                // Begin path for waveform
+                ctx.beginPath();
+                
+                // Center x position
+                const centerX = canvas.width / 2;
+                const maxAmplitude = canvas.width * 4.5; // Maximum horizontal displacement (10x increase)
+                
+                // Number of points to sample from the buffer
+                const samples = 256;
+                const step = Math.floor(bufferLength / samples);
+                
+                // Move to top center
+                ctx.moveTo(centerX, 0);
+                
+                // Draw waveform with cosine envelope
+                for (let i = 0; i < samples; i++) {
+                    const dataIndex = i * step;
+                    const sample = dataArray[dataIndex] || 0;
+                    
+                    // Y position (0 to canvas.height)
+                    const y = (i / (samples - 1)) * canvas.height;
+                    
+                    // Cosine envelope: 1 at center, 0 at top/bottom
+                    // Using cosine to create smooth tapering
+                    const envelope = Math.cos((i / (samples - 1) - 0.5) * Math.PI * 2) * 0.5 + 0.5;
+                    
+                    // Apply envelope to the sample amplitude
+                    const amplitude = sample * envelope * maxAmplitude;
+                    
+                    // X position with amplitude offset
+                    const x = centerX + amplitude;
+                    
+                    ctx.lineTo(x, y);
                 }
+                
+                ctx.stroke();
             }
 
             // handle data messages from controllers
             async function handle_data_message(data) {
+                // Debug logging for incoming messages
+                if (data.type === "command") {
+                    console.log(`[SYNTH] Received command message:`, data);
+                }
                 
                 if (data.type === "param") {
                     console.log(`param ${data.name} = ${data.value}`);
@@ -445,6 +485,13 @@
                         }
                     }
                 } else if (data.type === "program") {
+                    if (in_calibration_mode) {
+                        // If calibrating, store the program to be applied later
+                        current_program = data.program;
+                        // console.log("Program received during calibration, will apply when joining instrument.");
+                        return;
+                    }
+
                     current_program = data.program;
                     const transitionData = data.transition;
 
@@ -469,11 +516,9 @@
 
                     if (synthCore && synthCore.isInitialized) {
                         // Apply program with transition data
-                        console.log(`Received transitionData:`, transitionData);
                         if (transitionData && (transitionData.stagger || transitionData.durationSpread)) {
                             // Calculate individual timing from stagger and spread
                             const calculatedTransition = calculate_transition_timing(transitionData);
-                            console.log(`Calculated transition:`, calculatedTransition);
                             synthCore.applyProgram(current_program, calculatedTransition);
                         } else {
                             synthCore.applyProgram(current_program, transitionData);
@@ -607,21 +652,26 @@
                     if (synthCore && typeof volume === "number") {
                         console.log(`[SYNTH] Setting volume to ${volume} (mode: ${mode})`);
                         
+                        // Update the current program with new values
+                        const updatedProgram = { ...synthCore.currentProgram };
+                        
                         if (mode === "natural") {
                             // Natural dynamics: affect both master gain and bow force
                             // Master gain: 0 to 0.8 of slider value (to prevent clipping)
-                            synthCore.setMasterGain(volume * 0.8);
+                            updatedProgram.masterGain = volume * 0.8;
                             
                             // Bow force: map volume to a natural bow force range
                             // At volume 0: bow force = 0
                             // At volume 0.5: bow force = 0.5  
                             // At volume 1: bow force = 0.8 (strong but not harsh)
-                            const bowForce = volume * 0.8;
-                            synthCore.setBowForce(bowForce);
+                            updatedProgram.bowForce = volume * 0.8;
                         } else {
                             // Just control master gain
-                            synthCore.setMasterGain(volume);
+                            updatedProgram.masterGain = volume;
                         }
+                        
+                        // Apply the updated program
+                        synthCore.applyProgram(updatedProgram);
                     }
                 } else {
                     console.warn(`Unknown command: ${command_name}`);
@@ -726,13 +776,20 @@
 
                 if (all_controllers.length === 0) {
                     controller_list_el.textContent = "None";
+                    controller_list_el.style.color = "#64748b";
                 } else {
-                    controller_list_el.innerHTML = all_controllers
-                        .map(
-                            ([id, ctrl]) =>
-                                `<div style="margin: 2px 0;">${id} ${ctrl.connected ? "(connected)" : "(discovered)"}</div>`,
-                        )
-                        .join("");
+                    // Show only connected controllers in a simple comma-separated list
+                    const connectedControllers = all_controllers
+                        .filter(([id, ctrl]) => ctrl.connected)
+                        .map(([id, ctrl]) => id);
+                    
+                    if (connectedControllers.length === 0) {
+                        controller_list_el.textContent = "None connected";
+                        controller_list_el.style.color = "#64748b";
+                    } else {
+                        controller_list_el.textContent = connectedControllers.join(", ");
+                        controller_list_el.style.color = "#f0f0f0";
+                    }
                 }
             }
 
@@ -880,15 +937,43 @@
 
             // wake lock functions
             async function request_wake_lock() {
+                const wakeLockStatus = document.getElementById("wake-lock-status");
+                const wakeLockIcon = document.getElementById("wake-lock-icon");
+                const wakeLockText = document.getElementById("wake-lock-text");
+                
                 try {
                     if ("wakeLock" in navigator) {
                         wake_lock = await navigator.wakeLock.request("screen");
+                        
+                        // Show wake lock indicator
+                        if (wakeLockStatus) {
+                            wakeLockStatus.style.display = "block";
+                            wakeLockIcon.textContent = "🔒";
+                            wakeLockText.textContent = "Wake Lock Active";
+                        }
         
                         wake_lock.addEventListener("release", () => {
-                            console.log("Wake lock released");
+                            // Update indicator when released
+                            if (wakeLockStatus) {
+                                wakeLockIcon.textContent = "🔓";
+                                wakeLockText.textContent = "Wake Lock Released";
+                            }
                         });
+                    } else {
+                        // Browser doesn't support wake lock
+                        if (wakeLockStatus) {
+                            wakeLockStatus.style.display = "block";
+                            wakeLockIcon.textContent = "⚠️";
+                            wakeLockText.textContent = "Wake Lock Not Supported";
+                        }
                     }
                 } catch (err) {
+                    // Wake lock failed
+                    if (wakeLockStatus) {
+                        wakeLockStatus.style.display = "block";
+                        wakeLockIcon.textContent = "❌";
+                        wakeLockText.textContent = "Wake Lock Failed";
+                    }
                     console.log(`Wake lock error: ${err.name}, ${err.message}`);
                 }
             }
@@ -945,8 +1030,8 @@
                 }
             };
 
-            console.log("🎻 String Assembly FM - Fully Modular Architecture");
-            console.log("Debug commands: getSystemStatus(), testBanking()");
+            // console.log("🎻 String Assembly FM - Fully Modular Architecture");
+            // console.log("Debug commands: getSystemStatus(), testBanking()");
 
             // Start WebSocket connection
             connect_websocket();
