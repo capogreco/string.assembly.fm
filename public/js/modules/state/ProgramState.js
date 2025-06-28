@@ -215,6 +215,12 @@ export class ProgramState {
   applyHarmonicSelectionsToUI(selections) {
     Logger.log(`Applying harmonic selections to UI: ${JSON.stringify(selections)}`, 'lifecycle');
     
+    // Emit event for HarmonicRatioSelector components to sync
+    eventBus.emit('programState:harmonicSelectionsChanged', {
+      selections: selections
+    });
+    
+    // Still do direct DOM manipulation as fallback for now
     Object.entries(selections).forEach(([key, values]) => {
       const [expression, type] = key.split('-');
       
@@ -337,6 +343,22 @@ export class ProgramState {
       return false;
     }
     
+    // Compare harmonic selections
+    for (const key in this.currentProgram.harmonicSelections) {
+      const currentSelection = this.currentProgram.harmonicSelections[key];
+      const activeSelection = this.activeProgram.harmonicSelections[key];
+      
+      if (!activeSelection || currentSelection.length !== activeSelection.length) {
+        return false;
+      }
+      
+      for (let i = 0; i < currentSelection.length; i++) {
+        if (currentSelection[i] !== activeSelection[i]) {
+          return false;
+        }
+      }
+    }
+    
     return true;
   }
   
@@ -431,14 +453,16 @@ export class ProgramState {
     // Update PartManager's internal state (but don't send to synths)
     const partManager = window.modular?.partManager;
     if (partManager) {
-      // Update the chord in PartManager's internal state
-      partManager.currentChord = [...this.currentProgram.chord.frequencies];
-      
-      // Clear and update expressions in PartManager's internal state
+      // Clear expressions first
       partManager.noteExpressions.clear();
+      
+      // Update expressions
       Object.entries(this.currentProgram.chord.expressions).forEach(([noteName, expression]) => {
         partManager.noteExpressions.set(noteName, expression);
       });
+      
+      // Use setChord to properly update chord and trigger redistribution
+      partManager.setChord([...this.currentProgram.chord.frequencies]);
       
       Logger.log(`Updated PartManager state: ${this.currentProgram.chord.frequencies.length} notes`, 'lifecycle');
     }

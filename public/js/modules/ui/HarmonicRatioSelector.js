@@ -66,6 +66,20 @@ class HarmonicRatioSelector {
 
     // Global mouse up handler
     document.addEventListener('mouseup', () => this.endDrag());
+    
+    // Listen for bank load events to sync visual state
+    if (this.eventBus) {
+      this.eventBus.on('programState:bankLoaded', () => {
+        // Sync visual state with programState after bank load
+        this.syncWithProgramState();
+      });
+      
+      // Also listen for harmonic selections changes
+      this.eventBus.on('programState:harmonicSelectionsChanged', (data) => {
+        // Sync when harmonic selections are applied to UI
+        this.syncWithProgramState();
+      });
+    }
   }
 
   handleClick(button, event) {
@@ -267,6 +281,28 @@ class HarmonicRatioSelector {
     const selectorKey = `${this.expression}-${type}`;
     const harmonicSelections = this.appState.get('harmonicSelections');
     return harmonicSelections[selectorKey] ? Array.from(harmonicSelections[selectorKey]) : [1];
+  }
+  
+  // Sync visual state with programState after bank load
+  syncWithProgramState() {
+    if (!this.programState) return;
+    
+    const harmonicSelections = this.programState.currentProgram.harmonicSelections;
+    
+    // Update both numerator and denominator
+    ['numerator', 'denominator'].forEach(type => {
+      const selectorKey = `${this.expression}-${type}`;
+      const values = harmonicSelections[selectorKey] || [1];
+      
+      // Update internal state in appState to match programState
+      const appHarmonicSelections = this.appState.get('harmonicSelections');
+      if (appHarmonicSelections[selectorKey]) {
+        appHarmonicSelections[selectorKey] = new Set(values);
+      }
+      
+      // Update visual state
+      this.updateVisualState(type);
+    });
   }
 
   // Static method to create HRG components from existing HTML

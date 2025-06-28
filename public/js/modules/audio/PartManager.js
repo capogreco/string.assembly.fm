@@ -399,7 +399,12 @@ export class PartManager {
     // Send to each synth
     let successCount = 0;
     const synthIds = Array.from(this.synthAssignments.keys());
-
+    
+    // Check if we have any assignments
+    if (synthIds.length === 0) {
+      Logger.log(`No synth assignments available. Current chord: ${JSON.stringify(this.currentChord)}`, "error");
+      throw new Error("No synth assignments. Please ensure a chord is loaded.");
+    }
 
     for (let i = 0; i < synthIds.length; i++) {
       const synthId = synthIds[i];
