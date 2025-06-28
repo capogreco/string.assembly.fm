@@ -82,6 +82,10 @@ export class SynthCore {
       // Don't load from localStorage - keep banks in memory only
 
       this.isInitialized = true;
+      
+      // Set the initial program state to defaults without applying it
+      this.currentProgram = { ...this.defaultParameters };
+      
       this.log("Core synth initialized successfully");
     } catch (error) {
       this.log(`Failed to initialize synth core: ${error.message}`, "error");
@@ -170,8 +174,7 @@ export class SynthCore {
     // Connect the audio chain
     this.connectAudioChain(destination);
 
-    // Initialize with default parameters
-    this.applyProgram(this.defaultParameters);
+    // Don't apply default parameters here - wait until after isInitialized is set
   }
 
   // Connect audio nodes in chain
@@ -329,8 +332,11 @@ export class SynthCore {
     const shouldBow =
       program.fundamentalFrequency && program.fundamentalFrequency > 0;
 
-    if (shouldBow && !this.isBowing) {
+    if (this.isCalibrating) {
+      this.log("In calibration mode, deferring bowing state change");
+    } else if (shouldBow && !this.isBowing) {
       // Start bowing
+      this.log(`Starting bowing (freq=${program.fundamentalFrequency}, delay=${transitionData?.delay || 0})`);
       if (transitionData && transitionData.delay) {
         setTimeout(() => {
           this.bowedStringNode.port.postMessage({
@@ -348,11 +354,14 @@ export class SynthCore {
       }
     } else if (!shouldBow && this.isBowing) {
       // Stop bowing
+      this.log(`Stopping bowing (freq=${program.fundamentalFrequency})`);
       this.bowedStringNode.port.postMessage({
         type: "setBowing",
         value: false,
       });
       this.isBowing = false;
+    } else {
+      this.log(`Bowing state unchanged: shouldBow=${shouldBow}, isBowing=${this.isBowing}, freq=${program.fundamentalFrequency}`);
     }
 
     // Log program with expression status and transition info
@@ -395,6 +404,8 @@ export class SynthCore {
         ? this.currentProgram?.masterGain || this.defaultParameters.masterGain
         : 0;
 
+      this.log(`Setting gain to ${targetGain} (powerOn=${powerOn}, currentProgram.masterGain=${this.currentProgram?.masterGain})`);
+      
       this.gainNode.gain.linearRampToValueAtTime(
         targetGain,
         this.audioContext.currentTime + 0.1,
@@ -615,6 +626,8 @@ export class SynthCore {
         type: "setBowing",
         value: false,
       });
+      // Reset bowing state
+      this.isBowing = false;
     }
 
     // Connect and activate calibration path

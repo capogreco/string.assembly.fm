@@ -89,11 +89,11 @@ export class PartManager {
     });
 
     // Listen for synth connections/disconnections
-    this.eventBus.on("synth:connected", (data) => {
+    this.eventBus.on("network:synthConnected", (data) => {
       this.handleSynthConnected(data.synthId);
     });
 
-    this.eventBus.on("synth:disconnected", (data) => {
+    this.eventBus.on("network:synthDisconnected", (data) => {
       this.handleSynthDisconnected(data.synthId);
     });
 
@@ -260,7 +260,7 @@ export class PartManager {
    * @param {string} synthId - Synth ID to send to
    * @param {Object} transitionConfig - Transition configuration
    */
-  async sendProgramToSpecificSynth(synthId, transitionConfig = {}) {
+  async sendProgramToSpecificSynth(synthId, transitionConfig = null) {
     Logger.log(`Sending program to specific synth: ${synthId}`, "parts");
     
     const networkCoordinator = this.appState.get("networkCoordinator");
@@ -577,16 +577,9 @@ export class PartManager {
    */
   handleSynthConnected(synthId) {
     Logger.log(`Synth connected: ${synthId}`, "parts");
+    // Just redistribute - don't send program yet
+    // Synth will request program after SynthCore initialization
     this.redistributeToSynths();
-
-    // Send current program if we have one
-    if (this.lastSentProgram && this.currentChord.length > 0) {
-      const assignment = this.synthAssignments.get(synthId);
-      if (assignment) {
-        // TODO: Send current program to new synth
-        Logger.log(`Should send current program to ${synthId}`, "parts");
-      }
-    }
   }
 
   /**
@@ -606,13 +599,35 @@ export class PartManager {
    * @private
    */
   handleProgramRequest(synthId) {
+    Logger.log(`Program requested by ${synthId}`, "parts");
 
-    // If we have a current chord, send the current part to this synth
-    if (this.currentChord.length > 0) {
-      // Trigger redistribution which will assign this synth and send program
-      this.redistributeToSynths();
+    // Only send if we have a lastSentProgram (i.e., user has sent a program)
+    if (this.lastSentProgram && this.currentChord.length > 0) {
+      const assignment = this.synthAssignments.get(synthId);
+      if (assignment) {
+        // Create a program for this specific synth with its assigned frequency and expression
+        const synthProgram = { ...this.lastSentProgram.baseProgram };
+        synthProgram.fundamentalFrequency = assignment.frequency;
+        
+        // Apply expression with stochastic resolution
+        this.applyExpressionToProgram(synthProgram, assignment.expression);
+        
+        // Send with no transition (immediate)
+        const networkCoordinator = this.appState.get("networkCoordinator");
+        if (networkCoordinator) {
+          networkCoordinator.sendProgramToSynth(synthId, synthProgram, {
+            duration: 0,
+            stagger: 0,
+            durationSpread: 0
+          });
+          
+          Logger.log(`Sent program to ${synthId}: ${assignment.frequency.toFixed(1)}Hz, expression: ${assignment.expression?.type || 'none'}`, "parts");
+        }
+      }
     } else {
+      Logger.log(`No active program to send to ${synthId}`, "parts");
     }
+    // If no active program, synth will remain waiting
   }
 
   /**

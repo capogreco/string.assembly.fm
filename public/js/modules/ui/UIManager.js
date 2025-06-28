@@ -188,8 +188,16 @@ export class UIManager {
    */
   updateConnectionStatus(status = null) {
     const connectionStatus = status || this.appState.get("connectionStatus");
-
+    
     if (!this.elements.status) return;
+
+    // Track the actual status value, not the display text
+    const previousStatus = this.elements.status.dataset.status;
+    
+    // Only log and update if status actually changed
+    if (previousStatus === connectionStatus) return;
+    
+    this.elements.status.dataset.status = connectionStatus;
 
     // Update text and styling
     switch (connectionStatus) {
@@ -243,23 +251,53 @@ export class UIManager {
     const connectedSynths = this.appState.get("connectedSynths");
 
     if (connectedSynths.size === 0) {
-      this.elements.synthList.innerHTML = "None connected";
+      this.elements.synthList.innerHTML = '<span style="color: #64748b;">None connected</span>';
       return;
     }
 
-    const synthEntries = [];
-    connectedSynths.forEach((synthData, synthId) => {
-      const latencyText = synthData.latency
-        ? `${synthData.latency}ms`
-        : "measuring...";
+    // Convert Map to array and sort by status
+    const synthArray = Array.from(connectedSynths.entries())
+      .map(([synthId, synthData]) => ({ synthId, ...synthData }))
+      .sort((a, b) => {
+        // Sort order: instrument joined > audio enabled > connected only
+        if (a.instrumentJoined && !b.instrumentJoined) return -1;
+        if (!a.instrumentJoined && b.instrumentJoined) return 1;
+        if (a.audioEnabled && !b.audioEnabled) return -1;
+        if (!a.audioEnabled && b.audioEnabled) return 1;
+        return 0; // Keep original order for same status
+      });
 
-      const stateText = synthData.state ? ` (${synthData.state})` : "";
+    const synthEntries = [];
+    synthArray.forEach((synthData) => {
+      const synthId = synthData.synthId;
+      const latencyText = synthData.latency !== null
+        ? `${synthData.latency}ms`
+        : "...";
+
+      // Connection health indicator
+      const healthColors = {
+        excellent: '#4ade80',
+        good: '#22c55e',
+        fair: '#f59e0b',
+        poor: '#ef4444'
+      };
+      const healthColor = healthColors[synthData.connectionHealth] || '#64748b';
+
+      // Status indicators
+      const audioIcon = synthData.audioEnabled ? '🔊' : '🔇';
+      const instrumentIcon = synthData.instrumentJoined ? '🎻' : '⏸️';
 
       synthEntries.push(`
-        <div class="synth-entry">
-          <span class="synth-id">${synthId}</span>
-          <span class="synth-latency">${latencyText}</span>
-          <span class="synth-state">${stateText}</span>
+        <div class="synth" style="background: #262626; padding: 8px; margin: 4px 0; border-radius: 4px; border-left: 3px solid ${healthColor};">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span style="font-weight: 500; color: #e2e8f0; font-size: 0.85em;">${synthId}</span>
+            <div style="display: flex; gap: 8px; align-items: center;">
+              <span title="Audio ${synthData.audioEnabled ? 'enabled' : 'disabled'}" style="font-size: 0.9em;">${audioIcon}</span>
+              <span title="Instrument ${synthData.instrumentJoined ? 'joined' : 'not joined'}" style="font-size: 0.9em;">${instrumentIcon}</span>
+              <span style="color: ${healthColor}; font-size: 0.8em; font-family: monospace;">${latencyText}</span>
+            </div>
+          </div>
+          ${synthData.state ? `<div style="color: #94a3b8; font-size: 0.75em; margin-top: 2px;">${synthData.state}</div>` : ''}
         </div>
       `);
     });

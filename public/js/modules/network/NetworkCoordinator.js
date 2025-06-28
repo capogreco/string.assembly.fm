@@ -70,17 +70,19 @@ export class NetworkCoordinator {
       // Update connection status
       this.appState.set("connectionStatus", "connecting");
 
-      // Connect WebSocket
+      // Connect WebSocket and wait for it to be ready
       const connected = await this.webSocket.connect(this.controllerId);
 
       if (connected) {
-        // Initialize WebRTC manager after WebSocket is connected so it has the clientId
+        // This part will now only run after the WebSocket is fully connected
+        this.appState.set("connectionStatus", "connected");
+        
+        // Initialize WebRTC manager after WebSocket is connected
         this.webRTC.initialize();
 
         if (window.Logger) {
           window.Logger.log("Network connection established", "connections");
         }
-        this.appState.set("connectionStatus", "connected");
         return true;
       } else {
         if (window.Logger) {
@@ -294,6 +296,15 @@ export class NetworkCoordinator {
         // Update latency tracking
         this.appState.updateSynthLatency(peerId, peerData.latency);
 
+        // Also update state if included in pong message
+        if (message.state) {
+          this.appState.updateSynthState(peerId, {
+            audioEnabled: message.state.audio_enabled,
+            instrumentJoined: message.state.joined,
+            state: message.state
+          });
+        }
+
         if (window.Logger) {
           window.Logger.log(
             `Pong from ${peerId}: ${peerData.latency}ms`,
@@ -329,12 +340,14 @@ export class NetworkCoordinator {
         break;
 
       case "state_update":
-        // Update synth state
-        const synthData = this.appState.get("connectedSynths").get(peerId);
-        if (synthData) {
-          synthData.state = message.state;
-          this.appState.addConnectedSynth(peerId, synthData);
-        }
+        // Update synth state with enhanced information
+        // Handle both direct fields and nested state object
+        const stateUpdate = message.state || {};
+        this.appState.updateSynthState(peerId, {
+          state: stateUpdate,
+          audioEnabled: message.audioEnabled || message.audio_enabled || stateUpdate.audio_enabled,
+          instrumentJoined: message.instrumentJoined || message.joined || stateUpdate.joined
+        });
         break;
 
       default:
@@ -529,7 +542,12 @@ export class NetworkCoordinator {
     const wsStatus = this.webSocket.getStatus();
 
     // Update connection status based on WebSocket
-    if (wsStatus.connected) {
+    const currentStatus = this.appState.get("connectionStatus");
+    
+    // Don't override "ready" status with "connected"
+    if (currentStatus === "ready" && wsStatus.connected) {
+      // Keep "ready" status
+    } else if (wsStatus.connected) {
       this.appState.set("connectionStatus", "connected");
     } else if (wsStatus.connecting) {
       this.appState.set("connectionStatus", "connecting");

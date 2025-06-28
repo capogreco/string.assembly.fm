@@ -271,6 +271,9 @@
                         audio_context.destination,
                     );
                     console.log("SynthCore initialized.");
+                    
+                    // Now that SynthCore is initialized, request current program from controller
+                    request_current_program();
                 }
 
                 // Connect WebSocket for controller discovery
@@ -287,9 +290,9 @@
                     return { delay: 0, duration: 1.0 };
                 }
                 
-                const baseDuration = config.duration || 1.0;
-                const stagger = config.stagger || 0;
-                const durationSpread = config.durationSpread || 0;
+                const baseDuration = config.duration !== undefined ? config.duration : 1.0;
+                const stagger = config.stagger !== undefined ? config.stagger : 0;
+                const durationSpread = config.durationSpread !== undefined ? config.durationSpread : 0;
                 
                 // Calculate stagger delay using exponential algorithm
                 let delay = 0;
@@ -379,20 +382,21 @@
                     console.log("SynthCore stopped calibration noise.");
 
                     // Ensure synthesis path is active by calling setPower
+                    // This opens the gain node to allow audio through
                     await synthCore.setPower(true);
 
-                    // Re-apply current program to ensure synthesis starts correctly
+                    // Re-apply current program to restart bowing
+                    // This is needed because calibration mode stops the bowing
                     if (current_program) {
                         console.log(
-                            "Applying current program to SynthCore:",
+                            "Re-applying current program to restart bowing:",
                             current_program,
                         );
                         synthCore.applyProgram(current_program);
                     } else {
                         console.log(
-                            "No current program to apply upon joining instrument. Requesting one.",
+                            "No current program available.",
                         );
-                        request_current_program();
                     }
                 } else {
                     console.error(
@@ -449,7 +453,7 @@
             }
 
             // handle data messages from controllers
-            function handle_data_message(data) {
+            async function handle_data_message(data) {
                 // Debug logging for incoming messages
                 if (data.type === "command") {
                     console.log(`[SYNTH] Received command message:`, data);
@@ -525,8 +529,9 @@
                         } else {
                             synthCore.applyProgram(current_program, transitionData);
                         }
+                        console.log("Program applied successfully");
                     } else {
-                        console.warn("SynthCore not ready for program");
+                        console.warn("SynthCore still not ready after initialization attempt");
                     }
 
                     // Start synthesis with correct frequency
@@ -648,6 +653,30 @@
                         
                         synthCore.saveToBank(bank_id);
                     }
+                } else if (command_name === "volume") {
+                    // Handle volume command with smooth ramping
+                    const volume = typeof command_data === "number" ? command_data : command_data.value;
+                    const mode = command_data.mode || "natural";
+                    
+                    if (synthCore && typeof volume === "number") {
+                        console.log(`[SYNTH] Setting volume to ${volume} (mode: ${mode})`);
+                        
+                        if (mode === "natural") {
+                            // Natural dynamics: affect both master gain and bow force
+                            // Master gain: 0 to 0.8 of slider value (to prevent clipping)
+                            synthCore.setMasterGain(volume * 0.8);
+                            
+                            // Bow force: map volume to a natural bow force range
+                            // At volume 0: bow force = 0
+                            // At volume 0.5: bow force = 0.5  
+                            // At volume 1: bow force = 0.8 (strong but not harsh)
+                            const bowForce = volume * 0.8;
+                            synthCore.setBowForce(bowForce);
+                        } else {
+                            // Just control master gain
+                            synthCore.setMasterGain(volume);
+                        }
+                    }
                 } else {
                     console.warn(`Unknown command: ${command_name}`);
                 }
@@ -702,10 +731,7 @@
                         }),
                     );
 
-                    // request current program now that controller is connected and audio graph is ready
-                    if (audio_context && synthCore && synthCore.isInitialized) {
-                        request_current_program();
-                    }
+                    // Don't request program here - wait for SynthCore initialization
                 });
 
                 data_channel.addEventListener("close", () => {
@@ -714,9 +740,9 @@
                     update_controller_list();
                 });
 
-                data_channel.addEventListener("message", (event) => {
+                data_channel.addEventListener("message", async (event) => {
                     const data = JSON.parse(event.data);
-                    handle_data_message(data);
+                    await handle_data_message(data);
                 });
 
                 pc.addEventListener("connectionstatechange", () => {

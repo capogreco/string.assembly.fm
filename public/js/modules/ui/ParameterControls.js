@@ -232,6 +232,13 @@ export class ParameterControls {
     this.appState.subscribe("expressions", (expressions) => {
       this.updateExpressionParameterVisibility(expressions || {});
     });
+
+    // Listen for bank loaded events to update parameters
+    this.eventBus.on("programState:bankLoaded", (data) => {
+      if (data.program && data.program.parameters) {
+        this.updateParameterValues(data.program.parameters);
+      }
+    });
   }
 
   /**

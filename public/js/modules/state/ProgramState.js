@@ -165,22 +165,8 @@ export class ProgramState {
     try {
       this.isUpdating = true;
       
-      // Apply parameter values
-      Object.entries(program.parameters).forEach(([paramId, value]) => {
-        const element = document.getElementById(paramId);
-        if (element) {
-          element.value = value;
-          
-          // Update display value
-          const displayElement = document.getElementById(`${paramId}_value`);
-          if (displayElement) {
-            displayElement.textContent = value;
-          }
-          
-          // Trigger input event
-          element.dispatchEvent(new Event('input', { bubbles: true }));
-        }
-      });
+      // The ParameterControls module will now handle applying parameter values
+      // by listening to the programState:bankLoaded event.
       
       // Apply power state
       const powerCheckbox = document.getElementById('power');

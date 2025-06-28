@@ -83,6 +83,7 @@
                 border: 1px solid #404040;
                 cursor: pointer;
                 transition: all 0.2s;
+                user-select: none;
             }
             
             .bank-item:hover {
@@ -219,15 +220,26 @@
                 transform: none;
                 box-shadow: none;
             }
+            
+            button.success {
+                background: #27ae60 !important;
+                box-shadow: 0 4px 12px rgba(39, 174, 96, 0.3) !important;
+            }
+            
+            button.error {
+                background: #e74c3c !important;
+                box-shadow: 0 4px 12px rgba(231, 76, 60, 0.3) !important;
+            }
 
             #status {
                 text-align: center;
-                padding: 12px;
+                padding: 8px 12px;
                 border-radius: 6px;
-                margin-bottom: 20px;
+                margin-bottom: 10px;
                 font-weight: 500;
                 background: #e74c3c;
                 color: white;
+                font-size: 0.9em;
             }
 
             #status.connected {
@@ -235,7 +247,7 @@
             }
             
             #status.ready {
-                background: #f39c12;
+                background: #27ae60;
             }
 
             #stats {

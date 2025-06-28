@@ -391,7 +391,19 @@ export class AppState {
   // Connection state helpers
   addConnectedSynth(synthId, synthData) {
     const synths = new Map(this.get('connectedSynths'));
-    synths.set(synthId, synthData);
+    // Ensure all fields are initialized
+    const enrichedData = {
+      id: synthId,
+      connectedAt: Date.now(),
+      latency: null,
+      state: null,
+      audioEnabled: false,
+      instrumentJoined: false,
+      connectionHealth: 'good',
+      lastPing: null,
+      ...synthData
+    };
+    synths.set(synthId, enrichedData);
     this.set('connectedSynths', synths);
   }
 
@@ -407,11 +419,43 @@ export class AppState {
     if (synthData) {
       synthData.latency = latency;
       synthData.lastPing = Date.now();
+      
+      // Update connection health based on latency
+      if (latency < 50) {
+        synthData.connectionHealth = 'excellent';
+      } else if (latency < 100) {
+        synthData.connectionHealth = 'good';
+      } else if (latency < 200) {
+        synthData.connectionHealth = 'fair';
+      } else {
+        synthData.connectionHealth = 'poor';
+      }
+      
       synths.set(synthId, synthData);
       this.set('connectedSynths', synths);
 
       // Update average latency
       this.#updateAverageLatency();
+    }
+  }
+  
+  updateSynthState(synthId, stateUpdate) {
+    const synths = new Map(this.get('connectedSynths'));
+    const synthData = synths.get(synthId);
+    if (synthData) {
+      // Update specific state fields
+      if (stateUpdate.audioEnabled !== undefined) {
+        synthData.audioEnabled = stateUpdate.audioEnabled;
+      }
+      if (stateUpdate.instrumentJoined !== undefined) {
+        synthData.instrumentJoined = stateUpdate.instrumentJoined;
+      }
+      if (stateUpdate.state !== undefined) {
+        synthData.state = stateUpdate.state;
+      }
+      
+      synths.set(synthId, synthData);
+      this.set('connectedSynths', synths);
     }
   }
 

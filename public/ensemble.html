@@ -361,6 +361,16 @@
                         `[${this.id}] SynthCore initialized with panning`,
                         "info",
                     );
+                    
+                    // Apply any pending program that arrived before initialization
+                    if (this.pendingProgram) {
+                        log(`[${this.id}] Applying pending program after initialization`, "info");
+                        this.synthCore.applyProgram(this.pendingProgram.program, this.pendingProgram.transition);
+                        this.pendingProgram = null;
+                    } else {
+                        // Now that SynthCore is initialized, request current program from controller
+                        this.requestCurrentProgram();
+                    }
                 }
 
                 createElements(container) {
@@ -464,11 +474,26 @@
                     }
                 }
 
-                applyProgram(program, transition) {
+                async applyProgram(program, transition) {
                     log(
                         `[${this.id}] Applying program via SynthCore: freq=${program.fundamentalFrequency?.toFixed(1)}Hz${transition ? " with transition" : ""}`,
                         "info",
                     );
+
+                    // Ensure audio is initialized before applying program
+                    if (!this.audioInitialized) {
+                        log(`[${this.id}] Audio not initialized, initializing now...`, "info");
+                        // Initialize audio context if needed
+                        if (!audioContext) {
+                            await initializeAudioSystem();
+                        }
+                        if (audioContext && masterGain) {
+                            await this.ensureAudioInitialized(audioContext, masterGain);
+                        } else {
+                            log(`[${this.id}] Cannot initialize audio - no audio context available`, "error");
+                            return;
+                        }
+                    }
 
                     // Debug log expression parameters being applied
                     if (program.trillEnabled) {
@@ -539,9 +564,12 @@
                         this.synthCore.applyProgram(program, transition);
                     } else {
                         log(
-                            `[${this.id}] SynthCore not ready for program`,
-                            "warn",
+                            `[${this.id}] Cannot apply program yet - synthCore not ready. Will be applied after initialization.`,
+                            "warn"
                         );
+                        // Store program to apply after initialization
+                        this.pendingProgram = { program, transition };
+                        return;
                     }
 
                     if (this.element) {
@@ -552,6 +580,22 @@
                         "info",
                     );
                 } // End of applyProgram method
+                
+                requestCurrentProgram() {
+                    // Send request to controller for current program
+                    for (const [controllerId, controller] of this.controllers) {
+                        if (controller.channel && controller.channel.readyState === "open") {
+                            controller.channel.send(
+                                JSON.stringify({
+                                    type: "request_program",
+                                    timestamp: Date.now()
+                                })
+                            );
+                            log(`[${this.id}] Requested current program from controller`, "info");
+                            break;
+                        }
+                    }
+                }
                 
                 requestProgramForBank(bankId, transition) {
                     // Send request to controller for this specific bank
@@ -1127,6 +1171,8 @@
                             },
                         }),
                     );
+                    
+                    // Don't request program here - wait for SynthCore initialization
                 });
 
                 data_channel.addEventListener("message", (event) => {

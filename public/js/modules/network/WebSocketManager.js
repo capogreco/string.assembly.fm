@@ -216,6 +216,12 @@ export class WebSocketManager {
       );
     }
 
+    // Emit connection event immediately
+    this.eventBus.emit("websocket:connected", {
+      clientId: this.clientId,
+      timestamp: Date.now(),
+    });
+
     // Send registration message
     this.send({
       type: "register",
@@ -228,12 +234,6 @@ export class WebSocketManager {
 
     // Send queued messages
     this.flushMessageQueue();
-
-    // Emit connection event
-    this.eventBus.emit("websocket:connected", {
-      clientId: this.clientId,
-      timestamp: Date.now(),
-    });
   }
 
   /**
@@ -431,11 +431,21 @@ export class WebSocketManager {
   startHeartbeat() {
     this.clearHeartbeat();
 
+    // Send the first ping immediately
+    if (this.isConnected) {
+      this.send({
+        type: "ping",
+        timestamp: Date.now(),
+        target: "server",
+      });
+    }
+
     this.heartbeatInterval = setInterval(() => {
       if (this.isConnected) {
         this.send({
           type: "ping",
           timestamp: Date.now(),
+          target: "server",
         });
       }
     }, Config.NETWORK.PING_INTERVAL);

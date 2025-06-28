@@ -77,8 +77,26 @@ export class ProgramManager {
    * @param {number} bankId - Bank ID to load from
    * @deprecated Use programState.loadFromBank() instead
    */
-  loadFromBank(bankId) {
-    // Delegate to ProgramState
+  loadFromBank(bankId, options = { preview: false }) {
+    if (options.preview) {
+      const program = this.programState.banks.get(bankId);
+      if (program) {
+        // Apply program parameters without dispatching events
+        this.applyProgramToUI(program.parameters, { dispatchEvents: false });
+        this.applyHarmonicSelectionsToUI(program.harmonicSelections);
+        this.applyExpressionToUI(program.selectedExpression);
+
+        // Manually update the piano keyboard
+        const pianoKeyboard = window.modular?.pianoKeyboard;
+        if (pianoKeyboard) {
+          pianoKeyboard.setChord(program.chord.frequencies);
+          pianoKeyboard.expressionHandler.restoreExpressions(program.chord.expressions);
+        }
+        return true;
+      }
+      return false;
+    }
+    // Delegate to ProgramState for full load
     return this.programState.loadFromBank(bankId);
   }
 
@@ -132,7 +150,7 @@ export class ProgramManager {
    * Apply program values to UI elements
    * @param {Object} program - Program data to apply
    */
-  applyProgramToUI(program) {
+  applyProgramToUI(program, options = { dispatchEvents: true }) {
     // Prevent recursive updates
     if (this.isApplyingProgram) {
       console.warn('[ProgramManager] Prevented recursive applyProgramToUI call');
@@ -155,7 +173,9 @@ export class ProgramManager {
             }
 
             // Trigger input event to notify other systems
-            element.dispatchEvent(new Event('input', { bubbles: true }));
+            if (options.dispatchEvents) {
+              element.dispatchEvent(new Event('input', { bubbles: true }));
+            }
           }
         }
       });
@@ -169,14 +189,15 @@ export class ProgramManager {
    * @param {Object} harmonicSelections - Harmonic selections to apply
    */
   applyHarmonicSelectionsToUI(harmonicSelections) {
-    Object.entries(harmonicSelections).forEach(([selector, values]) => {
+    Object.entries(harmonicSelections).forEach(([key, values]) => {
+      const [expression, type] = key.split('-');
       const buttons = document.querySelectorAll(
-        `.harmonic-selector[data-expression="${selector.split('-')[0]}"] .harmonic-button`
+        `.harmonic-selector[data-expression="${expression}"] .harmonic-row[data-type="${type}"] .harmonic-button`
       );
 
       buttons.forEach(button => {
         const value = parseInt(button.dataset.value);
-        const isSelected = values.has(value);
+        const isSelected = values.includes(value);
         button.classList.toggle('selected', isSelected);
       });
     });

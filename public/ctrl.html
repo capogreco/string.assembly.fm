@@ -9,8 +9,6 @@
     <body>
         <div class="main-wrapper">
             <div class="container">
-            <div id="status">Disconnected</div>
-
             <div id="controller_warning" class="warning">
                 ⚠️ Controller conflict detected - multiple controllers detected!
                 <div
@@ -82,16 +80,12 @@
                         border: 1px solid #374151;
                     "
                 >
-                    <strong style="color: #f1f5f9;">Expression Display:</strong>
                     <div
                         id="expression-content"
                         style="
-                            margin-top: 10px;
                             color: #9ca3af;
-                            font-style: italic;
                         "
                     >
-                        Click piano keys to add notes to chord
                     </div>
                 </div>
 
@@ -814,10 +808,26 @@
                 </div>
             </div>
 
-            <hr class="separator" />
-
-            <div class="section">
-                <div class="section-title">Master Output</div>
+        </div>
+        
+        <div class="transition-sidebar">
+            <div id="status">Disconnected</div>
+            <div id="stats" style="margin-bottom: 15px;">
+                <div class="stat" style="display: flex; flex-direction: column; align-items: center;">
+                    <strong id="connected_count" style="display: block; order: 1;">0</strong>
+                    <span style="display: block; order: 2;">Connected</span>
+                </div>
+                <div class="stat" style="display: flex; flex-direction: column; align-items: center;">
+                    <strong id="avg_latency" style="display: block; order: 1;">-</strong>
+                    <span style="display: block; order: 2;">Avg Latency</span>
+                </div>
+            </div>
+            
+            <!-- Master Output -->
+            <div class="section" style="background: #1a1a1a; border-left-color: #667eea;">
+                <div class="section-title" style="color: #a78bfa; border-bottom-color: #2d3748; font-size: 1em;">
+                    Master Output
+                </div>
                 <div class="controls">
                     <div class="control-group">
                         <label for="masterGain">Volume</label>
@@ -834,56 +844,13 @@
                         >
                     </div>
                     <div class="control-group">
-                        <label>
-                            <input type="checkbox" id="power" checked /> Power
-                            On/Off
-                        </label>
-                        <span></span>
+                        <label for="power">Power</label>
+                        <div style="display: flex; align-items: center;">
+                            <input type="checkbox" id="power" checked />
+                            <span style="margin-left: 8px;">On/Off</span>
+                        </div>
                         <span></span>
                     </div>
-                </div>
-            </div>
-
-            <hr class="separator" />
-
-            <div class="section">
-                <div class="section-title">Program Banking</div>
-                <div style="font-size: 0.8em; color: #666; margin-bottom: 10px; padding: 8px; background: #f0f0f0; border-radius: 4px;">
-                    💡 <strong>Shift+1-9</strong> to save, <strong>1-9</strong> to load (0 = Bank 10)
-                </div>
-                <div class="banking-controls">
-                    <label for="bank_selector">Bank:</label>
-                    <select id="bank_selector">
-                        <option value="1">Bank 1 ⚪</option>
-                        <option value="2">Bank 2 ⚪</option>
-                        <option value="3">Bank 3 ⚪</option>
-                        <option value="4">Bank 4 ⚪</option>
-                        <option value="5">Bank 5 ⚪</option>
-                    </select>
-                    <button id="save_bank">Save</button>
-                    <button id="load_bank">Load</button>
-                </div>
-                <div style="font-size: 0.8em; color: #666; margin-top: 5px">
-                    Banks store: Parameters + Harmonic Ratios + Chord +
-                    Expressions
-                </div>
-            </div>
-
-            <div id="synths">
-                <h3>Connected Synths</h3>
-                <div id="synth_list">None connected</div>
-            </div>
-        </div>
-        
-        <div class="transition-sidebar">
-            <div id="stats" style="margin-bottom: 15px;">
-                <div class="stat" style="display: flex; flex-direction: column; align-items: center;">
-                    <strong id="connected_count" style="display: block; order: 1;">0</strong>
-                    <span style="display: block; order: 2;">Connected</span>
-                </div>
-                <div class="stat" style="display: flex; flex-direction: column; align-items: center;">
-                    <strong id="avg_latency" style="display: block; order: 1;">-</strong>
-                    <span style="display: block; order: 2;">Avg Latency</span>
                 </div>
             </div>
             
@@ -906,7 +873,7 @@
                     </div>
                     <div class="control-group">
                         <label for="transitionDurationSpread"
-                            >Duration Spread</label
+                            >Spread</label
                         >
                         <input
                             type="range"
@@ -941,8 +908,13 @@
             
             <!-- Active Program Display -->
             <div class="section" style="margin-top: 20px; background: #1a1a1a; border-left-color: #4ade80;">
-                <div class="section-title" style="color: #4ade80; border-bottom-color: #2d3748; font-size: 1em;">
+                <div class="section-title" style="color: #4ade80; border-bottom-color: #2d3748; font-size: 1em; position: relative;">
                     Active Program
+                    <button id="quick_save" disabled style="position: absolute; right: 10px; top: 0; padding: 2px 12px; font-size: 0.8em; background: #27ae60; color: white; border: none; border-radius: 3px; cursor: pointer; transition: background 0.2s;"
+                            onmouseover="this.style.background='#2ecc71'" 
+                            onmouseout="this.style.background='#27ae60'">
+                        Save
+                    </button>
                 </div>
                 <div id="active-program-display" style="padding: 10px; text-align: center; font-family: monospace; font-size: 1.1em; color: #e2e8f0;">
                     <span style="color: #64748b;">No active program</span>
@@ -965,7 +937,35 @@
                     </div>
                 </div>
             </div>
+            
+            <!-- Connected Synths -->
+            <div class="section" style="margin-top: 20px; background: #1a1a1a; border-left-color: #8b5cf6;">
+                <div class="section-title" style="color: #c084fc; border-bottom-color: #2d3748; font-size: 1em;">
+                    Connected Synths
+                </div>
+                <div id="synth_list" style="font-size: 0.9em; color: #e2e8f0; padding: 10px;">
+                    <span style="color: #64748b;">None connected</span>
+                </div>
+            </div>
         </div>
+        </div>
+        
+        <!-- Hidden bank elements to maintain compatibility with existing JavaScript -->
+        <div style="display: none;">
+            <select id="bank_selector">
+                <option value="1">Bank 1 ⚪</option>
+                <option value="2">Bank 2 ⚪</option>
+                <option value="3">Bank 3 ⚪</option>
+                <option value="4">Bank 4 ⚪</option>
+                <option value="5">Bank 5 ⚪</option>
+                <option value="6">Bank 6 ⚪</option>
+                <option value="7">Bank 7 ⚪</option>
+                <option value="8">Bank 8 ⚪</option>
+                <option value="9">Bank 9 ⚪</option>
+                <option value="10">Bank 10 ⚪</option>
+            </select>
+            <button id="save_bank">Save</button>
+            <button id="load_bank">Load</button>
         </div>
 
         <!-- Load the module loader (handles modular vs legacy) -->

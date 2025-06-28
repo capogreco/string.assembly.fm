@@ -122,7 +122,6 @@ export const Config = {
  * @returns {Promise<void>}
  */
 export async function fetchIceServers() {
-  // REMOVED: console.log('[CONFIG-DEBUG] Raw ICE servers received:', rawServerData); // This caused a ReferenceError
   try {
     const response = await fetch("/ice-servers");
     if (!response.ok) {

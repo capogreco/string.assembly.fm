@@ -697,10 +697,12 @@ export class PianoExpressionHandler {
       expression = null; // Don't set it again later
     } else if (dy > this.TREMOLO_THRESHOLD) {
       // Downward drag - tremolo
+      const tremoloArticulation = document.getElementById('tremoloArticulation');
       expression = {
         type: "tremolo",
         depth: this.calculateExpressionDepth(dy, this.TREMOLO_THRESHOLD),
         speed: 10, // Base speed, modified later by harmonic ratios
+        articulation: tremoloArticulation ? parseFloat(tremoloArticulation.value) : 0.8,
       };
       // Set expression BEFORE adding to chord
       this.setExpression(this.dragStartNote, expression);

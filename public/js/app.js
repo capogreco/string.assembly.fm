@@ -34,71 +34,34 @@ async function initializeApp() {
     );
 
     // Initialize core systems
-    try {
-      await initializeCore();
-    } catch (error) {
-      Logger.log(`Failed to initialize core systems: ${error}`, "error");
-      throw error;
-    }
+    await initializeCore();
 
     // Initialize state management
-    try {
-      initializeState();
-    } catch (error) {
-      Logger.log(`Failed to initialize state management: ${error}`, "error");
-      throw error;
-    }
+    initializeState();
 
     // Initialize program management
-    try {
-      initializeProgramManager();
-      
-      // Initialize new program state system
-      programState.initialize();
-      Logger.log("Program state system initialized", "lifecycle");
-    } catch (error) {
-      Logger.log(`Failed to initialize program management: ${error}`, "error");
-      throw error;
-    }
+    initializeProgramManager();
+    programState.initialize();
+    Logger.log("Program state system initialized", "lifecycle");
 
-    // Initialize network layer
-    try {
-      await initializeNetwork();
-    } catch (error) {
-      Logger.log(`Failed to initialize network layer: ${error}`, "error");
-      throw error;
-    }
+    // Initialize UI components BEFORE network so status updates are visible
+    await initializeUI();
 
-    // Initialize UI components
-    try {
-      await initializeUI();
-    } catch (error) {
-      Logger.log(`Failed to initialize UI: ${error}`, "error");
-      throw error;
-    }
+    // Initialize network layer and wait for connection
+    await initializeNetwork();
 
     // Initialize audio system
-    try {
-      await initializeAudio();
-    } catch (error) {
-      Logger.log(`Failed to initialize audio system: ${error}`, "error");
-      throw error;
-    }
+    await initializeAudio();
 
     // Set up event listeners
-    try {
-      setupGlobalEventListeners();
-    } catch (error) {
-      Logger.log(`Failed to set up event listeners: ${error}`, "error");
-      console.error("Event listener setup error:", error);
-      throw error;
-    }
+    setupGlobalEventListeners();
 
     Logger.log("Application initialized successfully", "lifecycle");
-    Logger.log("Application ready (modular-v1.0)", "lifecycle");
-
-    // Mark as ready
+    
+    // Mark as ready only after all systems are up
     appState.set("connectionStatus", "ready");
+    
+    Logger.log("Application ready (modular-v1.0)", "lifecycle");
 
     // Set global flag to indicate modular system is fully loaded
     window.__modularSystemLoaded = true;
@@ -369,8 +332,15 @@ function setupUIEventHandlers() {
   // Set up "Send Current Program" button
   setupProgramSendButton();
   
+  // Set up "Quick Save" button
+  setupQuickSaveButton();
+  
   // Set up bank control buttons
   setupBankControls();
+  
+  // Set up power and volume controls
+  setupPowerControl();
+  setupVolumeControl();
 }
 
 /**
@@ -615,34 +585,45 @@ function updateBankDisplay() {
       
       // Add click handlers to bank items
       savedBanksDisplay.querySelectorAll('.bank-item').forEach(item => {
-        item.addEventListener('click', async () => {
+        item.addEventListener('click', async (e) => {
+          e.preventDefault(); // Prevent text selection on shift-click
           const bankId = parseInt(item.dataset.bankId);
-          if (programState.loadFromBank(bankId)) {
-            // Update bank selector
-            const bankSelector = document.getElementById("bank_selector");
-            if (bankSelector) {
-              bankSelector.value = bankId;
+          const isPreview = e.shiftKey;
+
+          if (isPreview) {
+            // Shift-click: Preview the program without sending to synths
+            if (programManager.loadFromBank(bankId, { preview: true })) {
+              uiManager.showNotification(`Previewing Bank ${bankId}`, "info", 1500);
             }
-            
-            // Tell synths to load their stored bank
-            const result = await sendBankLoadMessage(bankId);
-            
-            // Set as active program if successfully sent to synths
-            if (result.successCount > 0) {
-              programState.setActiveProgram();
-              
-              // Mark all parameters as sent since we just loaded and sent them
-              if (parameterControls.markAllParametersSent) {
-                parameterControls.markAllParametersSent();
+          } else {
+            // Normal click: Load and send to synths
+            if (programState.loadFromBank(bankId)) {
+              // Update bank selector
+              const bankSelector = document.getElementById("bank_selector");
+              if (bankSelector) {
+                bankSelector.value = bankId;
               }
               
-              // Update sync status
-              updateSyncStatus();
+              // Tell synths to load their stored bank
+              const result = await sendBankLoadMessage(bankId);
+              
+              // Set as active program if successfully sent to synths
+              if (result.successCount > 0) {
+                programState.setActiveProgram();
+                
+                // Mark all parameters as sent since we just loaded and sent them
+                if (parameterControls.markAllParametersSent) {
+                  parameterControls.markAllParametersSent();
+                }
+                
+                // Update sync status
+                updateSyncStatus();
+              }
+              
+              // Update displays
+              updateBankDisplay();
+              updateActiveProgramDisplay();
             }
-            
-            // Update displays
-            updateBankDisplay();
-            updateActiveProgramDisplay();
           }
         });
       });
@@ -663,40 +644,10 @@ function updateBankDisplay() {
  * Set up network event handlers
  */
 function setupNetworkEventHandlers() {
-  // Handle synth connections - send current program but don't redistribute
+  // Handle synth connections - just log, don't send program
   networkCoordinator.on("synthConnected", (data) => {
     Logger.log(`Synth connected: ${data.synthId}`, "connections");
-
-    // Send the current program state to the new synth
-    const currentProgram = appState.get("currentProgram");
-
-    if (currentProgram) {
-      const currentChord = appState.get("currentChord") || [];
-
-      if (currentChord.length > 0) {
-        // PartManager handles synth connections automatically
-        // Just log that we received the connection
-        Logger.log(
-          `Synth ${data.synthId} connected - PartManager will handle assignment`,
-          "messages",
-        );
-      } else {
-        // No active chord - send base program
-        networkCoordinator.sendProgramToSynth(data.synthId, currentProgram);
-        Logger.log(
-          `Sent base program to newly connected ${data.synthId}`,
-          "messages",
-        );
-      }
-    } else {
-      // No current program - send default program
-      const defaultProgram = programManager.createExampleProgram();
-      networkCoordinator.sendProgramToSynth(data.synthId, defaultProgram);
-      Logger.log(
-        `Sent default program to newly connected ${data.synthId}`,
-        "messages",
-      );
-    }
+    // Don't send program here - wait for synth to request after initialization
   });
 
   // Handle program requests from synths
@@ -847,6 +798,16 @@ function setupGlobalEventListeners() {
     // Use event.code which is consistent regardless of shift state
     const code = event.code;
     const key = event.key;
+    
+    // Check for 's' key (Quick Save)
+    if (key === 's' && !event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey) {
+      event.preventDefault();
+      const quickSaveButton = document.getElementById("quick_save");
+      if (quickSaveButton && !quickSaveButton.disabled) {
+        quickSaveButton.click();
+      }
+      return;
+    }
     
     // Check for Digit1-Digit9 or Digit0
     if (code && code.startsWith("Digit")) {
@@ -1021,6 +982,207 @@ function setupProgramSendButton() {
   });
 
   Logger.log("Send Current Program button handler registered", "lifecycle");
+}
+
+/**
+ * Set up "Quick Save" button handler
+ */
+function setupQuickSaveButton() {
+  const quickSaveButton = document.getElementById("quick_save");
+  
+  if (!quickSaveButton) {
+    Logger.log("Quick Save button not found", "error");
+    return;
+  }
+  
+  // Enable the button once everything is set up
+  quickSaveButton.disabled = false;
+  
+  quickSaveButton.addEventListener("click", async () => {
+    try {
+      // Check if there's an active program to save
+      if (!programState.activeProgram) {
+        uiManager.showNotification(
+          "No active program to save. Send to synths first!",
+          "warning",
+          2000
+        );
+        return;
+      }
+      
+      // Find the next available bank (1-10)
+      const banks = programState.getSavedBanks();
+      let nextAvailableBank = null;
+      
+      for (let i = 1; i <= 10; i++) {
+        const bank = banks.find(b => b.id === i);
+        if (!bank || !bank.saved) {
+          nextAvailableBank = i;
+          break;
+        }
+      }
+      
+      if (!nextAvailableBank) {
+        uiManager.showNotification(
+          "All banks are full! Clear a bank first.",
+          "warning",
+          2000
+        );
+        return;
+      }
+      
+      // Save to the next available bank
+      const success = programState.saveToBank(nextAvailableBank);
+      
+      if (success) {
+        // Also tell all synths to save to this bank
+        const connectedSynths = appState.get("connectedSynths");
+        if (connectedSynths && connectedSynths.size > 0) {
+          const synthIds = Array.from(connectedSynths.keys());
+          let saveCount = 0;
+          
+          for (const synthId of synthIds) {
+            const message = {
+              type: "command",
+              name: "save",
+              value: nextAvailableBank
+            };
+            
+            const saveSuccess = networkCoordinator.sendCommandToSynth(synthId, message);
+            if (saveSuccess) {
+              saveCount++;
+            }
+          }
+          
+          Logger.log(`Bank ${nextAvailableBank} save command sent to ${saveCount}/${synthIds.length} synths`, "messages");
+        }
+        
+        // Update bank selector to show the saved bank
+        const bankSelector = document.getElementById("bank_selector");
+        if (bankSelector) {
+          bankSelector.value = nextAvailableBank;
+        }
+        
+        // Update bank display
+        updateBankDisplay();
+        updateActiveProgramDisplay();
+        
+        // Visual feedback on button
+        quickSaveButton.textContent = `✓ Bank ${nextAvailableBank}`;
+        quickSaveButton.classList.add("success");
+        setTimeout(() => {
+          quickSaveButton.classList.remove("success");
+          quickSaveButton.textContent = "Save";
+        }, 2000);
+        
+        uiManager.showNotification(
+          `Saved to Bank ${nextAvailableBank}`,
+          "success",
+          1500
+        );
+        
+        Logger.log(`Quick saved to Bank ${nextAvailableBank}`, "lifecycle");
+      }
+    } catch (error) {
+      Logger.log(`Quick save failed: ${error}`, "error");
+      uiManager.showNotification(
+        "Quick save failed",
+        "error",
+        2000
+      );
+    }
+  });
+  
+  Logger.log("Quick Save button handler registered", "lifecycle");
+}
+
+/**
+ * Set up power control
+ */
+function setupPowerControl() {
+  const powerCheckbox = document.getElementById("power");
+  
+  if (!powerCheckbox) {
+    Logger.log("Power checkbox not found", "error");
+    return;
+  }
+  
+  powerCheckbox.addEventListener("change", (event) => {
+    const isOn = event.target.checked;
+    Logger.log(`Power ${isOn ? 'ON' : 'OFF'}`, "messages");
+    
+    // Send power command to all synths
+    const command = {
+      type: "command",
+      name: "power",
+      value: isOn
+    };
+    
+    const count = networkCoordinator.broadcastCommand(command);
+    
+    if (count > 0) {
+      uiManager.showNotification(
+        `Power ${isOn ? 'ON' : 'OFF'} sent to ${count} synths`,
+        "success",
+        1000
+      );
+    } else {
+      uiManager.showNotification(
+        "No synths connected",
+        "warning",
+        1500
+      );
+    }
+  });
+  
+  Logger.log("Power control handler registered", "lifecycle");
+}
+
+/**
+ * Set up volume control with debouncing
+ */
+function setupVolumeControl() {
+  const volumeSlider = document.getElementById("masterGain");
+  const volumeDisplay = document.getElementById("masterGainValue");
+  
+  if (!volumeSlider || !volumeDisplay) {
+    Logger.log("Volume controls not found", "error");
+    return;
+  }
+  
+  // Update display immediately on input
+  volumeSlider.addEventListener("input", (event) => {
+    const volume = parseFloat(event.target.value);
+    volumeDisplay.textContent = volume.toFixed(2);
+  });
+  
+  // Send to synths only on release
+  volumeSlider.addEventListener("change", (event) => {
+    const volume = parseFloat(event.target.value);
+    Logger.log(`Volume set to ${volume}`, "parameters");
+    
+    // Send volume command to all synths
+    // This affects both master gain and bow force for natural dynamics
+    const command = {
+      type: "command",
+      name: "volume",
+      value: volume,
+      // Optional: specify what the volume controls
+      mode: "natural" // "natural" = both gain and bow force, "gain" = just master gain
+    };
+    
+    const count = networkCoordinator.broadcastCommand(command);
+    
+    // Brief visual feedback
+    if (count > 0) {
+      volumeDisplay.style.color = '#4ade80';
+      setTimeout(() => {
+        volumeDisplay.style.color = '';
+      }, 300);
+    }
+  });
+  
+  Logger.log("Volume control handler registered", "lifecycle");
 }
 
 /**
