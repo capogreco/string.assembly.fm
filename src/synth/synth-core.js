@@ -293,12 +293,21 @@ export class SynthCore {
           // Also set the final value on the AudioParam for consistency
           audioParam.setValueAtTime(value, applyTime + transitionData.duration);
         } else if (transitionData && transitionData.duration) {
-          // Use smooth transition for other parameters
-          audioParam.setValueAtTime(audioParam.value, applyTime);
-          audioParam.linearRampToValueAtTime(
-            value,
-            applyTime + transitionData.duration,
-          );
+          // For glissando transitions, only ramp parameters that actually change
+          const currentValue = audioParam.value;
+          const glissandoEnabled = !transitionData || transitionData.glissando !== false;
+          
+          if (glissandoEnabled && Math.abs(currentValue - value) < 0.001) {
+            // Value unchanged during glissando, just set it to ensure stability
+            audioParam.setValueAtTime(value, applyTime);
+          } else {
+            // Value changed or non-glissando transition, apply ramp
+            audioParam.setValueAtTime(currentValue, applyTime);
+            audioParam.linearRampToValueAtTime(
+              value,
+              applyTime + transitionData.duration,
+            );
+          }
         } else {
           // Immediate change
           audioParam.setValueAtTime(value, applyTime);
@@ -327,11 +336,18 @@ export class SynthCore {
         this.gainNode.gain.linearRampToValueAtTime(targetGain, applyTime + transitionData.duration);
       } else if (transitionData && transitionData.duration) {
         // Normal gain transition for glissando mode
-        this.gainNode.gain.setValueAtTime(this.gainNode.gain.value, applyTime);
-        this.gainNode.gain.linearRampToValueAtTime(
-          targetGain,
-          applyTime + transitionData.duration,
-        );
+        // Only ramp if the gain is actually changing
+        const currentGain = this.gainNode.gain.value;
+        if (Math.abs(currentGain - targetGain) > 0.001) {
+          this.gainNode.gain.setValueAtTime(currentGain, applyTime);
+          this.gainNode.gain.linearRampToValueAtTime(
+            targetGain,
+            applyTime + transitionData.duration,
+          );
+        } else {
+          // Gain unchanged, just set it to ensure stability
+          this.gainNode.gain.setValueAtTime(targetGain, applyTime);
+        }
       } else {
         // Immediate change
         this.gainNode.gain.setValueAtTime(targetGain, applyTime);

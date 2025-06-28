@@ -12,16 +12,19 @@
             }
 
             body {
-                font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
-                background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+                font-family: monospace;
+                background: #000;
                 min-height: 100vh;
                 color: white;
-                padding: 20px;
+                margin: 0;
+                padding: 0;
+                overflow: hidden;
             }
 
             .container {
-                max-width: 1200px;
-                margin: 0 auto;
+                width: 100vw;
+                height: 100vh;
+                position: relative;
             }
 
             h1 {
@@ -69,11 +72,15 @@
             }
 
             .status-message {
+                position: absolute;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
                 text-align: center;
-                padding: 20px;
-                background: rgba(255, 255, 255, 0.1);
+                padding: 30px;
+                background: rgba(42, 42, 42, 0.9);
                 border-radius: 8px;
-                margin-bottom: 20px;
+                z-index: 100;
                 color: #f0f0f0;
                 font-size: 1.1em;
             }
@@ -102,38 +109,63 @@
 
             #calibration_phase,
             #join_phase {
+                position: absolute;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
                 text-align: center;
-                margin: 20px 0;
-                padding: 20px;
-                background: rgba(255, 255, 255, 0.05);
+                padding: 30px;
+                background: rgba(42, 42, 42, 0.9);
                 border-radius: 8px;
+                z-index: 100;
             }
 
             .synth-grid {
-                display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-                gap: 20px;
+                display: flex;
+                flex-direction: row;
+                gap: 0;
+                height: 100vh;
+                width: 100vw;
+                position: fixed;
+                top: 0;
+                left: 0;
+                background: #000;
             }
 
             .synth-unit {
-                background: rgba(255, 255, 255, 0.1);
-                border-radius: 12px;
-                padding: 20px;
-                backdrop-filter: blur(10px);
-                border: 1px solid rgba(255, 255, 255, 0.2);
-                transition: all 0.3s ease;
+                flex: 1;
+                position: relative;
+                overflow: hidden;
+                background: #000;
+            }
+            
+            .synth-visualizer {
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                z-index: 1;
+            }
+            
+            .synth-info {
+                position: absolute;
+                top: 10px;
+                left: 10px;
+                z-index: 10;
+                background: rgba(51, 51, 51, 0.8);
+                padding: 10px;
+                border-radius: 4px;
+                font-size: 12px;
+                color: #f0f0f0;
             }
 
             .synth-unit.active {
-                border-color: #3498db;
-                box-shadow: 0 0 20px rgba(52, 152, 219, 0.3);
+                /* Remove active styling since we're using full-screen visualizers */
             }
 
             .synth-header {
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                margin-bottom: 15px;
+                display: none; /* Not needed for visualizer view */
             }
 
             .synth-id {
@@ -153,31 +185,15 @@
             }
 
             .note-display {
-                background: rgba(0, 0, 0, 0.3);
-                border-radius: 6px;
-                padding: 10px;
-                margin-bottom: 10px;
-                font-family: monospace;
-                min-height: 40px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                font-size: 1.2em;
+                display: none; /* Not needed for visualizer view */
             }
 
             .expression-display {
-                font-size: 0.9em;
-                color: rgba(255, 255, 255, 0.8);
-                margin-bottom: 10px;
+                display: none; /* Not needed for visualizer view */
             }
 
             .level-meter {
-                height: 100px;
-                background: rgba(0, 0, 0, 0.3);
-                border-radius: 6px;
-                position: relative;
-                overflow: hidden;
-                margin-bottom: 10px;
+                display: none; /* Not needed for visualizer view */
             }
 
             .level-bar {
@@ -190,10 +206,7 @@
             }
 
             .pan-control {
-                display: flex;
-                align-items: center;
-                gap: 10px;
-                font-size: 0.9em;
+                display: none; /* Not needed for visualizer view */
             }
 
             .pan-slider {
@@ -361,6 +374,11 @@
                         `[${this.id}] SynthCore initialized with panning`,
                         "info",
                     );
+                    
+                    // Start visualizer if we have a canvas
+                    if (this.canvas) {
+                        this.startVisualizer();
+                    }
                     
                     // Apply any pending program that arrived before initialization
                     if (this.pendingProgram) {
@@ -767,73 +785,53 @@
                     const unit = document.createElement("div");
                     unit.className = "synth-unit";
 
-                    const header = document.createElement("div");
-                    header.className = "synth-header";
-
-                    const synthId = document.createElement("span");
-                    synthId.className = "synth-id";
+                    // Create canvas for visualizer
+                    const canvas = document.createElement("canvas");
+                    canvas.className = "synth-visualizer";
+                    unit.appendChild(canvas);
+                    
+                    // Create info overlay
+                    const info = document.createElement("div");
+                    info.className = "synth-info";
+                    
+                    const synthId = document.createElement("div");
                     synthId.textContent = this.id;
-
-                    const statusDot = document.createElement("div");
-                    statusDot.className = "status-dot connected";
-
-                    header.appendChild(synthId);
-                    header.appendChild(statusDot);
-
+                    synthId.style.fontWeight = "bold";
+                    synthId.style.marginBottom = "5px";
+                    
                     const noteDisplay = document.createElement("div");
-                    noteDisplay.className = "note-display";
                     noteDisplay.textContent = "--";
-
+                    noteDisplay.style.fontSize = "1.2em";
+                    noteDisplay.style.marginBottom = "3px";
+                    
                     const expressionDisplay = document.createElement("div");
-                    expressionDisplay.className = "expression-display";
-                    expressionDisplay.textContent = "Expression: None";
-
-                    const levelMeter = document.createElement("div");
-                    levelMeter.className = "level-meter";
-                    const levelBar = document.createElement("div");
-                    levelBar.className = "level-bar";
-                    levelMeter.appendChild(levelBar);
-
-                    const panControl = document.createElement("div");
-                    panControl.className = "pan-control";
-
-                    const panLabel = document.createElement("label");
-                    panLabel.textContent = "Pan:";
-
-                    const panSlider = document.createElement("input");
-                    panSlider.type = "range";
-                    panSlider.className = "pan-slider";
-                    panSlider.min = "-1";
-                    panSlider.max = "1";
-                    panSlider.step = "0.1";
-                    panSlider.value = this.panPosition.toString();
-
-                    const panValue = document.createElement("span");
-                    panValue.className = "pan-value";
-                    panValue.textContent = this.panPosition.toFixed(1);
-
-                    panControl.appendChild(panLabel);
-                    panControl.appendChild(panSlider);
-                    panControl.appendChild(panValue);
-
-                    unit.appendChild(header);
-                    unit.appendChild(noteDisplay);
-                    unit.appendChild(expressionDisplay);
-                    unit.appendChild(levelMeter);
-                    unit.appendChild(panControl);
+                    expressionDisplay.textContent = "None";
+                    expressionDisplay.style.fontSize = "0.9em";
+                    expressionDisplay.style.opacity = "0.8";
+                    
+                    info.appendChild(synthId);
+                    info.appendChild(noteDisplay);
+                    info.appendChild(expressionDisplay);
+                    unit.appendChild(info);
 
                     this.element = unit;
+                    this.canvas = canvas;
                     this.noteDisplay = noteDisplay;
                     this.expressionDisplay = expressionDisplay;
-                    this.levelMeter = levelBar;
-                    this.panControl = panSlider;
-
-                    panSlider.addEventListener("input", (e) => {
-                        const value = parseFloat(e.target.value);
-                        this.panner.pan.value = value;
-                        panValue.textContent = value.toFixed(1);
-                    });
-
+                    
+                    // Setup canvas context
+                    this.ctx = canvas.getContext("2d");
+                    
+                    // Handle canvas resize
+                    this.resizeCanvas = () => {
+                        const rect = unit.getBoundingClientRect();
+                        canvas.width = rect.width;
+                        canvas.height = rect.height;
+                    };
+                    
+                    // Initial resize
+                    setTimeout(this.resizeCanvas, 0);
+                    
                     return unit;
                 }
 
@@ -885,6 +883,79 @@
                     this.audioInitialized = false;
                     
                     log(`[${this.id}] Fully disconnected and cleaned up`, "info");
+                }
+                
+                drawVisualizer() {
+                    if (!this.isVisualizerRunning) return;
+                    requestAnimationFrame(() => this.drawVisualizer());
+                    
+                    if (!this.ctx || !this.canvas) return;
+                    
+                    // Use SynthCore's analyser if available
+                    const activeAnalyser = this.synthCore && this.synthCore.analyserNode
+                        ? this.synthCore.analyserNode
+                        : this.analyser;
+                    if (!activeAnalyser) return;
+                    
+                    // Get time domain data for waveform
+                    const bufferLength = activeAnalyser.fftSize;
+                    const dataArray = new Float32Array(bufferLength);
+                    activeAnalyser.getFloatTimeDomainData(dataArray);
+                    
+                    // Clear canvas
+                    this.ctx.fillStyle = "rgba(0, 0, 0, 1)";
+                    this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+                    
+                    // Set up drawing style
+                    this.ctx.lineWidth = 3; // Thinner for multiple synths
+                    this.ctx.strokeStyle = "#ffffff";
+                    this.ctx.lineCap = "round";
+                    this.ctx.lineJoin = "round";
+                    
+                    // Begin path for waveform
+                    this.ctx.beginPath();
+                    
+                    // Center x position
+                    const centerX = this.canvas.width / 2;
+                    const maxAmplitude = this.canvas.width * 2; // Smaller amplitude for multiple displays
+                    
+                    // Number of points to sample from the buffer
+                    const samples = 256;
+                    const step = Math.floor(bufferLength / samples);
+                    
+                    // Move to top center
+                    this.ctx.moveTo(centerX, 0);
+                    
+                    // Draw waveform with cosine envelope
+                    for (let i = 0; i < samples; i++) {
+                        const dataIndex = i * step;
+                        const sample = dataArray[dataIndex] || 0;
+                        
+                        // Y position (0 to canvas.height)
+                        const y = (i / (samples - 1)) * this.canvas.height;
+                        
+                        // Cosine envelope: 1 at center, 0 at top/bottom
+                        const envelope = Math.cos((i / (samples - 1) - 0.5) * Math.PI * 2) * 0.5 + 0.5;
+                        
+                        // Apply envelope to the sample amplitude
+                        const amplitude = sample * envelope * maxAmplitude;
+                        
+                        // X position with amplitude offset
+                        const x = centerX + amplitude;
+                        
+                        this.ctx.lineTo(x, y);
+                    }
+                    
+                    this.ctx.stroke();
+                }
+                
+                startVisualizer() {
+                    this.isVisualizerRunning = true;
+                    this.drawVisualizer();
+                }
+                
+                stopVisualizer() {
+                    this.isVisualizerRunning = false;
                 }
             }
 
@@ -943,8 +1014,7 @@
                     audioInitialized = true;
                     log("Audio initialized and synths powered on", "info");
                     
-                    // Start level meter updates
-                    updateLevelMeters();
+                    // Visualizers are started when individual synths initialize
                 } catch (error) {
                     log(`Failed to initialize audio: ${error.message}`, "error");
                     console.error(error);
@@ -1317,15 +1387,7 @@
                 }
             }
 
-            function updateLevelMeters() {
-                if (!isInitialized) return;
-
-                synths.forEach((synth) => {
-                    synth.updateLevel();
-                });
-
-                requestAnimationFrame(updateLevelMeters);
-            }
+            // Level meters removed in favor of waveform visualizers
 
             function log(message, type = "info") {
                 const logArea = document.getElementById("log-area");
@@ -1400,6 +1462,15 @@
 
                 // Add event listener for start button
                 document.getElementById("start-ensemble").addEventListener("click", handleStartEnsemble);
+                
+                // Add window resize handler
+                window.addEventListener('resize', () => {
+                    synths.forEach(synth => {
+                        if (synth.resizeCanvas) {
+                            synth.resizeCanvas();
+                        }
+                    });
+                });
 
                 try {
                     
