@@ -89,19 +89,20 @@
                 ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
 
                 ws.addEventListener("open", () => {
-                    console.log("connected to server");
                     status_el.textContent = `Connected as ${synth_id}`;
 
                     // register with server
                     send_message({
                         type: "register",
                         client_id: synth_id,
+                        client_type: "synth",
                     });
 
                     // request list of active controllers
                     send_message({
                         type: "request-controllers",
                         source: synth_id,
+                        target: "server",
                     });
                 });
 
@@ -119,14 +120,7 @@
 
             // send message via websocket
             function send_message(message) {
-                console.log(
-                    `[${synth_id}] Attempting to send message:`,
-                    message,
-                );
                 if (ws && ws.readyState === WebSocket.OPEN) {
-                    console.log(
-                        `[${synth_id}] WebSocket is open, sending message`,
-                    );
                     ws.send(JSON.stringify(message));
                 } else {
                     console.log(
@@ -137,13 +131,9 @@
 
             // handle incoming messages
             async function handle_message(message) {
-                console.log("received:", message);
 
                 if (message.type === "controllers-list") {
                     // received list of active controllers
-                    console.log(
-                        `received controllers list: ${message.controllers.join(", ")}`,
-                    );
                     for (const controller_id of message.controllers) {
                         if (!controllers.has(controller_id)) {
                             console.log(
@@ -209,9 +199,6 @@
                             controller.ice_queue &&
                             controller.ice_queue.length > 0
                         ) {
-                            console.log(
-                                `processing ${controller.ice_queue.length} queued ice candidates`,
-                            );
                             for (const candidate of controller.ice_queue) {
                                 await controller.connection.addIceCandidate(
                                     candidate,
@@ -226,15 +213,11 @@
                     if (controller && controller.connection) {
                         try {
                             if (controller.connection.remoteDescription) {
-                                console.log(
-                                    `adding ice candidate: ${message.data.candidate}`,
-                                );
                                 await controller.connection.addIceCandidate(
                                     message.data,
                                 );
                             } else {
                                 // queue ice candidate until remote description is set
-                                console.log("queueing ice candidate");
                                 if (!controller.ice_queue)
                                     controller.ice_queue = [];
                                 controller.ice_queue.push(message.data);
@@ -388,15 +371,7 @@
                     // Re-apply current program to restart bowing
                     // This is needed because calibration mode stops the bowing
                     if (current_program) {
-                        console.log(
-                            "Re-applying current program to restart bowing:",
-                            current_program,
-                        );
                         synthCore.applyProgram(current_program);
-                    } else {
-                        console.log(
-                            "No current program available.",
-                        );
                     }
                 } else {
                     console.error(
@@ -454,10 +429,6 @@
 
             // handle data messages from controllers
             async function handle_data_message(data) {
-                // Debug logging for incoming messages
-                if (data.type === "command") {
-                    console.log(`[SYNTH] Received command message:`, data);
-                }
                 
                 if (data.type === "param") {
                     console.log(`param ${data.name} = ${data.value}`);
@@ -508,28 +479,16 @@
                             ? "trill"
                             : "none";
 
-                    if (transitionData) {
-                        console.log(
-                            `Received program with transition: ${current_program.fundamentalFrequency?.toFixed(1)}Hz, expression: ${expression}, delay: ${transitionData.delay?.toFixed(2)}s`,
-                        );
-                    } else {
-                        console.log(
-                            `Received program: ${current_program.fundamentalFrequency?.toFixed(1)}Hz, expression: ${expression}`,
-                        );
-                    }
 
                     if (synthCore && synthCore.isInitialized) {
                         // Apply program with transition data
                         if (transitionData && (transitionData.stagger || transitionData.durationSpread)) {
                             // Calculate individual timing from stagger and spread
                             const calculatedTransition = calculate_transition_timing(transitionData);
-                            console.log(`[PROGRAM] Transition config: stagger=${transitionData.stagger}, spread=${transitionData.durationSpread}`);
-                            console.log(`[PROGRAM] Calculated: delay=${calculatedTransition.delay?.toFixed(3)}s, duration=${calculatedTransition.duration?.toFixed(3)}s`);
                             synthCore.applyProgram(current_program, calculatedTransition);
                         } else {
                             synthCore.applyProgram(current_program, transitionData);
                         }
-                        console.log("Program applied successfully");
                     } else {
                         console.warn("SynthCore still not ready after initialization attempt");
                     }
@@ -571,7 +530,6 @@
 
             // handle command messages
             function handle_command(command_name, command_data) {
-                console.log(`Handling command: ${command_name}`, command_data);
                 
                 if (command_name === "power") {
                     if (synthCore) {
@@ -582,7 +540,6 @@
                     const bank_id = command_data.bank || command_data.bank_id;
                     const transition = command_data.transition;
                     
-                    console.log(`[SYNTH] Load command received with bank_id: ${bank_id}, command_data:`, command_data);
                     
                     if (synthCore && typeof bank_id === "number") {
                         // Check if we have this bank saved locally
@@ -711,10 +668,6 @@
 
                 // create unified data channel
                 const data_channel = pc.createDataChannel("data");
-                console.log(
-                    `[${synth_id}] Created 'data' data channel, initial readyState: ${data_channel.readyState}`,
-                    data_channel,
-                );
                 controller.channel = data_channel;
 
                 data_channel.addEventListener("open", () => {
@@ -768,22 +721,15 @@
                 });
 
                 // create and send offer
-                console.log(`[${synth_id}] Creating WebRTC offer...`);
                 const offer = await pc.createOffer();
-                console.log(`[${synth_id}] Offer created:`, offer);
                 await pc.setLocalDescription(offer);
-                console.log(`[${synth_id}] Local description set`);
 
-                console.log(
-                    `[${synth_id}] Sending offer to controller ${controller_id}`,
-                );
                 send_message({
                     type: "offer",
                     source: synth_id,
                     target: controller_id,
                     data: offer,
                 });
-                console.log(`[${synth_id}] Offer send request completed`);
             }
 
             // update controller list display

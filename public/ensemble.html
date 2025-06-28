@@ -985,6 +985,7 @@
                         const registerMsg = {
                             type: "register",
                             client_id: synth.id,
+                            client_type: "synth",
                         };
                         log(
                             `[${synth.id}] Sending registration: ${JSON.stringify(registerMsg)}`,
@@ -996,6 +997,7 @@
                         const requestMsg = {
                             type: "request-controllers",
                             source: synth.id,
+                            target: "server",
                         };
                         log(
                             `[${synth.id}] Requesting controllers: ${JSON.stringify(requestMsg)}`,

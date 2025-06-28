@@ -211,17 +211,7 @@ export class SynthCore {
 
     this.currentProgram = { ...program };
     
-    // Debug log trill parameters if enabled
-    if (program.trillEnabled) {
-      this.log(`Applying program with trill: speed=${program.trillSpeed}, interval=${program.trillInterval}, articulation=${program.trillArticulation}`);
-    }
     
-    // Debug log transition data
-    if (transitionData) {
-      this.log(`Applying program with transition: duration=${transitionData.duration}, delay=${transitionData.delay}, stagger=${transitionData.stagger}, spread=${transitionData.durationSpread}`);
-    } else {
-      this.log("Applying program with no transition (immediate)");
-    }
 
     // Determine if we should apply immediately or with transition
     const applyTime =
@@ -336,7 +326,6 @@ export class SynthCore {
       this.log("In calibration mode, deferring bowing state change");
     } else if (shouldBow && !this.isBowing) {
       // Start bowing
-      this.log(`Starting bowing (freq=${program.fundamentalFrequency}, delay=${transitionData?.delay || 0})`);
       if (transitionData && transitionData.delay) {
         setTimeout(() => {
           this.bowedStringNode.port.postMessage({
@@ -354,14 +343,12 @@ export class SynthCore {
       }
     } else if (!shouldBow && this.isBowing) {
       // Stop bowing
-      this.log(`Stopping bowing (freq=${program.fundamentalFrequency})`);
       this.bowedStringNode.port.postMessage({
         type: "setBowing",
         value: false,
       });
       this.isBowing = false;
     } else {
-      this.log(`Bowing state unchanged: shouldBow=${shouldBow}, isBowing=${this.isBowing}, freq=${program.fundamentalFrequency}`);
     }
 
     // Log program with expression status and transition info
@@ -404,7 +391,6 @@ export class SynthCore {
         ? this.currentProgram?.masterGain || this.defaultParameters.masterGain
         : 0;
 
-      this.log(`Setting gain to ${targetGain} (powerOn=${powerOn}, currentProgram.masterGain=${this.currentProgram?.masterGain})`);
       
       this.gainNode.gain.linearRampToValueAtTime(
         targetGain,
