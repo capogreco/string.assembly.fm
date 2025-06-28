@@ -112,7 +112,6 @@
                 });
 
                 ws.addEventListener("close", () => {
-                    console.log("disconnected from server");
                     status_el.textContent = "Disconnected - Reconnecting...";
                     setTimeout(connect_websocket, 2000);
                 });
@@ -136,9 +135,6 @@
                     // received list of active controllers
                     for (const controller_id of message.controllers) {
                         if (!controllers.has(controller_id)) {
-                            console.log(
-                                `discovered controller: ${controller_id}`,
-                            );
                             controllers.set(controller_id, {
                                 id: controller_id,
                                 connection: null,
@@ -238,8 +234,7 @@
                     if (audio_context.state === "suspended") {
                         await audio_context.resume();
                     }
-                    console.log("AudioContext created/resumed.");
-                }
+                    }
 
                 // Initialize SynthCore if it doesn't exist or isn't initialized
                 if (!synthCore || !synthCore.isInitialized) {
@@ -253,8 +248,7 @@
                         audio_context,
                         audio_context.destination,
                     );
-                    console.log("SynthCore initialized.");
-                    
+                        
                     // Now that SynthCore is initialized, request current program from controller
                     request_current_program();
                 }
@@ -264,7 +258,6 @@
                     connect_websocket();
                 }
 
-                console.log("Audio system and communication are ready.");
             }
 
             // calculate individual transition timing from stagger and spread parameters
@@ -295,7 +288,8 @@
                 
                 return {
                     delay: Math.max(0, delay),
-                    duration: finalDuration
+                    duration: finalDuration,
+                    glissando: config.glissando // preserve glissando parameter
                 };
             }
 
@@ -303,15 +297,13 @@
                 await init_audio_system_if_needed(); // Ensure everything is initialized
 
                 if (synthCore && synthCore.isInitialized) {
-                    console.log("Entering calibration mode...");
-                    in_calibration_mode = true;
+                        in_calibration_mode = true;
 
                     // Use SynthCore's calibration method
                     const success =
                         synthCore.startCalibrationNoise(stored_volume);
                     if (success) {
-                        console.log("Pink noise calibration started");
-                    } else {
+                            } else {
                         console.error("Failed to start pink noise calibration");
                     }
 
@@ -355,15 +347,11 @@
                 }
 
                 in_calibration_mode = false;
-                console.log(
-                    "Exiting calibration mode, entering synthesis mode...",
-                );
 
                 if (synthCore && synthCore.isInitialized) {
                     // Stop calibration noise using SynthCore method
                     synthCore.stopCalibrationNoise();
-                    console.log("SynthCore stopped calibration noise.");
-
+    
                     // Ensure synthesis path is active by calling setPower
                     // This opens the gain node to allow audio through
                     await synthCore.setPower(true);
@@ -384,7 +372,6 @@
                 join_phase.style.display = "none";
                 calibration_button.style.display = "block"; // Show calibrate button again
 
-                console.log("Joined instrument in synthesis mode.");
 
                 // request wake lock to prevent device sleep
                 request_wake_lock();
@@ -482,9 +469,11 @@
 
                     if (synthCore && synthCore.isInitialized) {
                         // Apply program with transition data
+                        console.log(`Received transitionData:`, transitionData);
                         if (transitionData && (transitionData.stagger || transitionData.durationSpread)) {
                             // Calculate individual timing from stagger and spread
                             const calculatedTransition = calculate_transition_timing(transitionData);
+                            console.log(`Calculated transition:`, calculatedTransition);
                             synthCore.applyProgram(current_program, calculatedTransition);
                         } else {
                             synthCore.applyProgram(current_program, transitionData);
@@ -654,7 +643,6 @@
 
             // connect to controller via webrtc
             async function connect_to_controller(controller_id) {
-                console.log(`connecting to controller ${controller_id}`);
 
                 const controller = controllers.get(controller_id);
                 if (!controller) return;
@@ -671,7 +659,6 @@
                 controller.channel = data_channel;
 
                 data_channel.addEventListener("open", () => {
-                    console.log(`data channel open to ${controller_id}`);
                     controller.connected = true;
                     update_controller_list();
 
@@ -699,7 +686,6 @@
                 });
 
                 pc.addEventListener("connectionstatechange", () => {
-                    console.log(`connection state: ${pc.connectionState}`);
                     if (
                         pc.connectionState === "failed" ||
                         pc.connectionState === "closed"
@@ -897,8 +883,7 @@
                 try {
                     if ("wakeLock" in navigator) {
                         wake_lock = await navigator.wakeLock.request("screen");
-                        console.log("Wake lock acquired");
-
+        
                         wake_lock.addEventListener("release", () => {
                             console.log("Wake lock released");
                         });

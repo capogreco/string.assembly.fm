@@ -704,7 +704,8 @@
                     
                     return {
                         delay: Math.max(0, delay),
-                        duration: finalDuration
+                        duration: finalDuration,
+                        glissando: config.glissando // preserve glissando parameter
                     };
                 }
 

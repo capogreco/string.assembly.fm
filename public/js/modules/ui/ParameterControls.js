@@ -115,6 +115,17 @@ export class ParameterControls {
         }
       }
     });
+    
+    // Cache glissando checkbox
+    const glissandoCheckbox = document.getElementById('glissando');
+    if (glissandoCheckbox) {
+      this.paramElements.set('glissando', {
+        input: glissandoCheckbox,
+        valueDisplay: null,
+        controlGroup: glissandoCheckbox.closest('.control-group'),
+        type: 'checkbox'
+      });
+    }
 
     if (window.Logger) {
       window.Logger.log(
@@ -147,6 +158,10 @@ export class ParameterControls {
       // Change event for committed changes
       element.input.addEventListener("change", (e) => {
         this.handleParameterChange(paramId, e);
+        // Debug log for glissando changes
+        if (paramId === 'glissando') {
+          console.log(`Glissando changed: ${e.target.checked}`);
+        }
       });
 
       // Focus events for visual feedback
@@ -397,7 +412,9 @@ export class ParameterControls {
    * @private
    */
   parseParameterValue(element, rawValue) {
-    if (element.type === "range" || element.type === "number") {
+    if (element.type === "checkbox") {
+      return element.input.checked;
+    } else if (element.type === "range" || element.type === "number") {
       const numValue = parseFloat(rawValue);
 
       // Special handling for transitionDuration with logarithmic scaling
@@ -623,12 +640,17 @@ export class ParameterControls {
     
     this.paramElements.forEach((element, paramId) => {
       if (element.input) {
-        const rawValue = element.input.value;
+        const rawValue = element.type === 'checkbox' ? element.input.checked : element.input.value;
         const parsedValue = this.parseParameterValue(
           element,
           rawValue,
         );
         values[paramId] = parsedValue;
+        
+        // Debug log for glissando
+        if (paramId === 'glissando') {
+          console.log(`Glissando parameter: rawValue=${rawValue}, parsedValue=${parsedValue}`);
+        }
       }
     });
 

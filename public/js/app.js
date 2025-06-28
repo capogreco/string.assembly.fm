@@ -1205,19 +1205,11 @@ async function sendBankLoadMessage(bankId) {
     // Get current transition parameters from UI
     const transitionParams = parameterControls.getAllParameterValues();
     
-    // Direct debugging - let's see what we actually get
-    console.log('[TRANSITION DEBUG] getAllParameterValues returned:', transitionParams);
-    console.log('[TRANSITION DEBUG] transitionDuration value:', transitionParams.transitionDuration);
-    
-    // Also check the DOM directly
-    const durationElement = document.getElementById('transitionDuration');
-    console.log('[TRANSITION DEBUG] Direct DOM check - transitionDuration element:', durationElement);
-    console.log('[TRANSITION DEBUG] Direct DOM value:', durationElement?.value);
-    
     const transitionConfig = {
       duration: transitionParams.transitionDuration,
       stagger: transitionParams.transitionStagger,
       durationSpread: transitionParams.transitionDurationSpread,
+      glissando: transitionParams.glissando !== undefined ? transitionParams.glissando : true, // default true
     };
     
     Logger.log(`Using transition config: duration=${transitionConfig.duration}s, stagger=${transitionConfig.stagger}, spread=${transitionConfig.durationSpread}`, "messages");
@@ -1234,7 +1226,6 @@ async function sendBankLoadMessage(bankId) {
       };
       
       Logger.log(`Attempting to send load command to ${synthId} for bank ${bankId}`, "messages");
-      console.log(`[BANK LOAD] Sending to ${synthId}:`, message);
       
       const success = networkCoordinator.sendCommandToSynth(synthId, message);
       if (success) {

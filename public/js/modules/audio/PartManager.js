@@ -252,7 +252,6 @@ export class PartManager {
       });
     });
 
-    Logger.log(`Redistributed to ${synthIds.length} synths`, "parts");
   }
 
   /**
@@ -261,7 +260,6 @@ export class PartManager {
    * @param {Object} transitionConfig - Transition configuration
    */
   async sendProgramToSpecificSynth(synthId, transitionConfig = null) {
-    Logger.log(`Sending program to specific synth: ${synthId}`, "parts");
     
     const networkCoordinator = this.appState.get("networkCoordinator");
     if (!networkCoordinator) {
@@ -383,6 +381,7 @@ export class PartManager {
       duration: baseProgram.transitionDuration,
       stagger: baseProgram.transitionStagger,
       durationSpread: baseProgram.transitionDurationSpread,
+      glissando: baseProgram.glissando !== undefined ? baseProgram.glissando : true, // default true
     };
 
     // Check if transition values are valid
@@ -393,6 +392,10 @@ export class PartManager {
     Logger.log(
       `Sending part with transition config: ${JSON.stringify(transitionConfig)}`,
       "parts",
+    );
+    Logger.log(
+      `Glissando value from baseProgram: ${baseProgram.glissando}`,
+      "parts"
     );
 
 
@@ -576,7 +579,6 @@ export class PartManager {
    * @private
    */
   handleSynthConnected(synthId) {
-    Logger.log(`Synth connected: ${synthId}`, "parts");
     // Just redistribute - don't send program yet
     // Synth will request program after SynthCore initialization
     this.redistributeToSynths();
@@ -599,7 +601,6 @@ export class PartManager {
    * @private
    */
   handleProgramRequest(synthId) {
-    Logger.log(`Program requested by ${synthId}`, "parts");
 
     // Only send if we have a lastSentProgram (i.e., user has sent a program)
     if (this.lastSentProgram && this.currentChord.length > 0) {
@@ -625,7 +626,6 @@ export class PartManager {
         }
       }
     } else {
-      Logger.log(`No active program to send to ${synthId}`, "parts");
     }
     // If no active program, synth will remain waiting
   }

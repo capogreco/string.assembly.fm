@@ -86,7 +86,6 @@ export class SynthCore {
       // Set the initial program state to defaults without applying it
       this.currentProgram = { ...this.defaultParameters };
       
-      this.log("Core synth initialized successfully");
     } catch (error) {
       this.log(`Failed to initialize synth core: ${error.message}`, "error");
       throw error;
@@ -98,7 +97,6 @@ export class SynthCore {
     const loadPromises = this.workletModules.map(async (module) => {
       try {
         await this.audioContext.audioWorklet.addModule(module);
-        this.log(`Loaded worklet: ${module}`);
       } catch (error) {
         this.log(
           `Warning: Failed to load worklet ${module}: ${error.message}`,
@@ -152,7 +150,6 @@ export class SynthCore {
       this.reverbNode.parameters.get("roomSize").value = 0.3;
       this.reverbNode.parameters.get("damping").value = 0.5;
       this.reverbNode.parameters.get("mix").value = 0.2;
-      this.log("Reverb worklet loaded successfully");
     } catch (error) {
       this.log(`Reverb worklet not available: ${error.message}`, "warn");
       this.reverbNode = null;
@@ -166,7 +163,6 @@ export class SynthCore {
       );
       this.calibrationGainNode = this.audioContext.createGain();
       this.calibrationGainNode.gain.value = 0; // Initially silent
-      this.log("Calibration nodes created successfully");
     } catch (error) {
       this.log(`Failed to create calibration nodes: ${error.message}`, "warn");
     }
@@ -282,14 +278,35 @@ export class SynthCore {
     for (const [param, value] of Object.entries(program)) {
       if (this.bowedStringNode.parameters.has(param)) {
         const audioParam = this.bowedStringNode.parameters.get(param);
+        const glissandoEnabled = !transitionData || transitionData.glissando !== false; // default true
 
         if (transitionData && transitionData.duration) {
-          // Use smooth transition over calculated varied duration
-          audioParam.setValueAtTime(audioParam.value, applyTime);
-          audioParam.linearRampToValueAtTime(
-            value,
-            applyTime + transitionData.duration,
-          );
+          // Debug log for frequency parameter
+          if (param === 'fundamentalFrequency') {
+            this.log(`Frequency transition: glissando=${transitionData.glissando}, glissandoEnabled=${glissandoEnabled}, from=${audioParam.value} to=${value}`);
+          }
+          if (param === 'fundamentalFrequency' && !glissandoEnabled) {
+            // Non-glissando: hold current frequency until midpoint, then instant change
+            const midpointTime = applyTime + (transitionData.duration / 2);
+            
+            audioParam.setValueAtTime(audioParam.value, applyTime);
+            audioParam.setValueAtTime(audioParam.value, midpointTime);
+            audioParam.setValueAtTime(value, midpointTime);
+          } else if (param === 'fundamentalFrequency' && glissandoEnabled) {
+            // Glissando: exponential ramp for natural pitch slide
+            audioParam.setValueAtTime(audioParam.value || 0.001, applyTime);
+            audioParam.exponentialRampToValueAtTime(
+              Math.max(0.001, value),
+              applyTime + transitionData.duration
+            );
+          } else {
+            // Other parameters: always use linear ramp
+            audioParam.setValueAtTime(audioParam.value, applyTime);
+            audioParam.linearRampToValueAtTime(
+              value,
+              applyTime + transitionData.duration
+            );
+          }
         } else {
           // Immediate change
           audioParam.setValueAtTime(value, applyTime);
@@ -300,9 +317,23 @@ export class SynthCore {
     // Handle special parameters
     if (program.masterGain !== undefined) {
       const targetGain = program.masterGain * (this.isPoweredOn ? 1 : 0);
+      const glissandoEnabled = !transitionData || transitionData.glissando !== false;
+      
+      this.log(`Gain transition: glissando=${transitionData?.glissando}, glissandoEnabled=${glissandoEnabled}, crossfade=${!glissandoEnabled}`);
 
-      if (transitionData && transitionData.duration) {
-        // Use smooth transition over calculated varied duration
+      if (transitionData && transitionData.duration && !glissandoEnabled) {
+        // Crossfade envelope for non-glissando transitions
+        const midpointTime = applyTime + (transitionData.duration / 2);
+        
+        // Fade out to silence
+        this.gainNode.gain.setValueAtTime(this.gainNode.gain.value, applyTime);
+        this.gainNode.gain.linearRampToValueAtTime(0, midpointTime);
+        
+        // Fade in from silence
+        this.gainNode.gain.setValueAtTime(0, midpointTime);
+        this.gainNode.gain.linearRampToValueAtTime(targetGain, applyTime + transitionData.duration);
+      } else if (transitionData && transitionData.duration) {
+        // Normal gain transition for glissando mode
         this.gainNode.gain.setValueAtTime(this.gainNode.gain.value, applyTime);
         this.gainNode.gain.linearRampToValueAtTime(
           targetGain,
@@ -323,7 +354,6 @@ export class SynthCore {
       program.fundamentalFrequency && program.fundamentalFrequency > 0;
 
     if (this.isCalibrating) {
-      this.log("In calibration mode, deferring bowing state change");
     } else if (shouldBow && !this.isBowing) {
       // Start bowing
       if (transitionData && transitionData.delay) {
@@ -366,15 +396,6 @@ export class SynthCore {
           ? "trill"
           : "none";
 
-    if (transitionData) {
-      this.log(
-        `Applied program with transition: ${program.fundamentalFrequency?.toFixed(1)}Hz, expression: ${expression}, delay: ${transitionData.delay ? transitionData.delay.toFixed(2) : '0.00'}s, duration: ${transitionData.duration ? transitionData.duration.toFixed(2) : '0.00'}s`,
-      );
-    } else {
-      this.log(
-        `Applied program: ${program.fundamentalFrequency?.toFixed(1)}Hz, expression: ${expression}`,
-      );
-    }
   }
 
   // Set power state
@@ -595,7 +616,6 @@ export class SynthCore {
       return false;
     }
 
-    this.log(`Starting calibration noise at volume: ${volume}`);
     this.isCalibrating = true;
 
     // Mute synthesis path
@@ -650,7 +670,6 @@ export class SynthCore {
       return;
     }
 
-    this.log("Stopping calibration noise");
     this.isCalibrating = false;
     this.calibrationGainNode.gain.setValueAtTime(
       0,

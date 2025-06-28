@@ -392,6 +392,11 @@ export class NetworkCoordinator {
       program,
       ...(transition !== null && { transition }),
     };
+    
+    // Debug log transition
+    if (window.Logger) {
+      window.Logger.log(`Sending to ${synthId} with transition: ${JSON.stringify(transition)}`, "messages");
+    }
 
     const success = this.webRTC.sendDataMessage(synthId, message);
 
@@ -411,13 +416,6 @@ export class NetworkCoordinator {
   sendCommandToSynth(synthId, command) {
     // Add detailed logging for bank load commands
     if (command.type === "command" && command.name === "load") {
-      if (window.Logger) {
-        window.Logger.log(
-          `[BANK LOAD] Sending load command to ${synthId}: bank=${command.value.bank}`,
-          "messages",
-        );
-      }
-      console.log(`[NetworkCoordinator] Sending bank load to ${synthId}:`, command);
     }
     
     const success = this.webRTC.sendDataMessage(synthId, command);

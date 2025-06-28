@@ -141,7 +141,6 @@ async function handle_request(request: Request): Promise<Response> {
     let client_id = temp_id;
 
     socket.addEventListener("open", () => {
-      console.log(`client connected: ${temp_id}`);
       connections.set(temp_id, { socket, actual_id: null } as ConnectionInfo);
     });
 
@@ -157,7 +156,6 @@ async function handle_request(request: Request): Promise<Response> {
           socket,
           actual_id: client_id,
         } as ConnectionInfo);
-        console.log(`client registered as: ${client_id}`);
 
         // if this is a controller, add to KV registry
         if (client_id.startsWith("ctrl-")) {
@@ -167,7 +165,6 @@ async function handle_request(request: Request): Promise<Response> {
             ws_id: temp_id,
           };
           await kv.set(key, value, { expireIn: 60 * 1000 }); // 60 second TTL
-          console.log(`controller ${client_id} added to KV registry`);
 
           // notify all connected synths about the new controller
           const notification: Message = {
@@ -182,9 +179,6 @@ async function handle_request(request: Request): Promise<Response> {
               conn_info.socket.readyState === WebSocket.OPEN
             ) {
               conn_info.socket.send(JSON.stringify(notification));
-              console.log(
-                `notified ${conn_id} about new controller ${client_id}`,
-              );
             }
           }
         }
@@ -197,13 +191,11 @@ async function handle_request(request: Request): Promise<Response> {
     });
 
     socket.addEventListener("close", async () => {
-      console.log(`client disconnected: ${client_id}`);
       connections.delete(client_id);
 
       // if this was a controller, remove from KV registry
       if (client_id.startsWith("ctrl-")) {
         await kv.delete(["controllers", client_id]);
-        console.log(`controller ${client_id} removed from KV registry`);
 
         // notify all connected synths about the controller leaving
         const notification: Message = {
@@ -218,9 +210,6 @@ async function handle_request(request: Request): Promise<Response> {
             conn_info.socket.readyState === WebSocket.OPEN
           ) {
             conn_info.socket.send(JSON.stringify(notification));
-            console.log(
-              `notified ${conn_id} about controller ${client_id} leaving`,
-            );
           }
         }
       }
@@ -318,9 +307,6 @@ async function handle_websocket_message(
     message.sender_id = sender_id;
     message.timestamp = Date.now();
 
-    console.log(
-      `received: ${message.type} from ${message.source} to ${message.target}`,
-    );
 
     // handle heartbeat from controller
     if (message.type === "heartbeat" && sender_id.startsWith("ctrl-")) {
@@ -330,7 +316,6 @@ async function handle_websocket_message(
         ws_id: connections.get(sender_id)?.actual_id || sender_id,
       };
       await kv.set(key, value, { expireIn: 60 * 1000 }); // refresh 60 second TTL
-      console.log(`heartbeat from ${sender_id}, TTL refreshed`);
       return;
     }
 
@@ -356,9 +341,6 @@ async function handle_websocket_message(
         client_connection.socket.readyState === WebSocket.OPEN
       ) {
         client_connection.socket.send(JSON.stringify(response));
-        console.log(
-          `sent controllers list to ${sender_id}: ${controllers_list.join(", ")}`,
-        );
       }
       return;
     }
@@ -381,7 +363,6 @@ async function handle_websocket_message(
       message.type === "kick-other-controllers" &&
       sender_id.startsWith("ctrl-")
     ) {
-      console.log(`${sender_id} kicking other controllers`);
 
       // find and close all other controller connections
       const kicked_controllers = [];
@@ -408,7 +389,6 @@ async function handle_websocket_message(
         }
       }
 
-      console.log(`kicked controllers: ${kicked_controllers.join(", ")}`);
       return;
     } else if (message.target) {
       // queue message in kv with ttl of 30 seconds

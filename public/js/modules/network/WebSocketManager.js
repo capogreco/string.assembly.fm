@@ -208,13 +208,6 @@ export class WebSocketManager {
     this.isConnecting = false;
     this.reconnectAttempts = 0;
 
-    if (window.Logger) {
-      window.Logger.log("WebSocket connected", "connections");
-      window.Logger.log(
-        `WebSocket open - readyState: ${this.ws?.readyState}, isConnected: ${this.isConnected}`,
-        "connections",
-      );
-    }
 
     // Emit connection event immediately
     this.eventBus.emit("websocket:connected", {

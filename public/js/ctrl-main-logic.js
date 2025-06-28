@@ -68,7 +68,6 @@ import { ArrangementManager } from './modules/controller/ArrangementManager.js';
 
             // Bridge functions to connect legacy calls to modular system
             function mark_parameter_changed(param_id) {
-                console.log(`mark_parameter_changed called with: ${param_id}`);
                 if (window.modular && window.modular.ParameterControls) {
                     window.modular.ParameterControls.markParameterChanged(
                         param_id,
@@ -79,7 +78,6 @@ import { ArrangementManager } from './modules/controller/ArrangementManager.js';
             }
 
             function check_overall_status() {
-                console.log("check_overall_status called");
                 if (window.modular && window.modular.UIManager) {
                     window.modular.UIManager.updateConnectionStatus();
                 }
@@ -93,8 +91,6 @@ import { ArrangementManager } from './modules/controller/ArrangementManager.js';
             // but it won't be called anymore
 
             function handleExpressionChange(note, expression) {
-                console.log("Expression changed:", note, expression);
-
                 // Update current chord if needed
                 if (window.svgExpression) {
                     const chordNotes = window.svgExpression.getChordNotes();
@@ -104,10 +100,6 @@ import { ArrangementManager } from './modules/controller/ArrangementManager.js';
                         return freqA - freqB;
                     });
 
-                    console.log(
-                        "Updated chord from expression system:",
-                        window.currentChord,
-                    );
 
                     // Sync to modular system
                     if (window.modular && window.modular.AppState) {
