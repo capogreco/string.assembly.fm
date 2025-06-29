@@ -3,6 +3,7 @@ import { SynthClient } from '../modules/synth/SynthClient.js';
 import { Logger } from '../modules/core/Logger.js';
 import { WaveformVisualizer } from '../modules/ui/WaveformVisualizer.js';
 import { SystemConfig } from '../config/system.config.js';
+import { MessageBuilders, validateMessage, MessageTypes, isMessageType } from '../protocol/MessageProtocol.js';
 
 class SynthApp {
   constructor() {
@@ -368,22 +369,28 @@ class SynthApp {
   }
 
   handleDataChannelMessage(controllerId, message) {
+    // Validate message before processing
+    try {
+      validateMessage(message);
+    } catch (error) {
+      Logger.log(`Invalid message from ${controllerId}: ${error.message}`, "error");
+      console.error("[ERROR] Invalid message:", message, error);
+      return;
+    }
+    
     Logger.log(`Data channel message from ${controllerId}: ${message.type}`, "messages");
 
     switch (message.type) {
-      case "ping":
+      case MessageTypes.PING:
         // Respond to ping
         const controller = this.controllers.get(controllerId);
         if (controller && controller.channel && controller.channel.readyState === "open") {
-          controller.channel.send(JSON.stringify({
-            type: "pong",
-            timestamp: message.timestamp,
-            state: this.getSynthState()
-          }));
+          const pongMessage = MessageBuilders.pong(message.timestamp, this.getSynthState());
+          controller.channel.send(JSON.stringify(pongMessage));
         }
         break;
 
-      case "program":
+      case MessageTypes.PROGRAM:
         // Receive program from controller
         console.log("[DEBUG] Received program message:", message);
         
@@ -392,7 +399,7 @@ class SynthApp {
         Logger.log("Received program from controller via SynthClient", "messages");
         break;
 
-      case "command":
+      case MessageTypes.COMMAND:
         // Handle commands
         console.log("[DEBUG] Received command:", message);
         
@@ -405,6 +412,30 @@ class SynthApp {
         } else if (message.data && message.data.type === "request-state") {
           // DEPRECATED: State requests removed - use ping/pong for state updates
           this.sendStateToController(controllerId);
+        }
+        break;
+        
+      case MessageTypes.SAVE_TO_BANK:
+        Logger.log(`Save to bank ${message.bankNumber} command received`, "messages");
+        // TODO: Implement bank saving
+        break;
+        
+      case MessageTypes.LOAD_FROM_BANK:
+        Logger.log(`Load from bank ${message.bankNumber} command received`, "messages");
+        // TODO: Implement bank loading
+        break;
+        
+      default:
+        // Handle legacy message types for backward compatibility
+        if (message.type === "ping") {
+          // Legacy ping format
+          const controller = this.controllers.get(controllerId);
+          if (controller && controller.channel && controller.channel.readyState === "open") {
+            const pongMessage = MessageBuilders.pong(message.timestamp, this.getSynthState());
+            controller.channel.send(JSON.stringify(pongMessage));
+          }
+        } else {
+          Logger.log(`Unknown message type: ${message.type}`, "warn");
         }
         break;
     }

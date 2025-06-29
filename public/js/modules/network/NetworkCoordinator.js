@@ -7,6 +7,7 @@ import { webSocketManager } from "./WebSocketManager.js";
 import { webRTCManager } from "./WebRTCManager.js";
 import { eventBus } from "../core/EventBus.js";
 import { appState } from "../state/AppState.js";
+import { MessageBuilders, validateMessage, MessageTypes } from "../../protocol/MessageProtocol.js";
 
 export class NetworkCoordinator {
   constructor() {
@@ -206,6 +207,7 @@ export class NetworkCoordinator {
 
     // WebRTC data channel events
     this.webRTC.on("dataChannelOpen", (data) => {
+      console.log(`[NetworkCoordinator] Data channel open event received for ${data.peerId}`);
       if (window.Logger) {
         window.Logger.log(
           `Data channel open: ${data.peerId}`,
@@ -221,6 +223,7 @@ export class NetworkCoordinator {
         state: null,
       });
 
+      console.log(`[NetworkCoordinator] Emitting network:synthConnected for ${data.peerId}`);
       // Auto-send program on connection
       this.eventBus.emit("network:synthConnected", {
         synthId: data.peerId,
@@ -310,7 +313,9 @@ export class NetworkCoordinator {
     const { peerId, data: message, peerData } = data;
 
     // Route to appropriate handler based on message type
-    if (message.type === "command" || message.type === "save_to_bank" || message.type === "load_from_bank") {
+    if (message.type === MessageTypes.COMMAND || 
+        message.type === MessageTypes.SAVE_TO_BANK || 
+        message.type === MessageTypes.LOAD_FROM_BANK) {
       this.handleCommandMessage(data);
     } else {
       this.handleParamMessage(data);
@@ -419,15 +424,24 @@ export class NetworkCoordinator {
    * @returns {boolean} Success status
    */
   sendProgramToSynth(synthId, program, transition = null) {
-    const message = {
-      type: "program",
-      program,
-      ...(transition !== null && { transition }),
-    };
+    // Extract power state if it's embedded in the program
+    const power = program.power !== undefined ? program.power : true;
     
-    // Debug log transition
-    if (window.Logger) {
-      // window.Logger.log(`Sending to ${synthId} with transition: ${JSON.stringify(transition)}`, "messages");
+    // Create clean program without power field
+    const cleanProgram = { ...program };
+    delete cleanProgram.power;
+    
+    // Use protocol builder
+    const message = MessageBuilders.program(cleanProgram, power, transition);
+    
+    // Validate before sending
+    try {
+      validateMessage(message);
+    } catch (error) {
+      if (window.Logger) {
+        window.Logger.log(`Invalid program message: ${error.message}`, "error");
+      }
+      return false;
     }
 
     const success = this.webRTC.sendDataMessage(synthId, message);
@@ -446,11 +460,34 @@ export class NetworkCoordinator {
    * @returns {boolean} Success status
    */
   sendCommandToSynth(synthId, command) {
-    // Add detailed logging for bank load commands
-    if (command.type === "command" && command.name === "load") {
+    // Ensure command has proper format
+    let message;
+    
+    // Handle legacy command format
+    if (command.type === MessageTypes.SAVE_TO_BANK || command.type === MessageTypes.LOAD_FROM_BANK) {
+      message = command; // Already in correct format
+    } else if (command.type === "command") {
+      // Convert to protocol format
+      message = MessageBuilders.command(command.name, command.value, command.data);
+      if (command.bank !== undefined) {
+        message.bank = command.bank;
+      }
+    } else {
+      // Assume it's a raw command
+      message = command;
     }
     
-    const success = this.webRTC.sendDataMessage(synthId, command);
+    // Validate before sending
+    try {
+      validateMessage(message);
+    } catch (error) {
+      if (window.Logger) {
+        window.Logger.log(`Invalid command message: ${error.message}`, "error");
+      }
+      return false;
+    }
+    
+    const success = this.webRTC.sendDataMessage(synthId, message);
 
     if (success && window.Logger) {
       window.Logger.log(
@@ -499,22 +536,34 @@ export class NetworkCoordinator {
    * @param {RTCDataChannel} channel - The data channel (optional)
    */
   onSynthConnected(synthId, channel = null) {
+    console.log(`[NetworkCoordinator] onSynthConnected called for ${synthId}`);
     if (window.Logger) {
       window.Logger.log(`Synth ${synthId} connected - sending current program`, 'network');
     }
     
-    // Get current program from AppState
-    const currentProgram = this.appState.getNested('performance.currentProgram');
+    // Get the active program from PartManager's last sent program
+    const partManager = window.partManager || this.appState.get('partManager');
     const systemState = this.appState.getSystemState();
     
-    if (currentProgram && Object.keys(currentProgram.parameters || {}).length > 0) {
-      // Send program with power state
+    console.log(`[NetworkCoordinator] PartManager available:`, !!partManager);
+    console.log(`[NetworkCoordinator] PartManager lastSentProgram:`, !!partManager?.lastSentProgram);
+    
+    if (partManager && partManager.lastSentProgram) {
+      // Use the last successfully sent program (the active program)
+      const baseProgram = partManager.lastSentProgram.baseProgram;
+      console.log(`[NetworkCoordinator] Got active program with ${Object.keys(baseProgram).length} parameters`);
+      
+      // Send the base program to the synth
+      // PartManager will handle assigning specific frequency/expression via sendProgramToSpecificSynth
       const sentProgram = {
-        ...currentProgram,
+        ...baseProgram,
         power: systemState.audio.power
       };
       
-      this.sendProgramToSynth(synthId, sentProgram);
+      console.log(`[NetworkCoordinator] Triggering program send for ${synthId}`);
+      
+      // Use PartManager to send program with proper frequency/expression assignment
+      partManager.sendProgramToSpecificSynth(synthId);
       
       // Track that we sent to this synth
       const connections = this.appState.getNested('connections.synths');
@@ -527,11 +576,12 @@ export class NetworkCoordinator {
       this.appState.setNested('connections.synths', new Map(connections));
       
       if (window.Logger) {
-        window.Logger.log(`Sent current program to synth ${synthId}`, 'network');
+        window.Logger.log(`Triggered program send to synth ${synthId}`, 'network');
       }
     } else {
+      console.log(`[NetworkCoordinator] No active program available`);
       if (window.Logger) {
-        window.Logger.log(`No program to send to synth ${synthId} - program is empty`, 'network');
+        window.Logger.log(`No active program to send to synth ${synthId} - user hasn't sent a program yet`, 'network');
       }
     }
   }
@@ -571,7 +621,7 @@ export class NetworkCoordinator {
 
   /**
    * Broadcast command to all connected synths
-   * @param {Object} command - Command data
+   * @param {Object} command - Command data (or name and value for simple commands)
    * @returns {number} Number of synths that received the command
    */
   broadcastCommand(command) {

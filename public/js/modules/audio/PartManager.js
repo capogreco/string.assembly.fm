@@ -82,8 +82,8 @@ export class PartManager {
       if (!data.fromBankLoad) {
         this.setChord(data.frequencies);
       } else {
-        // Just update internal state without sending to synths
-        this.currentChord = [...data.frequencies];
+        // Just update AppState without sending to synths
+        this.appState.set('currentChord', [...data.frequencies]);
         // Logger.log(`Updated chord from bank load: ${data.frequencies.length} notes (not redistributing)`, "parts");
       }
     });

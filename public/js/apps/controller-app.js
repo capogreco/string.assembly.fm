@@ -18,6 +18,7 @@ import { uiManager } from "../modules/ui/UIManager.js";
 import { parameterControls } from "../modules/ui/ParameterControls.js";
 import { pianoKeyboard } from "../modules/ui/PianoKeyboard.js";
 import { partManager } from "../modules/audio/PartManager.js";
+import { MessageBuilders, MessageTypes, CommandNames } from "../protocol/MessageProtocol.js";
 
 // Import UI components
 import "../modules/ui/HarmonicRatioSelector.js";
@@ -142,11 +143,9 @@ function setupProgramNetworkHandlers() {
     Logger.log(`Program saved to Bank ${data.bankId}`, "lifecycle");
     
     // Send save command to all connected synths
-    networkCoordinator.broadcastCommand({
-      type: "command",
-      name: "save",
-      bank: data.bankId
-    });
+    const saveCommand = MessageBuilders.command(CommandNames.SAVE, data.bankId);
+    saveCommand.bank = data.bankId; // Add bank for compatibility
+    networkCoordinator.broadcastCommand(saveCommand);
   });
 
   eventBus.on("program:loaded", async (data) => {
@@ -366,11 +365,7 @@ function setupBankControls() {
           let saveCount = 0;
           
           for (const synthId of synthIds) {
-            const message = {
-              type: "command",
-              name: "save",
-              value: bankId
-            };
+            const message = MessageBuilders.command(CommandNames.SAVE, bankId);
             
             const saveSuccess = networkCoordinator.sendCommandToSynth(synthId, message);
             if (saveSuccess) {
@@ -847,11 +842,7 @@ function setupGlobalEventListeners() {
           let saveCount = 0;
           
           for (const synthId of synthIds) {
-            const message = {
-              type: "command",
-              name: "save",
-              value: bankId
-            };
+            const message = MessageBuilders.command(CommandNames.SAVE, bankId);
             
             const saveSuccess = networkCoordinator.sendCommandToSynth(synthId, message);
             if (saveSuccess) {
@@ -1111,11 +1102,7 @@ function setupPowerControl() {
     Logger.log(`Power ${isOn ? 'ON' : 'OFF'}`, "messages");
     
     // Send power command to all synths
-    const command = {
-      type: "command",
-      name: "power",
-      value: isOn
-    };
+    const command = MessageBuilders.power(isOn);
     
     const count = networkCoordinator.broadcastCommand(command);
     
@@ -1215,14 +1202,10 @@ async function sendBankLoadMessage(bankId) {
     
     // Send load command to each synth
     for (const synthId of synthIds) {
-      const message = {
-        type: "command",
-        name: "load",
-        value: {
-          bank: bankId,
-          transition: transitionConfig
-        }
-      };
+      const message = MessageBuilders.command(CommandNames.LOAD, {
+        bank: bankId,
+        transition: transitionConfig
+      });
       
       Logger.log(`Attempting to send load command to ${synthId} for bank ${bankId}`, "messages");
       

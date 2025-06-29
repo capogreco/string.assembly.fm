@@ -46,8 +46,7 @@ class TestSynth {
     
     Logger.log(`[${this.id}] SynthClient initialized with panning: ${this.panPosition}`, "lifecycle");
     
-    // Request current program from controllers
-    this.synthClient.requestCurrentProgram();
+    // No need to request program - controller will push automatically when connected
   }
 
   createElements(container) {
@@ -97,8 +96,8 @@ class TestSynth {
   }
 
   requestCurrentProgram() {
-    // Delegate to SynthClient
-    this.synthClient.requestCurrentProgram();
+    // Deprecated - programs are pushed automatically
+    Logger.log(`[${this.id}] requestCurrentProgram called but deprecated - using push model`, "lifecycle");
   }
 
   startVisualizer() {
@@ -272,12 +271,14 @@ class EnsembleApp {
 
       synth.ws.addEventListener("open", () => {
         this.log(`[${synth.id}] Connected to server`, "info");
+        console.log(`[${synth.id}] Registering with server as synth type`);
         synth.updateConnectionStatus(true);
         
-        // Register with server
+        // Register with server as a synth (not a controller)
         synth.ws.send(JSON.stringify({
           type: "register",
-          client_id: synth.id
+          client_id: synth.id,
+          client_type: "synth"  // Important! This identifies it as a synth
         }));
         
         // Request controllers
@@ -299,11 +300,222 @@ class EnsembleApp {
     }
   }
 
+  async connectSynthToController(synth, controllerId) {
+    console.log(`[${synth.id}] Connecting to controller ${controllerId}`);
+    const controller = synth.controllers.get(controllerId);
+    if (!controller) {
+      Logger.log(`[${synth.id}] Controller ${controllerId} not found in map`, "error");
+      return;
+    }
+    
+    // Don't reconnect if already connected
+    if (controller.connected && controller.connection && 
+        controller.connection.connectionState === "connected") {
+      Logger.log(`[${synth.id}] Already connected to controller ${controllerId}`, "connections");
+      return;
+    }
+    
+    // Close any existing connection
+    if (controller.connection) {
+      controller.connection.close();
+    }
+    
+    Logger.log(`[${synth.id}] Initiating connection to controller ${controllerId}`, "connections");
+    
+    try {
+      const pc = new RTCPeerConnection(this.rtcConfig);
+      controller.connection = pc;
+
+      // Create unified data channel
+      const dataChannel = pc.createDataChannel("data");
+      controller.channel = dataChannel;
+
+      dataChannel.addEventListener("open", () => {
+        console.log(`[${synth.id}] Data channel OPENED to controller ${controllerId}`);
+        Logger.log(`[${synth.id}] Data channel open to controller ${controllerId}`, "connections");
+        controller.connected = true;
+        
+        // Add to SynthClient's controllers with data channel reference
+        synth.synthClient.controllers.set(controllerId, {
+          ...controller,
+          dataChannel: dataChannel
+        });
+        
+        // Send immediate state update (pong message)
+        dataChannel.send(JSON.stringify({
+          type: "pong",
+          timestamp: Date.now(),
+          state: {
+            synthId: synth.id,
+            ready: synth.synthClient.audioInitialized,
+            power: synth.synthClient.getPower()
+          }
+        }));
+
+        // No need to request program - controller will push automatically
+        this.log(`[${synth.id}] Connected to controller ${controllerId}`, "info");
+      });
+
+      dataChannel.addEventListener("message", (event) => {
+        const message = JSON.parse(event.data);
+        console.log(`[${synth.id}] Received data channel message:`, message.type);
+        
+        // Pass message to SynthClient for handling
+        if (synth.synthClient) {
+          synth.synthClient.handleControllerMessage(controllerId, message);
+        }
+      });
+
+      dataChannel.addEventListener("close", () => {
+        Logger.log(`[${synth.id}] Data channel closed to controller ${controllerId}`, "connections");
+        controller.connected = false;
+        
+        // Remove from SynthClient's controllers
+        synth.synthClient.controllers.delete(controllerId);
+        
+        this.log(`[${synth.id}] Disconnected from controller ${controllerId}`, "info");
+      });
+
+      // Handle ICE candidates
+      pc.addEventListener("icecandidate", (event) => {
+        if (event.candidate) {
+          synth.ws.send(JSON.stringify({
+            type: "ice",
+            source: synth.id,
+            target: controllerId,
+            data: event.candidate
+          }));
+        }
+      });
+
+      // Handle connection state changes
+      pc.addEventListener("connectionstatechange", () => {
+        Logger.log(`[${synth.id}] Connection state to ${controllerId}: ${pc.connectionState}`, "connections");
+        if (pc.connectionState === "failed" || pc.connectionState === "disconnected") {
+          controller.connected = false;
+          this.log(`[${synth.id}] Connection failed to controller ${controllerId}`, "error");
+        }
+      });
+
+      // Create and send offer
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+
+      synth.ws.send(JSON.stringify({
+        type: "offer",
+        source: synth.id,
+        target: controllerId,
+        data: offer
+      }));
+      
+      console.log(`[${synth.id}] Sent offer to controller ${controllerId}`);
+      
+    } catch (error) {
+      Logger.log(`[${synth.id}] Failed to connect to controller ${controllerId}: ${error.message}`, "error");
+      controller.connected = false;
+      this.log(`[${synth.id}] Failed to connect to controller ${controllerId}: ${error.message}`, "error");
+    }
+  }
+
   async handleSynthMessage(synth, message) {
-    // Handle WebSocket messages for synth
-    // This would include controller discovery, WebRTC setup, etc.
-    // Simplified for now
+    // Debug logging
+    console.log(`[${synth.id}] Received WebSocket message:`, message.type, message);
     Logger.log(`[${synth.id}] Received message: ${message.type}`, "messages");
+    
+    switch (message.type) {
+      case "controllers-list":
+        // Received list of active controllers
+        console.log(`[${synth.id}] Controllers available:`, message.controllers);
+        this.log(`[${synth.id}] Controllers: ${message.controllers.join(", ")}`, "info");
+        
+        // Connect to each controller
+        for (const controllerId of message.controllers) {
+          if (!synth.controllers.has(controllerId)) {
+            synth.controllers.set(controllerId, {
+              id: controllerId,
+              connection: null,
+              channel: null,
+              connected: false,
+              iceQueue: []
+            });
+            this.connectSynthToController(synth, controllerId);
+          }
+        }
+        break;
+        
+      case "controller-joined":
+        // New controller joined
+        console.log(`[${synth.id}] New controller joined:`, message.controller_id);
+        this.log(`[${synth.id}] Controller ${message.controller_id} joined`, "info");
+        
+        // Connect to new controller
+        if (!synth.controllers.has(message.controller_id)) {
+          synth.controllers.set(message.controller_id, {
+            id: message.controller_id,
+            connection: null,
+            channel: null,
+            connected: false,
+            iceQueue: []
+          });
+          this.connectSynthToController(synth, message.controller_id);
+        }
+        break;
+        
+      case "controller-left":
+        // Controller left
+        console.log(`[${synth.id}] Controller left:`, message.controller_id);
+        this.log(`[${synth.id}] Controller ${message.controller_id} left`, "info");
+        
+        // Clean up connection
+        if (synth.controllers.has(message.controller_id)) {
+          const controller = synth.controllers.get(message.controller_id);
+          if (controller.connection) {
+            controller.connection.close();
+          }
+          synth.controllers.delete(message.controller_id);
+          synth.synthClient.controllers.delete(message.controller_id);
+        }
+        break;
+        
+      case "answer":
+        // Handle WebRTC answer from controller
+        console.log(`[${synth.id}] Received answer from ${message.source}`);
+        const controller = synth.controllers.get(message.source);
+        if (controller && controller.connection) {
+          await controller.connection.setRemoteDescription(message.data);
+          
+          // Process any queued ICE candidates
+          if (controller.iceQueue && controller.iceQueue.length > 0) {
+            for (const candidate of controller.iceQueue) {
+              await controller.connection.addIceCandidate(candidate);
+            }
+            controller.iceQueue = [];
+          }
+        }
+        break;
+        
+      case "ice":
+        // Handle ICE candidate from controller
+        console.log(`[${synth.id}] Received ICE candidate from ${message.source}`);
+        const targetController = synth.controllers.get(message.source);
+        if (targetController && targetController.connection) {
+          try {
+            if (targetController.connection.remoteDescription) {
+              await targetController.connection.addIceCandidate(message.data);
+            } else {
+              // Queue ICE candidate until remote description is set
+              targetController.iceQueue.push(message.data);
+            }
+          } catch (error) {
+            console.error(`[${synth.id}] Error adding ICE candidate:`, error);
+          }
+        }
+        break;
+        
+      default:
+        console.log(`[${synth.id}] Unknown message type:`, message.type);
+        break;
+    }
   }
 
   calibrateAllSynths() {

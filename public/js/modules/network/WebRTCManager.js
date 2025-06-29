@@ -5,6 +5,7 @@
 
 import { eventBus } from "../core/EventBus.js";
 import { SystemConfig } from "../../config/system.config.js";
+import { MessageTypes } from "../../protocol/MessageProtocol.js";
 
 export class WebRTCManager {
   constructor(rtcConfig = SystemConfig.network.webrtc, eventBusInstance = eventBus) {
@@ -1164,6 +1165,7 @@ export class WebRTCManager {
       }
 
       // Emit both new and legacy events for compatibility
+      console.log(`[WebRTCManager] Emitting dataChannelOpen for ${peerId}`);
       this.eventBus.emit("webrtc:dataChannelOpen", {
         peerId,
         channel,
@@ -1242,7 +1244,7 @@ export class WebRTCManager {
       }
 
       // Handle pong messages for latency calculation
-      if (data.type === "pong") {
+      if (data.type === MessageTypes.PONG) {
         peerData.latency = Date.now() - data.timestamp;
         peerData.state = data.state || null;
         peerData.lastPing = Date.now();
@@ -1264,7 +1266,9 @@ export class WebRTCManager {
       });
 
       // Also emit legacy events based on message type for compatibility
-      if (data.type === "command" || data.type === "save_to_bank" || data.type === "load_from_bank") {
+      if (data.type === MessageTypes.COMMAND || 
+          data.type === MessageTypes.SAVE_TO_BANK || 
+          data.type === MessageTypes.LOAD_FROM_BANK) {
         this.eventBus.emit("webrtc:commandMessage", {
           peerId,
           data,
@@ -1305,7 +1309,7 @@ export class WebRTCManager {
       }
 
       // Handle pong messages for latency calculation
-      if (data.type === "pong") {
+      if (data.type === MessageTypes.PONG) {
         peerData.latency = Date.now() - data.timestamp;
         peerData.state = data.state || null;
         peerData.lastPing = Date.now();
@@ -1552,7 +1556,7 @@ export class WebRTCManager {
    */
   pingAllPeers() {
     const pingMessage = {
-      type: "ping",
+      type: MessageTypes.PING,
       timestamp: Date.now(),
     };
 

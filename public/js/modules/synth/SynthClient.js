@@ -6,6 +6,7 @@
 import { SynthCore } from '../../../../src/synth/synth-core.js';
 import { Logger } from '../core/Logger.js';
 import { SystemConfig } from '../../config/system.config.js';
+import { MessageTypes, isMessageType } from '../../protocol/MessageProtocol.js';
 
 export class SynthClient {
   constructor(synthId, options = {}) {
@@ -101,32 +102,51 @@ export class SynthClient {
   
   /**
    * Handle incoming program message from controller
-   * @param {Object} programMessage - Complete program message with program, power, etc.
+   * @param {Object} programMessage - Complete program message conforming to protocol
    */
   handleProgram(programMessage) {
     Logger.log(`[${this.synthId}] Received program update`, 'synth');
     
-    // Extract program data from message
-    const program = programMessage.program || programMessage;
-    const power = programMessage.power;
-    const transition = programMessage.transition;
-    
-    // Store the program and power state
-    this.storedProgram = program;
-    if (power !== undefined) {
-      this.storedPower = power;
+    // Handle protocol-compliant messages
+    if (isMessageType(programMessage, MessageTypes.PROGRAM)) {
+      // Protocol format: { type, program, power, transition?, timestamp }
+      const { program, power, transition } = programMessage;
+      
+      // Store the program and power state
+      this.storedProgram = program;
+      if (power !== undefined) {
+        this.storedPower = power;
+      }
+      
+      // Store transition if provided
+      this.storedTransition = transition || null;
+    } else {
+      // Legacy format handling for backward compatibility
+      Logger.log(`[${this.synthId}] Received legacy program format`, 'warn');
+      const program = programMessage.program || programMessage;
+      const power = programMessage.power;
+      const transition = programMessage.transition;
+      
+      this.storedProgram = program;
+      if (power !== undefined) {
+        this.storedPower = power;
+      }
+      this.storedTransition = transition || null;
     }
     
     if (!this.audioInitialized) {
       // Store for later application
-      this.pendingProgram = { program, transition };
+      this.pendingProgram = { 
+        program: this.storedProgram, 
+        transition: this.storedTransition 
+      };
       Logger.log(`[${this.synthId}] Storing program for later application (audio not initialized)`, "lifecycle");
       return;
     }
     
     // Apply immediately if ready, otherwise wait
     if (!this.isCalibrating && this.synthCore.isInitialized) {
-      this.applyStoredProgram(transition);
+      this.applyStoredProgram(this.storedTransition);
     } else {
       Logger.log(`[${this.synthId}] Storing program for later application (${
         !this.synthCore.isInitialized ? 'not initialized' : 'calibrating'
