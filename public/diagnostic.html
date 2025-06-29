@@ -328,24 +328,10 @@
         }
 
         function testLegacyLoading() {
-            console.log('=== Testing Legacy Loading ===');
-
-            const script = document.createElement('script');
-            script.src = './js/ctrl-main-logic.js';
-
-            script.onload = function() {
-                console.log('Legacy system loaded successfully');
-                document.getElementById('app-status').textContent = 'LEGACY OK';
-                document.getElementById('app-status').className = 'status pass';
-            };
-
-            script.onerror = function() {
-                console.error('Failed to load legacy system');
-                document.getElementById('app-status').textContent = 'LEGACY FAIL';
-                document.getElementById('app-status').className = 'status fail';
-            };
-
-            document.head.appendChild(script);
+            console.log('=== Legacy System Removed ===');
+            console.log('Legacy system has been removed - modular only');
+            document.getElementById('app-status').textContent = 'LEGACY REMOVED';
+            document.getElementById('app-status').className = 'status info';
         }
 
         function clearLog() {

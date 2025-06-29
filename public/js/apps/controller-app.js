@@ -1,4 +1,4 @@
-// Mark that modular system is loading to prevent legacy system from running
+// controller-app.js - Controller application entry point
 window.__modularSystemActive = true;
 
 /**
@@ -7,21 +7,21 @@ window.__modularSystemActive = true;
  */
 
 // Import core modules
-import { Logger } from "./modules/core/Logger.js";
-import { Config, fetchIceServers } from "./modules/core/Config.js";
-import { eventBus } from "./modules/core/EventBus.js";
-import { appState } from "./modules/state/AppState.js";
-import { programManager } from "./modules/state/ProgramManager.js";
-import { programState } from "./modules/state/ProgramState.js";
-import { networkCoordinator } from "./modules/network/NetworkCoordinator.js";
-import { uiManager } from "./modules/ui/UIManager.js";
-import { parameterControls } from "./modules/ui/ParameterControls.js";
-import { pianoKeyboard } from "./modules/ui/PianoKeyboard.js";
-import { partManager } from "./modules/audio/PartManager.js";
+import { Logger } from "../modules/core/Logger.js";
+import { Config, fetchIceServers } from "../modules/core/Config.js";
+import { eventBus } from "../modules/core/EventBus.js";
+import { appState } from "../modules/state/AppState.js";
+import { programManager } from "../modules/state/ProgramManager.js";
+import { programState } from "../modules/state/ProgramState.js";
+import { networkCoordinator } from "../modules/network/NetworkCoordinator.js";
+import { uiManager } from "../modules/ui/UIManager.js";
+import { parameterControls } from "../modules/ui/ParameterControls.js";
+import { pianoKeyboard } from "../modules/ui/PianoKeyboard.js";
+import { partManager } from "../modules/audio/PartManager.js";
 
 // Import UI components
-import "./modules/ui/HarmonicRatioSelector.js";
-import { AudioUtilities } from "./modules/utils/AudioUtilities.js";
+import "../modules/ui/HarmonicRatioSelector.js";
+import { AudioUtilities } from "../modules/utils/AudioUtilities.js";
 
 /**
  * Initialize the modular application

@@ -194,6 +194,11 @@ export class SynthCore {
     this.analyserNode.connect(destination);
   }
 
+  // Get the analyser node for visualization
+  getAnalyserNode() {
+    return this.analyserNode;
+  }
+
   // Apply a program to the synth
   applyProgram(program, transitionData = null) {
     if (!this.isInitialized) {

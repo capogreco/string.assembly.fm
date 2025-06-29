@@ -170,20 +170,8 @@
             }
         }, 5000);
 
-        // Test if we can load the legacy system
-        log('Testing legacy system availability...', 'info');
-
-        const legacyTest = document.createElement('script');
-        legacyTest.src = './js/ctrl-main-logic.js';
-        legacyTest.onload = () => {
-            log('✓ Legacy system file exists and loads', 'success');
-        };
-        legacyTest.onerror = () => {
-            log('✗ Legacy system file not found or has errors', 'error');
-        };
-
-        // Don't append to avoid conflicts, just test loading
-        // document.head.appendChild(legacyTest);
+        // Legacy system removed - no longer testing
+        log('Legacy system has been removed - modular only', 'info');
 
         log('Test initialization complete. Watching for results...', 'info');
     </script>
