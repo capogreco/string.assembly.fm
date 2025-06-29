@@ -154,18 +154,36 @@ export class UIManager {
    * @private
    */
   setupStateSubscriptions() {
-    // Connection status changes
+    // Connection status changes - NEW nested path
+    this.appState.subscribe("connections.websocket", (websocket) => {
+      const status = websocket.connected ? "connected" : 
+                     websocket.reconnecting ? "connecting" : "disconnected";
+      this.updateConnectionStatus(status);
+    });
+    
+    // Legacy subscription for backward compatibility
     this.appState.subscribe("connectionStatus", (newStatus) => {
       this.updateConnectionStatus(newStatus);
     });
 
-    // Connected synths changes
+    // Connected synths changes - NEW nested path
+    this.appState.subscribe("connections.synths", () => {
+      this.updateSynthList();
+      this.updateConnectionCount();
+    });
+    
+    // Legacy subscription for backward compatibility
     this.appState.subscribe("connectedSynths", () => {
       this.updateSynthList();
       this.updateConnectionCount();
     });
 
-    // Average latency changes
+    // Average latency changes - NEW nested path
+    this.appState.subscribe("connections.metrics.averageLatency", (newLatency) => {
+      this.updateLatencyDisplay(newLatency);
+    });
+    
+    // Legacy subscription for backward compatibility
     this.appState.subscribe("averageLatency", (newLatency) => {
       this.updateLatencyDisplay(newLatency);
     });
@@ -186,7 +204,12 @@ export class UIManager {
    * @param {string} status - Connection status
    */
   updateConnectionStatus(status = null) {
-    const connectionStatus = status || this.appState.get("connectionStatus");
+    // Try new structure first, fall back to legacy
+    const websocket = this.appState.getNested("connections.websocket");
+    const connectionStatus = status || 
+      (websocket ? (websocket.connected ? "connected" : 
+                    websocket.reconnecting ? "connecting" : "disconnected") 
+                 : this.appState.get("connectionStatus"));
     
     if (!this.elements.status) return;
 
@@ -247,7 +270,9 @@ export class UIManager {
   updateSynthList() {
     if (!this.elements.synthList) return;
 
-    const connectedSynths = this.appState.get("connectedSynths");
+    // Try new structure first, fall back to legacy
+    const connectedSynths = this.appState.getNested("connections.synths") || 
+                           this.appState.get("connectedSynths");
 
     if (connectedSynths.size === 0) {
       this.elements.synthList.innerHTML = '<span style="color: #64748b;">None connected</span>';
@@ -310,7 +335,9 @@ export class UIManager {
   updateConnectionCount() {
     if (!this.elements.connectedCount) return;
 
-    const connectedSynths = this.appState.get("connectedSynths");
+    // Try new structure first, fall back to legacy
+    const connectedSynths = this.appState.getNested("connections.synths") || 
+                           this.appState.get("connectedSynths");
     this.elements.connectedCount.textContent = connectedSynths.size.toString();
   }
 

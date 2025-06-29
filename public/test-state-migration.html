@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>State Migration Test</title>
+    <style>
+        body {
+            font-family: monospace;
+            padding: 20px;
+            background: #1a1a1a;
+            color: #e0e0e0;
+        }
+        .section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #333;
+            border-radius: 5px;
+        }
+        .success { color: #4ade80; }
+        .error { color: #ef4444; }
+        .info { color: #3b82f6; }
+        button {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            margin: 5px;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+        button:hover { background: #2563eb; }
+        pre {
+            background: #000;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>AppState Migration Test</h1>
+    
+    <div class="section">
+        <h2>Test Controls</h2>
+        <button onclick="testNewStructure()">Test New Structure</button>
+        <button onclick="testCompatibility()">Test Compatibility Layer</button>
+        <button onclick="testSubscriptions()">Test Subscriptions</button>
+        <button onclick="testSystemState()">Test System State</button>
+        <button onclick="testConnectionState()">Test Connection State</button>
+        <button onclick="testPerformanceState()">Test Performance State</button>
+        <button onclick="testPartAssignments()">Test Part Assignments</button>
+        <button onclick="testFullMigration()">Test Full Migration</button>
+        <button onclick="showFullState()">Show Full State</button>
+    </div>
+
+    <div class="section">
+        <h2>Test Results</h2>
+        <div id="results"></div>
+    </div>
+
+    <div class="section">
+        <h2>State Viewer</h2>
+        <pre id="stateViewer"></pre>
+    </div>
+
+    <script type="module">
+        import { appState } from '/js/modules/state/AppState.js';
+        
+        // Make functions available globally
+        window.appState = appState;
+        
+        // Logger is already initialized by the module
+        
+        const results = document.getElementById('results');
+        const stateViewer = document.getElementById('stateViewer');
+        
+        function log(message, type = 'info') {
+            const div = document.createElement('div');
+            div.className = type;
+            div.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            results.appendChild(div);
+            results.scrollTop = results.scrollHeight;
+        }
+        
+        window.testNewStructure = function() {
+            log('Testing new nested structure...', 'info');
+            
+            try {
+                // Test nested getters
+                const power = appState.getNested('system.audio.power');
+                log(`✓ system.audio.power = ${power}`, 'success');
+                
+                const websocket = appState.getNested('connections.websocket');
+                log(`✓ connections.websocket = ${JSON.stringify(websocket)}`, 'success');
+                
+                // Test nested setters
+                appState.setNested('system.audio.masterGain', 0.75);
+                log(`✓ Set system.audio.masterGain to 0.75`, 'success');
+                
+                appState.setNested('connections.websocket.connected', true);
+                log(`✓ Set connections.websocket.connected to true`, 'success');
+                
+                // Test helper methods
+                const systemState = appState.getSystemState();
+                log(`✓ getSystemState() returned: ${JSON.stringify(systemState)}`, 'success');
+                
+            } catch (error) {
+                log(`✗ Error: ${error.message}`, 'error');
+            }
+        };
+        
+        window.testCompatibility = function() {
+            log('Testing compatibility layer...', 'info');
+            
+            try {
+                // Test legacy property access
+                appState.power = false;
+                const power = appState.power;
+                log(`✓ Legacy: appState.power = ${power}`, 'success');
+                
+                // Verify it updated the new structure
+                const newPower = appState.getNested('system.audio.power');
+                log(`✓ New structure reflects change: ${newPower}`, 'success');
+                
+                // Test connection status mapping
+                appState.connectionStatus = 'connected';
+                const status = appState.connectionStatus;
+                const websocketConnected = appState.getNested('connections.websocket.connected');
+                log(`✓ Legacy connectionStatus = '${status}', websocket.connected = ${websocketConnected}`, 'success');
+                
+            } catch (error) {
+                log(`✗ Error: ${error.message}`, 'error');
+            }
+        };
+        
+        window.testSubscriptions = function() {
+            log('Testing subscription patterns...', 'info');
+            
+            try {
+                // Test nested path subscription
+                const unsubscribe1 = appState.subscribe('system.audio.power', (value) => {
+                    log(`✓ Subscription fired: system.audio.power = ${value}`, 'success');
+                });
+                
+                // Test legacy subscription
+                const unsubscribe2 = appState.subscribe('connectionStatus', (value) => {
+                    log(`✓ Legacy subscription fired: connectionStatus = ${value}`, 'success');
+                });
+                
+                // Trigger updates
+                appState.setNested('system.audio.power', !appState.getNested('system.audio.power'));
+                appState.set('connectionStatus', 'disconnected');
+                
+                // Clean up
+                unsubscribe1();
+                unsubscribe2();
+                
+                log('✓ Subscriptions tested and cleaned up', 'success');
+                
+            } catch (error) {
+                log(`✗ Error: ${error.message}`, 'error');
+            }
+        };
+        
+        window.testSystemState = function() {
+            log('Testing system state migration...', 'info');
+            
+            try {
+                // Test power control
+                appState.setNested('system.audio.power', true);
+                log(`✓ Set power ON`, 'success');
+                
+                // Test volume control  
+                appState.setNested('system.audio.masterGain', 0.9);
+                log(`✓ Set volume to 0.9`, 'success');
+                
+                // Test debug state
+                appState.setNested('system.debug.enabled', true);
+                appState.setNested('system.debug.categories', ['network', 'performance']);
+                log(`✓ Updated debug settings`, 'success');
+                
+                const system = appState.getSystemState();
+                log(`✓ System state: ${JSON.stringify(system, null, 2)}`, 'success');
+                
+            } catch (error) {
+                log(`✗ Error: ${error.message}`, 'error');
+            }
+        };
+        
+        window.testConnectionState = function() {
+            log('Testing connection state migration...', 'info');
+            
+            try {
+                // Add a synth
+                appState.addConnectedSynth('synth-001', {
+                    audioEnabled: true,
+                    instrumentJoined: true
+                });
+                log(`✓ Added synth-001`, 'success');
+                
+                // Update latency
+                appState.updateSynthLatency('synth-001', 25);
+                log(`✓ Updated synth latency to 25ms`, 'success');
+                
+                // Check metrics
+                const metrics = appState.getNested('connections.metrics');
+                log(`✓ Connection metrics: ${JSON.stringify(metrics)}`, 'success');
+                
+                // Test websocket state
+                appState.setNested('connections.websocket.connected', true);
+                appState.setNested('connections.websocket.reconnecting', false);
+                log(`✓ Updated websocket state`, 'success');
+                
+                const connections = appState.getConnections();
+                log(`✓ Connections state has ${connections.synths.size} synths`, 'success');
+                
+            } catch (error) {
+                log(`✗ Error: ${error.message}`, 'error');
+            }
+        };
+        
+        window.testPerformanceState = function() {
+            log('Testing performance state migration...', 'info');
+            
+            try {
+                // Test chord state
+                appState.setNested('performance.currentProgram.chord.frequencies', [440, 554.37, 659.25]);
+                appState.setNested('performance.currentProgram.chord.noteNames', ['A4', 'C#5', 'E5']);
+                log(`✓ Set chord frequencies and names`, 'success');
+                
+                // Test expressions
+                appState.setNested('performance.currentProgram.chord.expressions', {
+                    'A4': { type: 'vibrato', depth: 0.01 },
+                    'E5': { type: 'tremolo', depth: 0.3 }
+                });
+                log(`✓ Set note expressions`, 'success');
+                
+                // Test transitions
+                appState.setNested('performance.transitions.duration', 2.5);
+                appState.setNested('performance.transitions.glissando', true);
+                log(`✓ Updated transition settings`, 'success');
+                
+                const performance = appState.getNested('performance');
+                log(`✓ Performance state: ${JSON.stringify(performance, null, 2)}`, 'success');
+                
+            } catch (error) {
+                log(`✗ Error: ${error.message}`, 'error');
+            }
+        };
+        
+        window.testPartAssignments = function() {
+            log('Testing part assignments...', 'info');
+            
+            try {
+                // Test part assignments
+                const assignments = new Map();
+                assignments.set('synth-001', { frequency: 440, expression: { type: 'vibrato' } });
+                assignments.set('synth-002', { frequency: 554.37, expression: { type: 'none' } });
+                
+                appState.setNested('performance.currentProgram.parts.assignments', assignments);
+                log(`✓ Set part assignments for 2 synths`, 'success');
+                
+                // Test reading back
+                const parts = appState.getNested('performance.currentProgram.parts');
+                log(`✓ Parts has ${parts.assignments.size} assignments`, 'success');
+                
+                // Test compatibility mapping
+                const compatAssignments = appState.partAssignments;
+                log(`✓ Compatibility mapping works: ${compatAssignments.size} assignments`, 'success');
+                
+            } catch (error) {
+                log(`✗ Error: ${error.message}`, 'error');
+            }
+        };
+        
+        window.testFullMigration = function() {
+            log('Testing full Phase 3 migration...', 'info');
+            
+            try {
+                // Test performance state
+                appState.setNested('performance.currentProgram.parameters.bowPressure', 0.75);
+                appState.setNested('performance.currentProgram.parameters.bowSpeed', 0.5);
+                log(`✓ Set performance parameters`, 'success');
+                
+                // Test chord and expressions
+                appState.setNested('performance.currentProgram.chord.frequencies', [440, 554.37, 659.25]);
+                appState.setNested('performance.currentProgram.chord.noteNames', ['A4', 'C#5', 'E5']);
+                appState.setNested('performance.currentProgram.chord.expressions', {
+                    'A4': { type: 'vibrato', depth: 0.01 },
+                    'C#5': { type: 'none' },
+                    'E5': { type: 'tremolo', depth: 0.3 }
+                });
+                log(`✓ Set chord with expressions`, 'success');
+                
+                // Test part assignments  
+                const assignments = new Map();
+                assignments.set('synth-001', { frequency: 440, expression: { type: 'vibrato' } });
+                assignments.set('synth-002', { frequency: 554.37, expression: { type: 'none' } });
+                assignments.set('synth-003', { frequency: 659.25, expression: { type: 'tremolo' } });
+                appState.setNested('performance.currentProgram.parts.assignments', assignments);
+                log(`✓ Set part assignments for 3 synths`, 'success');
+                
+                // Test transitions
+                appState.setNested('performance.transitions.duration', 2.5);
+                appState.setNested('performance.transitions.stagger', 0.5);
+                appState.setNested('performance.transitions.glissando', true);
+                log(`✓ Set transition configuration`, 'success');
+                
+                // Test UI state
+                appState.setNested('ui.piano.selectedNotes', ['A4', 'C#5', 'E5']);
+                appState.setNested('ui.parameters.changed', new Set(['bowPressure', 'bowSpeed']));
+                appState.setNested('ui.expressions.selected', 'vibrato');
+                log(`✓ Set UI state`, 'success');
+                
+                // Test compatibility mappings
+                const partAssignmentsCompat = appState.partAssignments;
+                log(`✓ Compatibility: partAssignments has ${partAssignmentsCompat.size} assignments`, 'success');
+                
+                const selectedExpression = appState.selectedExpression;
+                log(`✓ Compatibility: selectedExpression = ${selectedExpression}`, 'success');
+                
+                const parametersChanged = appState.parametersChanged;
+                log(`✓ Compatibility: parametersChanged has ${parametersChanged.size} changes`, 'success');
+                
+                // Summary
+                const performance = appState.getNested('performance');
+                log(`✓ Full migration test completed. Performance state has ${Object.keys(performance.currentProgram.parameters).length} parameters`, 'success');
+                
+            } catch (error) {
+                log(`✗ Error: ${error.message}`, 'error');
+            }
+        };
+        
+        window.showFullState = function() {
+            const state = appState.getState();
+            // Convert Maps to objects for display
+            const displayState = JSON.parse(JSON.stringify(state, (key, value) => {
+                if (value instanceof Map) {
+                    return Object.fromEntries(value);
+                }
+                if (value instanceof Set) {
+                    return Array.from(value);
+                }
+                return value;
+            }));
+            
+            stateViewer.textContent = JSON.stringify(displayState, null, 2);
+            log('✓ State displayed below', 'success');
+        };
+        
+        // Initial state display
+        showFullState();
+        
+        log('Test page loaded. Click buttons to run tests.', 'info');
+    </script>
+</body>
+</html>

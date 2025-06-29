@@ -36,6 +36,9 @@ export class NetworkCoordinator {
 
     this.controllerId =
       controllerId || `ctrl-${Math.random().toString(36).substr(2, 9)}`;
+    
+    // Store controller ID in new state structure
+    this.appState.setNested("connections.controllerId", this.controllerId);
 
     if (window.Logger) {
       window.Logger.log(
@@ -67,15 +70,20 @@ export class NetworkCoordinator {
         window.Logger.log("Starting network connection...", "connections");
       }
 
-      // Update connection status
-      this.appState.set("connectionStatus", "connecting");
+      // Update connection status - both new and legacy structure
+      this.appState.setNested("connections.websocket.connected", false);
+      this.appState.setNested("connections.websocket.reconnecting", true);
+      this.appState.set("connectionStatus", "connecting"); // Legacy compatibility
 
       // Connect WebSocket and wait for it to be ready
       const connected = await this.webSocket.connect(this.controllerId);
 
       if (connected) {
         // This part will now only run after the WebSocket is fully connected
-        this.appState.set("connectionStatus", "connected");
+        // Update connection status - both new and legacy structure
+        this.appState.setNested("connections.websocket.connected", true);
+        this.appState.setNested("connections.websocket.reconnecting", false);
+        this.appState.set("connectionStatus", "connected"); // Legacy compatibility
         
         // Initialize WebRTC manager after WebSocket is connected
         this.webRTC.initialize();
@@ -88,14 +96,22 @@ export class NetworkCoordinator {
         if (window.Logger) {
           window.Logger.log("Failed to establish network connection", "error");
         }
-        this.appState.set("connectionStatus", "failed");
+        // Update connection status - both new and legacy structure
+        this.appState.setNested("connections.websocket.connected", false);
+        this.appState.setNested("connections.websocket.reconnecting", false);
+        this.appState.setNested("connections.websocket.lastError", "Failed to establish network connection");
+        this.appState.set("connectionStatus", "failed"); // Legacy compatibility
         return false;
       }
     } catch (error) {
       if (window.Logger) {
         window.Logger.log(`Network connection error: ${error}`, "error");
       }
-      this.appState.set("connectionStatus", "error");
+      // Update connection status - both new and legacy structure
+      this.appState.setNested("connections.websocket.connected", false);
+      this.appState.setNested("connections.websocket.reconnecting", false);
+      this.appState.setNested("connections.websocket.lastError", error.message || error.toString());
+      this.appState.set("connectionStatus", "error"); // Legacy compatibility
       return false;
     }
   }
@@ -117,8 +133,10 @@ export class NetworkCoordinator {
     // Stop status monitoring
     this.stopStatusMonitoring();
 
-    // Update connection status
-    this.appState.set("connectionStatus", "disconnected");
+    // Update connection status - both new and legacy structure
+    this.appState.setNested("connections.websocket.connected", false);
+    this.appState.setNested("connections.websocket.reconnecting", false);
+    this.appState.set("connectionStatus", "disconnected"); // Legacy compatibility
     this.appState.set("connectedSynths", new Map());
 
     if (window.Logger) {
@@ -136,14 +154,20 @@ export class NetworkCoordinator {
       if (window.Logger) {
         window.Logger.log("WebSocket connected", "connections");
       }
-      this.appState.set("connectionStatus", "connected");
+      // Update connection status - both new and legacy structure
+      this.appState.setNested("connections.websocket.connected", true);
+      this.appState.setNested("connections.websocket.reconnecting", false);
+      this.appState.set("connectionStatus", "connected"); // Legacy compatibility
     });
 
     this.webSocket.on("disconnected", (data) => {
       if (window.Logger) {
         window.Logger.log("WebSocket disconnected", "connections");
       }
-      this.appState.set("connectionStatus", "disconnected");
+      // Update connection status - both new and legacy structure
+      this.appState.setNested("connections.websocket.connected", false);
+      this.appState.setNested("connections.websocket.reconnecting", false);
+      this.appState.set("connectionStatus", "disconnected"); // Legacy compatibility
       this.appState.set("connectedSynths", new Map());
     });
 
@@ -151,7 +175,11 @@ export class NetworkCoordinator {
       if (window.Logger) {
         window.Logger.log("Controller was kicked", "connections");
       }
-      this.appState.set("connectionStatus", "kicked");
+      // Update connection status - both new and legacy structure
+      this.appState.setNested("connections.websocket.connected", false);
+      this.appState.setNested("connections.websocket.reconnecting", false);
+      this.appState.setNested("connections.websocket.lastError", "Controller was kicked");
+      this.appState.set("connectionStatus", "kicked"); // Legacy compatibility
       this.eventBus.emit("network:kicked", data);
     });
 
@@ -544,13 +572,24 @@ export class NetworkCoordinator {
     
     // Don't override "ready" status with "connected"
     if (currentStatus === "ready" && wsStatus.connected) {
-      // Keep "ready" status
+      // Keep "ready" status but update connection state
+      this.appState.setNested("connections.websocket.connected", true);
+      this.appState.setNested("connections.websocket.reconnecting", false);
     } else if (wsStatus.connected) {
-      this.appState.set("connectionStatus", "connected");
+      // Update connection status - both new and legacy structure
+      this.appState.setNested("connections.websocket.connected", true);
+      this.appState.setNested("connections.websocket.reconnecting", false);
+      this.appState.set("connectionStatus", "connected"); // Legacy compatibility
     } else if (wsStatus.connecting) {
-      this.appState.set("connectionStatus", "connecting");
+      // Update connection status - both new and legacy structure
+      this.appState.setNested("connections.websocket.connected", false);
+      this.appState.setNested("connections.websocket.reconnecting", true);
+      this.appState.set("connectionStatus", "connecting"); // Legacy compatibility
     } else {
-      this.appState.set("connectionStatus", "disconnected");
+      // Update connection status - both new and legacy structure
+      this.appState.setNested("connections.websocket.connected", false);
+      this.appState.setNested("connections.websocket.reconnecting", false);
+      this.appState.set("connectionStatus", "disconnected"); // Legacy compatibility
     }
 
     // Ping all synths for latency updates

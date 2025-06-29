@@ -31,8 +31,8 @@ export class PartManager {
       "trill-denominator": new Set([1]),
     };
 
-    // Distribution state
-    this.synthAssignments = new Map(); // synthId -> {note, frequency, expression}
+    // Distribution state - now stored in AppState
+    // this.synthAssignments accessed via getter/setter
     this.lastSentProgram = null;
   }
 
@@ -221,20 +221,37 @@ export class PartManager {
   }
 
   /**
+   * Get synth assignments from AppState
+   * @private
+   */
+  get synthAssignments() {
+    return this.appState.getNested('performance.currentProgram.parts.assignments') || new Map();
+  }
+
+  /**
+   * Set synth assignments in AppState
+   * @private
+   */
+  setSynthAssignments(assignments) {
+    this.appState.setNested('performance.currentProgram.parts.assignments', assignments);
+  }
+
+  /**
    * Redistribute current chord to connected synths
    */
   redistributeToSynths() {
     const connectedSynths = this.appState.get("connectedSynths");
     if (!connectedSynths || connectedSynths.size === 0) {
-      this.synthAssignments.clear();
+      this.setSynthAssignments(new Map());
       return;
     }
 
     const synthIds = Array.from(connectedSynths.keys());
-    this.synthAssignments.clear();
+    const assignments = new Map();
 
     if (this.currentChord.length === 0) {
       // No chord - clear assignments
+      this.setSynthAssignments(assignments);
       return;
     }
 
@@ -245,13 +262,13 @@ export class PartManager {
       const noteName = this.frequencyToNoteName(frequency);
       const expression = this.noteExpressions.get(noteName) || { type: "none" };
       
-
-      this.synthAssignments.set(synthId, {
+      assignments.set(synthId, {
         frequency,
         expression,
       });
     });
 
+    this.setSynthAssignments(assignments);
   }
 
   /**

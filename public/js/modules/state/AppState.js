@@ -1,42 +1,135 @@
 /**
  * AppState Module for String Assembly FM
  * Centralized state management with reactive updates
+ * 
+ * Migration Status (Phase 3):
+ * ✓ Performance state: Migrated to performance.currentProgram.*
+ * ✓ Part assignments: Migrated to performance.currentProgram.parts.assignments
+ * ✓ Expression state: Migrated to performance.currentProgram.chord.expressions
+ * ✓ Piano UI state: Mapped via compatibility layer
+ * ✓ Parameter tracking: Mapped via compatibility layer
+ * 
+ * Next Steps:
+ * - Remove redundant state at root level once all modules are updated
+ * - Update modules to use new nested paths directly
  */
 
 import { eventBus } from '../core/EventBus.js';
 
 export class AppState {
   constructor() {
+    // Initialize with the new unified structure
     this.#state = {
-      // NOTE: Program-related state has been moved to ProgramState
-      // Keeping minimal state here for compatibility during migration
-      
-      // Chord state - kept for compatibility
-      currentChord: [],
-
-      // Harmonic selections - kept for compatibility  
-      harmonicSelections: {
-        'vibrato-numerator': new Set([1]),
-        'vibrato-denominator': new Set([1]),
-        'trill-numerator': new Set([1]),
-        'trill-denominator': new Set([1]),
-        'tremolo-numerator': new Set([1]),
-        'tremolo-denominator': new Set([1])
+      // Performance State (Musical)
+      performance: {
+        currentProgram: {
+          parameters: {}, // Will be populated by ProgramState
+          chord: {
+            frequencies: [],
+            noteNames: [],
+            expressions: {} // { noteName: { type, parameters } }
+          },
+          harmonicSelections: this.#initializeHarmonicSelections(),
+          parts: {
+            assignments: new Map() // Map<synthId, { frequency, expression }>
+          }
+        },
+        activeProgram: null, // What's running on synths
+        transitions: {
+          duration: 1.0,
+          stagger: 0.0,
+          durationSpread: 0.0,
+          glissando: false
+        },
+        timestamp: Date.now()
       },
-      
-      // Connection state
+
+      // System State (Infrastructure)
+      system: {
+        audio: {
+          masterGain: 0.8,
+          power: true,
+          calibrated: false
+        },
+        debug: {
+          enabled: false,
+          categories: [],
+          logHistory: []
+        }
+      },
+
+      // Connection State
+      connections: {
+        websocket: {
+          connected: false,
+          reconnecting: false,
+          reconnectAttempts: 0,
+          lastError: null
+        },
+        synths: new Map(), // Map<synthId, { connected, latency, lastSeen }>
+        metrics: {
+          connectedCount: 0,
+          averageLatency: 0,
+          lastHeartbeat: null
+        },
+        controllerId: null
+      },
+
+      // UI State
+      ui: {
+        piano: {
+          selectedNotes: [], // Note names being displayed
+          playingNotes: [],  // Notes currently sounding
+          instrumentRange: { min: 20, max: 20000 }
+        },
+        parameters: {
+          changed: new Set(), // Parameters modified since last sync
+          focused: null       // Currently focused parameter
+        },
+        expressions: {
+          selected: 'none',
+          activeGroups: []
+        },
+        banking: {
+          currentBank: 1,
+          lastSaved: null,
+          lastLoaded: null
+        },
+        modals: {
+          saveDialog: false,
+          loadDialog: false,
+          settingsOpen: false
+        }
+      },
+
+      // Banking State
+      banking: {
+        banks: new Map(), // Map<bankNumber, Program>
+        metadata: {
+          lastModified: Date.now(),
+          version: '2.0'
+        }
+      },
+
+      // History (for future undo/redo)
+      history: {
+        past: [],
+        future: [],
+        maxSize: 50,
+        enabled: false
+      },
+
+      // ==============================================
+      // LEGACY COMPATIBILITY - TO BE REMOVED
+      // ==============================================
+      currentChord: [],
+      harmonicSelections: this.#initializeHarmonicSelections(),
       connectionStatus: 'disconnected',
       connectedSynths: new Map(),
-
-      // UI state
       selectedExpression: 'none',
       parametersChanged: new Set(),
-
-      // Performance state
       averageLatency: 0,
       lastHeartbeat: null,
-      
-      // Legacy compatibility
       currentProgram: null,
       activeProgram: null,
       programBanks: new Map()
@@ -45,12 +138,108 @@ export class AppState {
     this.#subscribers = new Map();
     this.#history = [];
     this.#maxHistorySize = 50;
+
+    // Set up compatibility layer
+    this.#setupCompatibilityLayer();
   }
 
   #state = {};
   #subscribers = new Map();
   #history = [];
   #maxHistorySize = 50;
+
+  /**
+   * Initialize harmonic selections with default values
+   * @private
+   */
+  #initializeHarmonicSelections() {
+    return {
+      'vibrato-numerator': new Set([1]),
+      'vibrato-denominator': new Set([1]),
+      'trill-numerator': new Set([1]),
+      'trill-denominator': new Set([1]),
+      'tremolo-numerator': new Set([1]),
+      'tremolo-denominator': new Set([1])
+    };
+  }
+
+  /**
+   * Set up compatibility layer for gradual migration
+   * @private
+   */
+  #setupCompatibilityLayer() {
+    // Create property descriptors for legacy access patterns
+    const compatibilityMappings = {
+      // System state mappings
+      'power': 'system.audio.power',
+      'masterGain': 'system.audio.masterGain',
+      'volume': 'system.audio.masterGain',
+      
+      // Connection state mappings
+      'connectionStatus': {
+        get: () => this.#state.connections.websocket.connected ? 'connected' : 'disconnected',
+        set: (v) => this.#state.connections.websocket.connected = (v === 'connected')
+      },
+      'averageLatency': 'connections.metrics.averageLatency',
+      'lastHeartbeat': 'connections.metrics.lastHeartbeat',
+      
+      // UI state mappings
+      'selectedExpression': 'ui.expressions.selected',
+      'parametersChanged': 'ui.parameters.changed',
+      'selectedNotes': 'ui.piano.selectedNotes',
+      'playingNotes': 'ui.piano.playingNotes',
+      
+      // These are already at root level for compatibility
+      // 'currentChord', 'harmonicSelections', 'connectedSynths', 'currentProgram', 'activeProgram', 'programBanks'
+    };
+
+    // Apply compatibility mappings
+    Object.entries(compatibilityMappings).forEach(([oldKey, mapping]) => {
+      if (typeof mapping === 'string') {
+        // Simple path mapping
+        Object.defineProperty(this, oldKey, {
+          get: () => this.getNested(mapping),
+          set: (value) => this.setNested(mapping, value),
+          configurable: true
+        });
+      } else if (typeof mapping === 'object') {
+        // Custom getter/setter
+        Object.defineProperty(this, oldKey, {
+          get: mapping.get,
+          set: mapping.set,
+          configurable: true
+        });
+      }
+    });
+
+    // Additional compatibility for complex state
+    // Note: currentProgram is already at root level in the state object for compatibility
+    
+    // Expressions compatibility
+    Object.defineProperty(this, 'expressions', {
+      get: () => this.#state.performance.currentProgram.chord.expressions,
+      set: (v) => this.#state.performance.currentProgram.chord.expressions = v,
+      configurable: true
+    });
+    
+    // Per-note expressions (used by ChordManager)
+    Object.defineProperty(this, 'perNoteExpressions', {
+      get: () => this.#state.performance.currentProgram.chord.expressions,
+      set: (v) => this.#state.performance.currentProgram.chord.expressions = v,
+      configurable: true
+    });
+    
+    // Part assignments compatibility (used by PartManager)
+    Object.defineProperty(this, 'partAssignments', {
+      get: () => this.#state.performance.currentProgram.parts.assignments,
+      set: (v) => this.#state.performance.currentProgram.parts.assignments = v,
+      configurable: true
+    });
+
+    if (window.Logger) {
+      window.Logger.log('AppState compatibility layer initialized', 'lifecycle');
+    }
+  }
 
   /**
    * Get state value by key
@@ -98,6 +287,108 @@ export class AppState {
         window.Logger.log(`State updated: ${key}`, 'lifecycle');
       }
     }
+  }
+
+  /**
+   * Get nested state value using dot notation path
+   * @param {string} path - Dot notation path (e.g., 'system.audio.power')
+   * @returns {*} State value at path
+   */
+  getNested(path) {
+    const keys = path.split('.');
+    let current = this.#state;
+    
+    for (const key of keys) {
+      if (!current || current[key] === undefined) {
+        return undefined;
+      }
+      current = current[key];
+    }
+    
+    return current;
+  }
+
+  /**
+   * Set nested state value using dot notation path
+   * @param {string} path - Dot notation path (e.g., 'system.audio.power')
+   * @param {*} value - New value to set
+   * @param {boolean} silent - Skip notifications if true
+   */
+  setNested(path, value, silent = false) {
+    const keys = path.split('.');
+    let current = this.#state;
+    
+    // Navigate to the parent of the target
+    for (let i = 0; i < keys.length - 1; i++) {
+      if (!current[keys[i]]) {
+        current[keys[i]] = {};
+      }
+      current = current[keys[i]];
+    }
+    
+    const lastKey = keys[keys.length - 1];
+    const oldValue = current[lastKey];
+    
+    // Don't update if value hasn't changed
+    if (oldValue === value) {
+      return;
+    }
+    
+    // Store previous state for history
+    this.#addToHistory(path, oldValue, value);
+    
+    // Update state
+    current[lastKey] = value;
+    
+    if (!silent) {
+      // Notify subscribers using the full path
+      this.#notifySubscribers(path, value, oldValue);
+      
+      // Also notify any subscribers to parent paths
+      let parentPath = '';
+      for (let i = 0; i < keys.length; i++) {
+        parentPath = i === 0 ? keys[0] : parentPath + '.' + keys[i];
+        const parentValue = this.getNested(parentPath);
+        this.#notifySubscribers(parentPath, parentValue, parentValue);
+      }
+
+      // Emit global state change event
+      eventBus.emit('state:changed', {
+        key: path,
+        value,
+        oldValue,
+        timestamp: Date.now()
+      });
+
+      // Log state changes in debug mode
+      if (window.Logger) {
+        window.Logger.log(`State updated: ${path}`, 'lifecycle');
+      }
+    }
+  }
+
+  /**
+   * Get current program helper
+   * @returns {Object} Current program state
+   */
+  getCurrentProgram() {
+    return this.#state.performance.currentProgram;
+  }
+
+  /**
+   * Get system state helper
+   * @returns {Object} System state
+   */
+  getSystemState() {
+    return this.#state.system;
+  }
+
+  /**
+   * Get connections helper
+   * @returns {Object} Connection state
+   */
+  getConnections() {
+    return this.#state.connections;
   }
 
   /**
@@ -191,42 +482,125 @@ export class AppState {
   reset(silent = false) {
     const oldState = this.getState();
 
+    // Recreate initial state structure
     this.#state = {
-      // NOTE: Program-related state has been moved to ProgramState
-      // Keeping minimal state here for compatibility during migration
-      
-      // Chord state - kept for compatibility
-      currentChord: [],
-
-      // Harmonic selections - kept for compatibility  
-      harmonicSelections: {
-        'vibrato-numerator': new Set([1]),
-        'vibrato-denominator': new Set([1]),
-        'trill-numerator': new Set([1]),
-        'trill-denominator': new Set([1]),
-        'tremolo-numerator': new Set([1]),
-        'tremolo-denominator': new Set([1])
+      // Performance State (Musical)
+      performance: {
+        currentProgram: {
+          parameters: {},
+          chord: {
+            frequencies: [],
+            noteNames: [],
+            expressions: {}
+          },
+          harmonicSelections: this.#initializeHarmonicSelections(),
+          parts: {
+            assignments: new Map()
+          }
+        },
+        activeProgram: null,
+        transitions: {
+          duration: 1.0,
+          stagger: 0.0,
+          durationSpread: 0.0,
+          glissando: false
+        },
+        timestamp: Date.now()
       },
-      
-      // Connection state
+
+      // System State (Infrastructure)
+      system: {
+        audio: {
+          masterGain: 0.8,
+          power: true,
+          calibrated: false
+        },
+        debug: {
+          enabled: false,
+          categories: [],
+          logHistory: []
+        }
+      },
+
+      // Connection State
+      connections: {
+        websocket: {
+          connected: false,
+          reconnecting: false,
+          reconnectAttempts: 0,
+          lastError: null
+        },
+        synths: new Map(),
+        metrics: {
+          connectedCount: 0,
+          averageLatency: 0,
+          lastHeartbeat: null
+        },
+        controllerId: null
+      },
+
+      // UI State
+      ui: {
+        piano: {
+          selectedNotes: [],
+          playingNotes: [],
+          instrumentRange: { min: 20, max: 20000 }
+        },
+        parameters: {
+          changed: new Set(),
+          focused: null
+        },
+        expressions: {
+          selected: 'none',
+          activeGroups: []
+        },
+        banking: {
+          currentBank: 1,
+          lastSaved: null,
+          lastLoaded: null
+        },
+        modals: {
+          saveDialog: false,
+          loadDialog: false,
+          settingsOpen: false
+        }
+      },
+
+      // Banking State
+      banking: {
+        banks: new Map(),
+        metadata: {
+          lastModified: Date.now(),
+          version: '2.0'
+        }
+      },
+
+      // History
+      history: {
+        past: [],
+        future: [],
+        maxSize: 50,
+        enabled: false
+      },
+
+      // Legacy compatibility
+      currentChord: [],
+      harmonicSelections: this.#initializeHarmonicSelections(),
       connectionStatus: 'disconnected',
       connectedSynths: new Map(),
-
-      // UI state
       selectedExpression: 'none',
       parametersChanged: new Set(),
-
-      // Performance state
       averageLatency: 0,
       lastHeartbeat: null,
-      
-      // Legacy compatibility
       currentProgram: null,
       activeProgram: null,
       programBanks: new Map()
     };
 
     this.#history = [];
+
+    // Re-setup compatibility layer
+    this.#setupCompatibilityLayer();
 
     if (!silent) {
       eventBus.emit('state:reset', {
@@ -390,7 +764,10 @@ export class AppState {
 
   // Connection state helpers
   addConnectedSynth(synthId, synthData) {
+    // Work with both old and new state locations
     const synths = new Map(this.get('connectedSynths'));
+    const newSynths = new Map(this.getNested('connections.synths'));
+    
     // Ensure all fields are initialized
     const enrichedData = {
       id: synthId,
@@ -403,19 +780,41 @@ export class AppState {
       lastPing: null,
       ...synthData
     };
+    
+    // Update both locations during migration
     synths.set(synthId, enrichedData);
+    newSynths.set(synthId, enrichedData);
+    
     this.set('connectedSynths', synths);
+    this.setNested('connections.synths', newSynths);
+    
+    // Update connection count
+    this.setNested('connections.metrics.connectedCount', newSynths.size);
   }
 
   removeConnectedSynth(synthId) {
+    // Work with both old and new state locations
     const synths = new Map(this.get('connectedSynths'));
+    const newSynths = new Map(this.getNested('connections.synths'));
+    
     synths.delete(synthId);
+    newSynths.delete(synthId);
+    
     this.set('connectedSynths', synths);
+    this.setNested('connections.synths', newSynths);
+    
+    // Update connection count
+    this.setNested('connections.metrics.connectedCount', newSynths.size);
   }
 
   updateSynthLatency(synthId, latency) {
+    // Work with both old and new state locations
     const synths = new Map(this.get('connectedSynths'));
+    const newSynths = new Map(this.getNested('connections.synths'));
+    
     const synthData = synths.get(synthId);
+    const newSynthData = newSynths.get(synthId);
+    
     if (synthData) {
       synthData.latency = latency;
       synthData.lastPing = Date.now();
@@ -433,10 +832,29 @@ export class AppState {
       
       synths.set(synthId, synthData);
       this.set('connectedSynths', synths);
-
-      // Update average latency
-      this.#updateAverageLatency();
     }
+    
+    if (newSynthData) {
+      newSynthData.latency = latency;
+      newSynthData.lastPing = Date.now();
+      
+      // Update connection health
+      if (latency < 50) {
+        newSynthData.connectionHealth = 'excellent';
+      } else if (latency < 100) {
+        newSynthData.connectionHealth = 'good';
+      } else if (latency < 200) {
+        newSynthData.connectionHealth = 'fair';
+      } else {
+        newSynthData.connectionHealth = 'poor';
+      }
+      
+      newSynths.set(synthId, newSynthData);
+      this.setNested('connections.synths', newSynths);
+    }
+
+    // Update average latency
+    this.#updateAverageLatency();
   }
   
   updateSynthState(synthId, stateUpdate) {
@@ -460,16 +878,22 @@ export class AppState {
   }
 
   #updateAverageLatency() {
-    const synths = this.get('connectedSynths');
+    // Use new state location
+    const synths = this.getNested('connections.synths');
     const latencies = Array.from(synths.values())
       .map(s => s.latency)
       .filter(l => l != null);
 
     if (latencies.length > 0) {
       const average = latencies.reduce((sum, l) => sum + l, 0) / latencies.length;
-      this.set('averageLatency', Math.round(average));
+      const rounded = Math.round(average);
+      
+      // Update both old and new locations
+      this.set('averageLatency', rounded);
+      this.setNested('connections.metrics.averageLatency', rounded);
     } else {
       this.set('averageLatency', 0);
+      this.setNested('connections.metrics.averageLatency', 0);
     }
   }
 }
