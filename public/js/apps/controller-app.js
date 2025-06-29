@@ -8,7 +8,7 @@ window.__modularSystemActive = true;
 
 // Import core modules
 import { Logger } from "../modules/core/Logger.js";
-import { Config, fetchIceServers } from "../modules/core/Config.js";
+import { SystemConfig, ConfigUtils, fetchIceServers } from '../config/system.config.js';
 import { eventBus } from "../modules/core/EventBus.js";
 import { appState } from "../modules/state/AppState.js";
 import { programManager } from "../modules/state/ProgramManager.js";
@@ -1332,7 +1332,7 @@ function setupCompatibilityLayer() {
   // Expose modular components globally for gradual migration
   window.modular = {
     Logger,
-    Config,
+    SystemConfig,
     eventBus,
     appState,
     programManager,
@@ -1394,10 +1394,10 @@ window.addEventListener("unhandledrejection", (event) => {
 /**
  * Development utilities
  */
-if (Config.DEBUG.ENABLED) {
+if (SystemConfig.system.logging.enabled) {
   window.dev = {
     Logger,
-    Config,
+    SystemConfig,
     eventBus,
     appState,
     programManager,
@@ -1414,7 +1414,7 @@ if (Config.DEBUG.ENABLED) {
     getChordInfo: () => partManager.getChordInfo(),
     getAllParams: () => parameterControls.getAllParameterValues(),
     getPartStats: () => partManager.getStatistics(),
-    testSave: () => programManager.saveToBank(1, Config.DEFAULT_PROGRAM),
+    testSave: () => programManager.saveToBank(1, ConfigUtils.getDefaultProgram()),
     testLoad: () => programManager.loadFromBank(1),
     testConnect: () => networkCoordinator.connect(),
     testDisconnect: () => networkCoordinator.disconnect(),
@@ -1577,8 +1577,8 @@ window.debugWebRTC = {
 
   // Force refresh ICE servers
   refreshICE: async () => {
-    const { refreshIceServers } = await import("./modules/core/Config.js");
-    return await refreshIceServers();
+    await fetchIceServers();
+    return SystemConfig.network.webrtc.iceServers;
   },
 
   // Get detailed peer info
@@ -1627,7 +1627,7 @@ window.debugWebRTC = {
 
   // Get current RTC config
   getConfig: () => {
-    return Config.RTC_CONFIG;
+    return { iceServers: SystemConfig.network.webrtc.iceServers };
   },
 };
 

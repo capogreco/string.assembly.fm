@@ -4,7 +4,7 @@
  * note calculations, and transition timing
  */
 
-import { Config } from '../core/Config.js';
+import { SystemConfig, ConfigUtils } from '../../config/system.config.js';
 
 export class AudioUtilities {
   /**
@@ -218,8 +218,8 @@ export class AudioUtilities {
    * @returns {boolean} True if frequency is audible
    */
   static isAudibleFrequency(frequency) {
-    return frequency >= Config.AUDIO.FREQUENCY_RANGE.MIN &&
-           frequency <= Config.AUDIO.FREQUENCY_RANGE.MAX;
+    return frequency >= SystemConfig.audio.ranges.frequency.min &&
+           frequency <= SystemConfig.audio.ranges.frequency.max;
   }
 
   /**

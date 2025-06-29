@@ -2,6 +2,7 @@
 import { SynthCore } from '../../../src/synth/synth-core.js';
 import { Logger } from '../modules/core/Logger.js';
 import { WaveformVisualizer } from '../modules/ui/WaveformVisualizer.js';
+import { SystemConfig } from '../config/system.config.js';
 
 class SynthApp {
   constructor() {
@@ -10,9 +11,7 @@ class SynthApp {
     this.audioContext = null;
     this.synthCore = null;
     this.controllers = new Map();
-    this.rtcConfig = {
-      iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
-    };
+    this.rtcConfig = SystemConfig.network.webrtc;
     this.inCalibrationMode = false;
     this.currentProgram = null;
     
@@ -96,8 +95,7 @@ class SynthApp {
   }
 
   connectWebSocket() {
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const wsUrl = `${protocol}//${window.location.host}/ws`;
+    const wsUrl = SystemConfig.network.websocket.url;
     // console.log("[DEBUG] Connecting to WebSocket:", wsUrl);
     this.ws = new WebSocket(wsUrl);
 
@@ -133,7 +131,7 @@ class SynthApp {
     this.ws.addEventListener("close", () => {
       Logger.log("Disconnected from server", "connections");
       this.updateStatus("Disconnected - Reconnecting...");
-      setTimeout(() => this.connectWebSocket(), 2000);
+      setTimeout(() => this.connectWebSocket(), SystemConfig.network.websocket.reconnectDelay);
     });
 
     this.ws.addEventListener("error", (error) => {

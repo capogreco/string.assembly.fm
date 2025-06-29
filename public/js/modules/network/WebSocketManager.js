@@ -4,17 +4,17 @@
  */
 
 import { eventBus } from "../core/EventBus.js";
-import { Config } from "../core/Config.js";
+import { SystemConfig } from "../../config/system.config.js";
 
 export class WebSocketManager {
-  constructor(url = Config.WS_URL, eventBusInstance = eventBus) {
+  constructor(url, eventBusInstance = eventBus) {
     this.url = url;
     this.eventBus = eventBusInstance;
     this.ws = null;
     this.heartbeatInterval = null;
     this.reconnectAttempts = 0;
-    this.maxReconnectAttempts = Config.NETWORK.MAX_RECONNECT_ATTEMPTS;
-    this.reconnectDelay = Config.NETWORK.RECONNECT_DELAY;
+    this.maxReconnectAttempts = SystemConfig.network.websocket.maxReconnectAttempts;
+    this.reconnectDelay = SystemConfig.network.websocket.reconnectDelay;
     this.messageQueue = [];
     this.isConnected = false;
     this.isConnecting = false;
@@ -57,7 +57,7 @@ export class WebSocketManager {
       return new Promise((resolve, reject) => {
         const timeout = setTimeout(() => {
           reject(new Error("WebSocket connection timeout"));
-        }, Config.NETWORK.CONNECTION_TIMEOUT);
+        }, SystemConfig.network.webrtc.connectionTimeout);
 
         this.eventBus.once("websocket:connected", () => {
           clearTimeout(timeout);
@@ -112,7 +112,7 @@ export class WebSocketManager {
       this.ws.readyState !== 1 // WebSocket.OPEN = 1
     ) {
       // Queue message for later if not connected
-      if (this.messageQueue.length < Config.NETWORK.MESSAGE_QUEUE_SIZE) {
+      if (this.messageQueue.length < SystemConfig.network.websocket.maxQueueSize) {
         this.messageQueue.push(message);
         if (window.Logger) {
           window.Logger.log("Message queued (WebSocket not ready)", "messages");
@@ -448,7 +448,7 @@ export class WebSocketManager {
           target: "server",
         });
       }
-    }, Config.NETWORK.PING_INTERVAL);
+    }, SystemConfig.network.websocket.heartbeatInterval);
   }
 
   /**
@@ -470,7 +470,7 @@ export class WebSocketManager {
     this.reconnectAttempts++;
     const delay =
       this.reconnectDelay *
-      Math.pow(Config.NETWORK.RECONNECT_BACKOFF, this.reconnectAttempts - 1);
+      Math.pow(SystemConfig.network.websocket.reconnectBackoff, this.reconnectAttempts - 1);
 
     if (window.Logger) {
       window.Logger.log(

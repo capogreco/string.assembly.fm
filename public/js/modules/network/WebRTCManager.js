@@ -4,10 +4,10 @@
  */
 
 import { eventBus } from "../core/EventBus.js";
-import { Config } from "../core/Config.js";
+import { SystemConfig } from "../../config/system.config.js";
 
 export class WebRTCManager {
-  constructor(rtcConfig = Config.RTC_CONFIG, eventBusInstance = eventBus) {
+  constructor(rtcConfig = SystemConfig.network.webrtc, eventBusInstance = eventBus) {
     // Don't store rtcConfig - use Config.RTC_CONFIG directly to get updates
     this.eventBus = eventBusInstance;
     this.peers = new Map();
@@ -121,7 +121,7 @@ export class WebRTCManager {
       }
     }
     // Always use the latest RTC configuration
-    const currentConfig = { ...Config.RTC_CONFIG };
+    const currentConfig = { ...SystemConfig.network.webrtc };
         if (this.enableDiagnosticLogs) console.log(
       `[WEBRTC-DIAG] Peer ${peerId}: Creating new RTCPeerConnection at ${new Date().toISOString()}. Config:`,
       JSON.stringify(currentConfig, null, 2),
@@ -384,14 +384,14 @@ export class WebRTCManager {
     try {
       // Ensure we have fresh ICE servers before creating connection
       if (
-        !Config.RTC_CONFIG.iceServers ||
-        Config.RTC_CONFIG.iceServers.length === 0
+        !SystemConfig.network.webrtc.iceServers ||
+        SystemConfig.network.webrtc.iceServers.length === 0
       ) {
         if (this.enableDiagnosticLogs) console.warn(
           `[WEBRTC-DIAG] Peer ${peerId}: No ICE servers configured when handling offer. Attempting to fetch...`,
         );
-        if (Config.fetchIceServers) {
-          await Config.fetchIceServers();
+        if (SystemConfig.fetchIceServers) {
+          await SystemConfig.fetchIceServers();
         }
       }
 
@@ -1680,13 +1680,13 @@ export class WebRTCManager {
         iceTransportPolicy: "all",
       },
       "turn-only": {
-        iceServers: Config.RTC_CONFIG.iceServers.filter(
+        iceServers: SystemConfig.network.webrtc.iceServers.filter(
           (server) => server.urls && server.urls.includes("turn:"),
         ),
         iceTransportPolicy: "relay",
       },
       all: {
-        iceServers: Config.RTC_CONFIG.iceServers,
+        iceServers: SystemConfig.network.webrtc.iceServers,
         iceTransportPolicy: "all",
       },
     };

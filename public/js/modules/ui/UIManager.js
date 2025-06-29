@@ -5,7 +5,7 @@
 
 import { eventBus } from "../core/EventBus.js";
 import { appState } from "../state/AppState.js";
-import { Config } from "../core/Config.js";
+import { SystemConfig } from "../../config/system.config.js";
 
 export class UIManager {
   constructor() {
@@ -637,7 +637,7 @@ export class UIManager {
 
     this.updateInterval = setInterval(() => {
       this.performPeriodicUpdate();
-    }, Config.UI.STATUS_UPDATE_INTERVAL || 1000);
+    }, SystemConfig.ui.statusUpdateInterval || 1000);
   }
 
   /**

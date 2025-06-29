@@ -4,7 +4,7 @@
  */
 
 import { appState } from './AppState.js';
-import { Config } from '../core/Config.js';
+import { SystemConfig, ConfigUtils } from '../../config/system.config.js';
 import { eventBus } from '../core/EventBus.js';
 import { programState } from './ProgramState.js';
 
@@ -13,7 +13,7 @@ export class ProgramManager {
     this.state = state;
     this.storage = storage;
     this.eventBus = eventBusInstance;
-    this.storageKey = Config.STORAGE_KEYS.BANKS;
+    this.storageKey = ConfigUtils.getStorageKey('banks');
     this.isApplyingProgram = false; // Prevent recursive updates
     
     // This is now a compatibility wrapper around ProgramState
@@ -105,7 +105,7 @@ export class ProgramManager {
    */
   createExampleProgram() {
     return {
-      ...Config.DEFAULT_PROGRAM,
+      ...ConfigUtils.getDefaultProgram(),
       name: 'Example Program',
       timestamp: Date.now(),
       version: '1.0'
@@ -120,7 +120,7 @@ export class ProgramManager {
       const program = {};
 
       // Get parameter values from UI elements
-      Config.PARAM_IDS.forEach((id) => {
+      ConfigUtils.getParameterNames().forEach((id) => {
         const element = document.getElementById(id);
         if (element) {
           const value = element.type === 'range'
@@ -129,7 +129,7 @@ export class ProgramManager {
           program[id] = value;
         } else {
           // Use default value if element not found
-          program[id] = Config.DEFAULT_PROGRAM[id] || 0.5;
+          program[id] = ConfigUtils.getDefaultProgram()[id] || 0.5;
         }
       });
 
@@ -160,7 +160,7 @@ export class ProgramManager {
     this.isApplyingProgram = true;
     
     try {
-      Config.PARAM_IDS.forEach((id) => {
+      ConfigUtils.getParameterNames().forEach((id) => {
         if (program[id] !== undefined) {
           const element = document.getElementById(id);
           if (element) {

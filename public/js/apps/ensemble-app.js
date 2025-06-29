@@ -1,6 +1,7 @@
 // ensemble-app.js - Multi-synth test ensemble application
 import { SynthCore } from '../../../src/synth/synth-core.js';
 import { Logger } from '../modules/core/Logger.js';
+import { SystemConfig } from '../config/system.config.js';
 
 // Wrapper class for SynthCore in ensemble
 class TestSynth {
@@ -190,9 +191,7 @@ class EnsembleApp {
     this.audioInitialized = false;
     
     // WebRTC configuration
-    this.rtcConfig = {
-      iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
-    };
+    this.rtcConfig = SystemConfig.network.webrtc;
   }
 
   async init() {
@@ -278,13 +277,14 @@ class EnsembleApp {
       }
 
       this.masterGain = this.audioContext.createGain();
-      this.masterGain.gain.value = 0.7;
+      this.masterGain.gain.value = SystemConfig.audio.defaults.masterVolume;
       this.masterGain.connect(this.audioContext.destination);
 
       this.log("Loading audio worklets...", "info");
-      await this.audioContext.audioWorklet.addModule("../src/worklets/bowed_string_worklet.js");
-      await this.audioContext.audioWorklet.addModule("../src/worklets/reverb_worklet.js");
-      await this.audioContext.audioWorklet.addModule("../src/worklets/pink_noise.js");
+      const { basePath, modules } = SystemConfig.audio.worklets;
+      for (const module of modules) {
+        await this.audioContext.audioWorklet.addModule(basePath + module);
+      }
       this.log("Audio worklets loaded successfully", "info");
     }
   }

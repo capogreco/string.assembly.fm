@@ -1,6 +1,8 @@
 // synth-core.js
 // Core synthesis functionality shared between individual synths and test ensemble
 
+import { SystemConfig } from '/js/config/system.config.js';
+
 export class SynthCore {
   constructor(synthId, options = {}) {
     this.synthId = synthId;
@@ -33,39 +35,35 @@ export class SynthCore {
     this.pinkNoiseNode = null;
     this.calibrationGainNode = null;
 
-    // Worklet modules required
-    this.workletModules = [
-      "/src/worklets/bowed_string_worklet.js", // Path relative to server root
-      "/src/worklets/reverb_worklet.js",
-      "/src/worklets/pink_noise.js",
-      "/src/worklets/white_noise.js",
-      "/src/worklets/lfo_worklet.js",
-    ];
+    // Get worklet modules from config
+    this.workletModules = SystemConfig.audio.worklets.modules.map(
+      module => SystemConfig.audio.worklets.basePath + module
+    );
 
-    // Default parameter values
+    // Default parameter values from config
     this.defaultParameters = {
-      fundamentalFrequency: 440.0,
-      stringDamping: 0.5,
-      bowPosition: 0.12,
-      bowSpeed: 0.5,
-      bowForce: 0.5,
-      brightness: 0.5,
-      bodyResonance: 0.3,
-      bodyType: 0,
-      stringMaterial: 0,
-      vibratoEnabled: 0,
-      vibratoRate: 5.0,
-      vibratoDepth: 0.01,
-      tremoloEnabled: 0,
-      tremoloSpeed: 4.0,
-      tremoloDepth: 0.3,
-      tremoloArticulation: 0.8,
-      trillEnabled: 0,
-      trillSpeed: 5.0,
-      trillInterval: 2,
-      trillArticulation: 0.7,
-      masterGain: 0.5,
-      power: 1,
+      fundamentalFrequency: SystemConfig.parameters.fundamentalFrequency.default,
+      stringDamping: SystemConfig.parameters.stringDamping.default,
+      bowPosition: SystemConfig.parameters.bowPosition.default,
+      bowSpeed: SystemConfig.parameters.bowSpeed.default,
+      bowForce: SystemConfig.parameters.bowForce.default,
+      brightness: SystemConfig.parameters.brightness.default,
+      bodyResonance: SystemConfig.parameters.bodyResonance.default,
+      bodyType: SystemConfig.parameters.bodyType.default,
+      stringMaterial: SystemConfig.parameters.stringMaterial.default,
+      vibratoEnabled: SystemConfig.parameters.vibratoEnabled.default,
+      vibratoRate: SystemConfig.parameters.vibratoRate.default,
+      vibratoDepth: SystemConfig.parameters.vibratoDepth.default,
+      tremoloEnabled: SystemConfig.parameters.tremoloEnabled.default,
+      tremoloSpeed: SystemConfig.parameters.tremoloSpeed.default,
+      tremoloDepth: SystemConfig.parameters.tremoloDepth.default,
+      tremoloArticulation: SystemConfig.parameters.tremoloArticulation.default,
+      trillEnabled: SystemConfig.parameters.trillEnabled.default,
+      trillSpeed: SystemConfig.parameters.trillSpeed.default,
+      trillInterval: SystemConfig.parameters.trillInterval.default,
+      trillArticulation: SystemConfig.parameters.trillArticulation.default,
+      masterGain: SystemConfig.parameters.masterGain.default,
+      power: SystemConfig.parameters.power.default,
     };
   }
 

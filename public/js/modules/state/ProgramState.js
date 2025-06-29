@@ -3,7 +3,7 @@
  * Single source of truth for all program data
  */
 
-import { Config } from '../core/Config.js';
+import { SystemConfig, ConfigUtils } from '../../config/system.config.js';
 import { Logger } from '../core/Logger.js';
 import { eventBus } from '../core/EventBus.js';
 
@@ -79,7 +79,7 @@ export class ProgramState {
     this.banks = new Map();
     
     // Storage key for localStorage
-    this.storageKey = Config.STORAGE_KEYS?.BANKS || 'stringfm_banks';
+    this.storageKey = ConfigUtils.getStorageKey('banks');
     
     // Track if we're in the middle of an update
     this.isUpdating = false;
@@ -108,8 +108,9 @@ export class ProgramState {
    */
   initializeDefaults() {
     // Set default parameter values from Config
-    Config.PARAM_IDS.forEach(paramId => {
-      this.currentProgram.parameters[paramId] = Config.DEFAULT_PROGRAM?.[paramId] ?? 0.5;
+    ConfigUtils.getParameterNames().forEach(paramId => {
+      const paramDef = SystemConfig.parameters[paramId];
+      this.currentProgram.parameters[paramId] = paramDef ? paramDef.default : 0.5;
     });
     
     // Log what defaults are being set
@@ -126,7 +127,7 @@ export class ProgramState {
       this.isUpdating = true;
       
       // Capture parameter values
-      Config.PARAM_IDS.forEach(paramId => {
+      ConfigUtils.getParameterNames().forEach(paramId => {
         const element = document.getElementById(paramId);
         if (element) {
           const value = element.type === 'range' 

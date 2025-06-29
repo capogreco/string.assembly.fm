@@ -5,7 +5,7 @@
 
 import { eventBus } from "../core/EventBus.js";
 import { appState } from "../state/AppState.js";
-import { Config } from "../core/Config.js";
+import { SystemConfig, ConfigUtils } from "../../config/system.config.js";
 import { programState } from "../state/ProgramState.js";
 
 export class ParameterControls {
@@ -75,7 +75,7 @@ export class ParameterControls {
    */
   cacheParameterElements() {
     // Cache regular parameters
-    Config.PARAM_IDS.forEach((paramId) => {
+    ConfigUtils.getParameterNames().forEach((paramId) => {
       const input = document.getElementById(paramId);
       const valueDisplay =
         document.getElementById(`${paramId}Value`) ||
@@ -93,7 +93,8 @@ export class ParameterControls {
           step: parseFloat(input.step) || 0.01,
         });
       } else if (window.Logger) {
-        window.Logger.log(`Parameter element not found: ${paramId}`, "error");
+        // Only log as debug - some parameters are synth-only without UI elements
+        window.Logger.log(`Parameter element not found: ${paramId}`, "debug");
       }
     });
     
@@ -125,7 +126,7 @@ export class ParameterControls {
         this.updateDisplayValue(paramId, initialValue);
       } else {
         if (window.Logger) {
-          window.Logger.log(`Transition parameter element not found: ${paramId}`, "error");
+          window.Logger.log(`Transition parameter element not found: ${paramId}`, "debug");
         }
       }
     });
@@ -286,7 +287,7 @@ export class ParameterControls {
     this.updateDisplayValue(paramId, value);
 
     // Only mark program parameters as changed
-    if (Config.PROGRAM_PARAMS.includes(paramId)) {
+    if (ConfigUtils.getProgramParameters().includes(paramId)) {
       this.markParameterChanged(paramId);
     }
 
@@ -310,7 +311,7 @@ export class ParameterControls {
 
     const value = this.parseParameterValue(element, event.target.value);
 
-    if (Config.PROGRAM_PARAMS.includes(paramId)) {
+    if (ConfigUtils.getProgramParameters().includes(paramId)) {
       // This is a normal, syncable parameter
       programState.currentProgram.parameters[paramId] = value;
       programState.markChanged();
@@ -579,7 +580,7 @@ export class ParameterControls {
    * @param {Object} program - Program data
    */
   updateParameterValues(program) {
-    Config.PARAM_IDS.forEach((paramId) => {
+    ConfigUtils.getParameterNames().forEach((paramId) => {
       if (program[paramId] !== undefined) {
         this.setParameterValue(paramId, program[paramId]);
       }
@@ -866,14 +867,14 @@ export class ParameterControls {
    * Reset all parameters to default values
    */
   resetToDefaults() {
-    this.updateParameterValues(Config.DEFAULT_PROGRAM);
+    this.updateParameterValues(ConfigUtils.getDefaultProgram());
 
     // Reset expressions
     this.appState.set("selectedExpression", "none");
 
     // Reset harmonic selections
     const defaultHarmonics = {};
-    Object.keys(Config.HARMONIC_SELECTORS).forEach((key) => {
+    Object.keys(SystemConfig.ui.harmonicSelectors).forEach((key) => {
       defaultHarmonics[key] = new Set([1]);
     });
     this.appState.set("harmonicSelections", defaultHarmonics);

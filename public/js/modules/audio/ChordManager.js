@@ -5,7 +5,7 @@
 
 import { eventBus } from "../core/EventBus.js";
 import { appState } from "../state/AppState.js";
-import { Config } from "../core/Config.js";
+import { SystemConfig, ConfigUtils } from "../../config/system.config.js";
 
 export class ChordManager {
   constructor() {
