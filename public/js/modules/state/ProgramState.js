@@ -6,6 +6,7 @@
 import { SystemConfig, ConfigUtils } from '../../config/system.config.js';
 import { Logger } from '../core/Logger.js';
 import { eventBus } from '../core/EventBus.js';
+import { appState } from './AppState.js';
 
 /**
  * Represents a complete program state
@@ -75,8 +76,7 @@ export class ProgramState {
     // Active program (what's running on synths)
     this.activeProgram = null;
     
-    // Saved banks
-    this.banks = new Map();
+    // Banks are now stored in AppState
     
     // Storage key for localStorage
     this.storageKey = ConfigUtils.getStorageKey('banks');
@@ -401,7 +401,14 @@ export class ProgramState {
       Logger.log(`Saving to bank ${bankId} (no trill enabled)`, 'lifecycle');
     }
     
-    this.banks.set(bankId, programToSave);
+    // Get banks from AppState
+    const banks = appState.getNested('banking.banks') || new Map();
+    banks.set(bankId, programToSave);
+    appState.setNested('banking.banks', banks);
+    
+    // Update metadata
+    appState.setNested('banking.metadata.lastModified', Date.now());
+    
     this.saveBanksToStorage();
     
     eventBus.emit('programState:bankSaved', {
@@ -417,7 +424,8 @@ export class ProgramState {
    * Load program from bank
    */
   loadFromBank(bankId) {
-    const program = this.banks.get(bankId);
+    const banks = appState.getNested('banking.banks') || new Map();
+    const program = banks.get(bankId);
     if (!program) {
       Logger.log(`Bank ${bankId} is empty`, 'warning');
       return false;
@@ -504,7 +512,8 @@ export class ProgramState {
    * Clear all banks
    */
   clearAllBanks() {
-    this.banks.clear();
+    appState.setNested('banking.banks', new Map());
+    appState.setNested('banking.metadata.lastModified', Date.now());
     this.saveBanksToStorage();
     
     eventBus.emit('programState:banksCleared');
@@ -515,9 +524,10 @@ export class ProgramState {
    * Get saved banks info
    */
   getSavedBanks() {
+    const banksMap = appState.getNested('banking.banks') || new Map();
     const banks = [];
     for (let i = 1; i <= 10; i++) {
-      const program = this.banks.get(i);
+      const program = banksMap.get(i);
       banks.push({
         id: i,
         saved: !!program,
@@ -533,9 +543,10 @@ export class ProgramState {
   loadBanksFromStorage() {
     try {
       const saved = localStorage.getItem(this.storageKey);
+      const banks = new Map();
+      
       if (saved) {
         const data = JSON.parse(saved);
-        this.banks.clear();
         
         Object.entries(data).forEach(([bankId, program]) => {
           const prog = new Program();
@@ -563,13 +574,22 @@ export class ProgramState {
             });
           }
           
-          this.banks.set(parseInt(bankId), prog);
+          banks.set(parseInt(bankId), prog);
         });
         
-        Logger.log(`Loaded ${this.banks.size} banks from storage`, 'lifecycle');
+        // Store in AppState
+        appState.setNested('banking.banks', banks);
+        appState.setNested('banking.metadata.lastModified', Date.now());
+        
+        Logger.log(`Loaded ${banks.size} banks from storage`, 'lifecycle');
+      } else {
+        // Initialize empty banks
+        appState.setNested('banking.banks', banks);
       }
     } catch (error) {
       Logger.log(`Failed to load banks: ${error}`, 'error');
+      // Initialize empty banks on error
+      appState.setNested('banking.banks', new Map());
     }
   }
   
@@ -578,8 +598,9 @@ export class ProgramState {
    */
   saveBanksToStorage() {
     try {
+      const banks = appState.getNested('banking.banks') || new Map();
       const data = {};
-      this.banks.forEach((program, bankId) => {
+      banks.forEach((program, bankId) => {
         data[bankId] = program;
       });
       

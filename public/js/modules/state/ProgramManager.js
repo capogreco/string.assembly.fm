@@ -79,7 +79,8 @@ export class ProgramManager {
    */
   loadFromBank(bankId, options = { preview: false }) {
     if (options.preview) {
-      const program = this.programState.banks.get(bankId);
+      const banks = this.state.getNested('banking.banks') || new Map();
+      const program = banks.get(bankId);
       if (program) {
         // Apply program parameters without dispatching events
         this.applyProgramToUI(program.parameters, { dispatchEvents: false });

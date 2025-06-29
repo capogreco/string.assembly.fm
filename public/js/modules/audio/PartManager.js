@@ -18,11 +18,32 @@ export class PartManager {
     this.eventBus = eventBus;
     this.appState = appState;
     this.isInitialized = false;
+    this.lastSentProgram = null;
+  }
 
-    // Current musical state
-    this.currentChord = []; // Array of frequencies
-    this.noteExpressions = new Map(); // note -> expression object
-    this.harmonicSelections = {
+  /**
+   * Get current chord from AppState
+   * @private
+   */
+  get currentChord() {
+    return this.appState.get('currentChord') || [];
+  }
+
+  /**
+   * Get note expressions from AppState
+   * @private
+   */
+  get noteExpressions() {
+    const expressions = this.appState.getNested('performance.currentProgram.chord.expressions') || {};
+    return new Map(Object.entries(expressions));
+  }
+
+  /**
+   * Get harmonic selections from AppState
+   * @private
+   */
+  get harmonicSelections() {
+    return this.appState.get('harmonicSelections') || {
       "vibrato-numerator": new Set([1]),
       "vibrato-denominator": new Set([1]),
       "tremolo-numerator": new Set([1]),
@@ -30,10 +51,6 @@ export class PartManager {
       "trill-numerator": new Set([1]),
       "trill-denominator": new Set([1]),
     };
-
-    // Distribution state - now stored in AppState
-    // this.synthAssignments accessed via getter/setter
-    this.lastSentProgram = null;
   }
 
   /**
@@ -46,13 +63,6 @@ export class PartManager {
     }
 
     Logger.log("Initializing PartManager...", "lifecycle");
-
-    // Sync harmonic selections from AppState
-    const savedSelections = this.appState.get("harmonicSelections");
-    if (savedSelections) {
-      this.harmonicSelections = savedSelections;
-      // Logger.log("Loaded harmonic selections from AppState", "parts");
-    }
 
     this.setupEventListeners();
     this.isInitialized = true;
@@ -108,27 +118,29 @@ export class PartManager {
    * @param {number[]} frequencies - Array of frequencies
    */
   setChord(frequencies) {
-    this.currentChord = [...frequencies];
-
+    // Update app state
+    this.appState.set("currentChord", [...frequencies]);
+    
     // Clean up expressions for notes no longer in chord
     const currentNotes = new Set(
       frequencies.map((f) => this.frequencyToNoteName(f)),
     );
-    for (const [noteName] of this.noteExpressions) {
-      if (!currentNotes.has(noteName)) {
-        this.noteExpressions.delete(noteName);
+    const expressions = this.appState.getNested('performance.currentProgram.chord.expressions') || {};
+    const newExpressions = {};
+    
+    // Keep only expressions for notes in the current chord
+    for (const [noteName, expression] of Object.entries(expressions)) {
+      if (currentNotes.has(noteName)) {
+        newExpressions[noteName] = expression;
       }
     }
+    
+    // Update expressions in AppState
+    this.appState.setNested('performance.currentProgram.chord.expressions', newExpressions);
+    this.appState.set("expressions", newExpressions); // Legacy compatibility
 
     // Update ProgramState
-    programState.updateChord(frequencies, Object.fromEntries(this.noteExpressions));
-    
-    // Update app state for compatibility
-    this.appState.set("currentChord", this.currentChord);
-    
-    // Update expressions in app state for UI visibility
-    const expressionsObj = Object.fromEntries(this.noteExpressions);
-    this.appState.set("expressions", expressionsObj);
+    programState.updateChord(frequencies, newExpressions);
     
     // Mark as changed for sync tracking
     this.appState.markParameterChanged("chord");
@@ -150,19 +162,22 @@ export class PartManager {
    * @param {Object} expression - Expression object {type, ...params}
    */
   setNoteExpression(noteName, expression) {
+    // Get current expressions from AppState
+    const expressions = this.appState.getNested('performance.currentProgram.chord.expressions') || {};
+    const newExpressions = { ...expressions };
     
     if (expression && expression.type && expression.type !== "none") {
-      this.noteExpressions.set(noteName, expression);
+      newExpressions[noteName] = expression;
     } else {
-      this.noteExpressions.delete(noteName);
+      delete newExpressions[noteName];
     }
+
+    // Update AppState
+    this.appState.setNested('performance.currentProgram.chord.expressions', newExpressions);
+    this.appState.set("expressions", newExpressions); // Legacy compatibility
 
     // Update ProgramState
     programState.updateNoteExpression(noteName, expression);
-    
-    // Update AppState expressions for UI visibility (compatibility)
-    const expressionsObj = Object.fromEntries(this.noteExpressions);
-    this.appState.set("expressions", expressionsObj);
     
     // Mark as changed for sync tracking
     this.appState.markParameterChanged(`expression_${noteName}`);
@@ -184,8 +199,13 @@ export class PartManager {
    */
   updateHarmonicSelection(data) {
     const key = `${data.expression}-${data.type}`;
-    if (this.harmonicSelections[key]) {
-      this.harmonicSelections[key] = new Set(data.selection);
+    const selections = { ...this.harmonicSelections };
+    
+    if (selections[key]) {
+      selections[key] = new Set(data.selection);
+      
+      // Update AppState
+      this.appState.set('harmonicSelections', selections);
       
       // Update ProgramState
       programState.updateHarmonicSelection(key, Array.from(data.selection));
@@ -697,11 +717,10 @@ export class PartManager {
    * Clear current chord and expressions
    */
   clearPart() {
-    this.currentChord = [];
-    this.noteExpressions.clear();
-    this.synthAssignments.clear();
     this.appState.set("currentChord", []);
-    this.appState.set("expressions", {}); // Clear expressions in app state
+    this.appState.setNested('performance.currentProgram.chord.expressions', {});
+    this.appState.set("expressions", {}); // Legacy compatibility
+    this.setSynthAssignments(new Map());
     Logger.log("Part cleared", "parts");
   }
 
@@ -711,10 +730,12 @@ export class PartManager {
    */
   getStatistics() {
     const connectedSynths = this.appState.get("connectedSynths") || new Map();
+    const chord = this.currentChord;
+    const expressions = this.noteExpressions;
 
     return {
-      chordSize: this.currentChord.length,
-      expressionsCount: this.noteExpressions.size,
+      chordSize: chord.length,
+      expressionsCount: expressions.size,
       connectedSynths: connectedSynths.size,
       assignedSynths: this.synthAssignments.size,
       lastSent: this.lastSentProgram?.timestamp || null,

@@ -2,16 +2,26 @@
  * AppState Module for String Assembly FM
  * Centralized state management with reactive updates
  * 
- * Migration Status (Phase 3):
+ * Migration Status (Phase 4 - COMPLETE):
  * ✓ Performance state: Migrated to performance.currentProgram.*
  * ✓ Part assignments: Migrated to performance.currentProgram.parts.assignments
  * ✓ Expression state: Migrated to performance.currentProgram.chord.expressions
  * ✓ Piano UI state: Mapped via compatibility layer
  * ✓ Parameter tracking: Mapped via compatibility layer
+ * ✓ Banking state: Migrated to banking.banks and banking.metadata
+ * ✓ Component cleanup: PartManager and ProgramState use AppState
+ * ✓ Deprecation warnings: Added to compatibility layer
  * 
- * Next Steps:
- * - Remove redundant state at root level once all modules are updated
- * - Update modules to use new nested paths directly
+ * State Structure:
+ * - performance: Musical performance state (programs, parts, transitions)
+ * - system: Infrastructure state (audio, debug)
+ * - connections: Network state (websocket, synths, metrics)
+ * - ui: User interface state (piano, parameters, expressions, banking, modals)
+ * - banking: Program storage (banks, metadata)
+ * - history: State change history for undo/redo
+ * 
+ * Compatibility layer provides backward compatibility during migration.
+ * To remove: Set REMOVE_COMPATIBILITY_LAYER to true and fix any warnings.
  */
 
 import { eventBus } from '../core/EventBus.js';
@@ -198,15 +208,27 @@ export class AppState {
       if (typeof mapping === 'string') {
         // Simple path mapping
         Object.defineProperty(this, oldKey, {
-          get: () => this.getNested(mapping),
-          set: (value) => this.setNested(mapping, value),
+          get: () => {
+            console.warn(`DEPRECATED: Direct access to '${oldKey}', use getNested('${mapping}') instead`);
+            return this.getNested(mapping);
+          },
+          set: (value) => {
+            console.warn(`DEPRECATED: Direct set of '${oldKey}', use setNested('${mapping}', value) instead`);
+            this.setNested(mapping, value);
+          },
           configurable: true
         });
       } else if (typeof mapping === 'object') {
         // Custom getter/setter
         Object.defineProperty(this, oldKey, {
-          get: mapping.get,
-          set: mapping.set,
+          get: () => {
+            console.warn(`DEPRECATED: Direct access to '${oldKey}'`);
+            return mapping.get();
+          },
+          set: (v) => {
+            console.warn(`DEPRECATED: Direct set of '${oldKey}'`);
+            mapping.set(v);
+          },
           configurable: true
         });
       }
@@ -217,22 +239,40 @@ export class AppState {
     
     // Expressions compatibility
     Object.defineProperty(this, 'expressions', {
-      get: () => this.#state.performance.currentProgram.chord.expressions,
-      set: (v) => this.#state.performance.currentProgram.chord.expressions = v,
+      get: () => {
+        console.warn("DEPRECATED: Direct access to 'expressions', use getNested('performance.currentProgram.chord.expressions') instead");
+        return this.#state.performance.currentProgram.chord.expressions;
+      },
+      set: (v) => {
+        console.warn("DEPRECATED: Direct set of 'expressions', use setNested('performance.currentProgram.chord.expressions', value) instead");
+        this.#state.performance.currentProgram.chord.expressions = v;
+      },
       configurable: true
     });
     
     // Per-note expressions (used by ChordManager)
     Object.defineProperty(this, 'perNoteExpressions', {
-      get: () => this.#state.performance.currentProgram.chord.expressions,
-      set: (v) => this.#state.performance.currentProgram.chord.expressions = v,
+      get: () => {
+        console.warn("DEPRECATED: Direct access to 'perNoteExpressions', use getNested('performance.currentProgram.chord.expressions') instead");
+        return this.#state.performance.currentProgram.chord.expressions;
+      },
+      set: (v) => {
+        console.warn("DEPRECATED: Direct set of 'perNoteExpressions', use setNested('performance.currentProgram.chord.expressions', value) instead");
+        this.#state.performance.currentProgram.chord.expressions = v;
+      },
       configurable: true
     });
     
     // Part assignments compatibility (used by PartManager)
     Object.defineProperty(this, 'partAssignments', {
-      get: () => this.#state.performance.currentProgram.parts.assignments,
-      set: (v) => this.#state.performance.currentProgram.parts.assignments = v,
+      get: () => {
+        console.warn("DEPRECATED: Direct access to 'partAssignments', use getNested('performance.currentProgram.parts.assignments') instead");
+        return this.#state.performance.currentProgram.parts.assignments;
+      },
+      set: (v) => {
+        console.warn("DEPRECATED: Direct set of 'partAssignments', use setNested('performance.currentProgram.parts.assignments', value) instead");
+        this.#state.performance.currentProgram.parts.assignments = v;
+      },
       configurable: true
     });
 

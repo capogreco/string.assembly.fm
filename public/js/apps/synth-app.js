@@ -1,5 +1,5 @@
 // synth-app.js - Single synth instance application
-import { SynthCore } from '../../../src/synth/synth-core.js';
+import { SynthClient } from '../modules/synth/SynthClient.js';
 import { Logger } from '../modules/core/Logger.js';
 import { WaveformVisualizer } from '../modules/ui/WaveformVisualizer.js';
 import { SystemConfig } from '../config/system.config.js';
@@ -7,13 +7,15 @@ import { SystemConfig } from '../config/system.config.js';
 class SynthApp {
   constructor() {
     this.synthId = `synth-${Math.random().toString(36).substr(2, 9)}`;
+    this.synthClient = new SynthClient(this.synthId, {
+      enableLogging: true,
+      enableVisualizer: true
+    });
+    
     this.ws = null;
     this.audioContext = null;
-    this.synthCore = null;
     this.controllers = new Map();
     this.rtcConfig = SystemConfig.network.webrtc;
-    this.inCalibrationMode = false;
-    this.currentProgram = null;
     
     // UI elements
     this.statusEl = document.getElementById("status");
@@ -27,13 +29,6 @@ class SynthApp {
     
     // Initialize logging
     Logger.log("SynthApp initializing", "lifecycle");
-    
-    // Debug canvas initialization
-    // console.log("[DEBUG] Canvas element:", this.canvas);
-    // console.log("[DEBUG] Canvas context:", this.ctx);
-    // if (this.canvas) {
-    //   console.log("[DEBUG] Canvas dimensions:", this.canvas.width, "x", this.canvas.height);
-    // }
   }
 
   async init() {
@@ -44,7 +39,6 @@ class SynthApp {
     
     // Setup canvas and visualizer
     if (this.canvas) {
-      // console.log("[DEBUG] Setting up canvas");
       this.visualizer = new WaveformVisualizer(this.canvas, {
         lineWidth: 2,
         strokeStyle: '#60a5fa',
@@ -55,8 +49,9 @@ class SynthApp {
       window.addEventListener('resize', () => this.resizeCanvas());
       // Start the visualizer animation loop
       this.visualizer.start();
-    } else {
-      // console.log("[DEBUG] No canvas element found!");
+      
+      // Set canvas on SynthClient for its internal visualizer
+      this.synthClient.setVisualizerCanvas(this.canvas);
     }
     
     // Connect WebSocket
@@ -156,6 +151,7 @@ class SynthApp {
               controller.connection.close();
             }
             this.controllers.delete(controllerId);
+            this.synthClient.controllers.delete(controllerId);
           }
         }
         
@@ -206,6 +202,7 @@ class SynthApp {
             controller.connection.close();
           }
           this.controllers.delete(message.controller_id);
+          this.synthClient.controllers.delete(message.controller_id);
         }
         this.updateControllerList();
         break;
@@ -294,6 +291,13 @@ class SynthApp {
       // console.log(`[DEBUG] Data channel OPENED to controller ${controllerId}`);
       Logger.log(`Data channel open to controller ${controllerId}`, "connections");
       controller.connected = true;
+      
+      // Add to SynthClient's controllers with data channel reference
+      this.synthClient.controllers.set(controllerId, {
+        ...controller,
+        dataChannel: dataChannel
+      });
+      
       this.updateControllerList();
 
       // Send immediate state update
@@ -304,8 +308,8 @@ class SynthApp {
       }));
 
       // Request current program if we're ready
-      if (this.synthCore && !this.inCalibrationMode) {
-        this.requestCurrentProgram();
+      if (this.synthClient.audioInitialized && !this.synthClient.isCalibrating) {
+        this.synthClient.requestCurrentProgram();
       }
     });
 
@@ -316,6 +320,10 @@ class SynthApp {
     dataChannel.addEventListener("close", () => {
       Logger.log(`Data channel closed to controller ${controllerId}`, "connections");
       controller.connected = false;
+      
+      // Remove from SynthClient's controllers
+      this.synthClient.controllers.delete(controllerId);
+      
       this.updateControllerList();
     });
 
@@ -380,23 +388,15 @@ class SynthApp {
       case "program":
         // Receive program from controller
         console.log("[DEBUG] Received program message:", message);
-        // Controller sends program in message.program, not message.data
         const programData = message.program || message.data;
         if (!programData) {
           console.error("[ERROR] Program data is undefined in message:", message);
           break;
         }
         
-        if (!this.inCalibrationMode && this.synthCore) {
-          this.currentProgram = programData;
-          console.log("[DEBUG] Applying program:", this.currentProgram);
-          this.synthCore.applyProgram(this.currentProgram, message.transition);
-          Logger.log("Applied program from controller", "messages");
-        } else if (this.inCalibrationMode) {
-          // Store for later
-          this.currentProgram = programData;
-          Logger.log("Stored program for after calibration", "messages");
-        }
+        // Use SynthClient to handle program
+        this.synthClient.handleProgram(programData, null, message.transition);
+        Logger.log("Applied program from controller via SynthClient", "messages");
         break;
 
       case "command":
@@ -405,12 +405,10 @@ class SynthApp {
         
         if (message.name === "power") {
           // Handle power on/off
-          if (this.synthCore) {
-            const powerOn = message.value;
-            console.log(`[DEBUG] Setting power to: ${powerOn}`);
-            this.synthCore.setPower(powerOn);
-            Logger.log(`Power ${powerOn ? 'on' : 'off'}`, "messages");
-          }
+          const powerOn = message.value;
+          console.log(`[DEBUG] Setting power to: ${powerOn}`);
+          this.synthClient.setPower(powerOn);
+          Logger.log(`Power ${powerOn ? 'on' : 'off'}`, "messages");
         } else if (message.data && message.data.type === "request-state") {
           this.sendStateToController(controllerId);
         }
@@ -439,24 +437,17 @@ class SynthApp {
   }
 
   requestCurrentProgram() {
-    // Send to all connected controllers
-    this.controllers.forEach((controller) => {
-      if (controller.channel && controller.channel.readyState === "open") {
-        controller.channel.send(JSON.stringify({
-          type: "command",
-          data: { type: "request-program" },
-          timestamp: Date.now()
-        }));
-      }
-    });
+    // Delegate to SynthClient
+    this.synthClient.requestCurrentProgram();
   }
 
   getSynthState() {
+    const clientState = this.synthClient.getState();
     return {
       synthId: this.synthId,
-      isCalibrating: this.inCalibrationMode,
-      isPowered: this.synthCore ? this.synthCore.isPoweredOn : false,
-      hasProgram: !!this.currentProgram,
+      isCalibrating: clientState.isCalibrating,
+      isPowered: clientState.isPoweredOn,
+      hasProgram: clientState.isActive,
       audioContextState: this.audioContext ? this.audioContext.state : 'none'
     };
   }
@@ -477,20 +468,16 @@ class SynthApp {
     // Initialize audio context and start calibration
     if (!this.audioContext) {
       this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
-      this.synthCore = new SynthCore(this.synthId);
-      // FIX: Pass audioContext.destination as second parameter
-      await this.synthCore.initialize(this.audioContext, this.audioContext.destination);
+      await this.synthClient.initializeAudio(this.audioContext);
       
       // Connect visualizer to the analyser
-      if (this.visualizer && this.synthCore.analyserNode) {
-        this.visualizer.setAnalyserNode(this.synthCore.analyserNode);
+      if (this.visualizer && this.synthClient.analyser) {
+        this.visualizer.setAnalyserNode(this.synthClient.analyser);
       }
     }
     
-    this.inCalibrationMode = true;
-    
-    // Start calibration noise
-    this.synthCore.startCalibrationNoise(0.7);
+    // Start calibration via SynthClient
+    await this.synthClient.startCalibration(0.7);
     
     // Update UI
     if (this.calibrationContent) {
@@ -504,23 +491,18 @@ class SynthApp {
   }
 
   async joinInstrument() {
-    if (!this.synthCore) {
-      Logger.log("SynthCore not initialized", "error");
+    if (!this.synthClient.audioInitialized) {
+      Logger.log("SynthClient not initialized", "error");
       return;
     }
 
-    // Stop calibration and join
-    this.inCalibrationMode = false;
-    this.synthCore.stopCalibrationNoise();
-    await this.synthCore.setPower(true);
+    // End calibration and set power
+    this.synthClient.endCalibration();
+    this.synthClient.setPower(true);
     
-    // Apply stored program if we have one
-    if (this.currentProgram) {
-      this.synthCore.applyProgram(this.currentProgram);
-      Logger.log("Applied stored program after calibration", "lifecycle");
-    } else {
-      // Request program from controllers
-      this.requestCurrentProgram();
+    // Request program from controllers if none stored
+    if (!this.synthClient.storedProgram) {
+      this.synthClient.requestCurrentProgram();
     }
     
     // Hide calibration UI

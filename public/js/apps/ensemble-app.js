@@ -1,9 +1,9 @@
 // ensemble-app.js - Multi-synth test ensemble application
-import { SynthCore } from '../../../src/synth/synth-core.js';
+import { SynthClient } from '../modules/synth/SynthClient.js';
 import { Logger } from '../modules/core/Logger.js';
 import { SystemConfig } from '../config/system.config.js';
 
-// Wrapper class for SynthCore in ensemble
+// Wrapper class using SynthClient for ensemble
 class TestSynth {
   constructor(id, index, totalSynths) {
     this.id = id;
@@ -14,18 +14,11 @@ class TestSynth {
     this.levelMeter = null;
     this.canvas = null;
     this.ctx = null;
-    this.isVisualizerRunning = false;
 
     // State
     this.currentNote = null;
     this.currentExpression = null;
     this.isActive = false;
-    this.currentProgram = null;
-    this.audioInitialized = false;
-    this.pendingProgram = null;
-
-    // Banking
-    this.synthBanks = new Map();
 
     // WebRTC connections
     this.ws = null;
@@ -34,44 +27,27 @@ class TestSynth {
     // Calculate pan position
     this.panPosition = totalSynths === 1 ? 0 : (index / (totalSynths - 1)) * 2 - 1;
 
-    // Create SynthCore instance
-    this.synthCore = new SynthCore(id, { enableLogging: true });
+    // Create SynthClient instance with ensemble options
+    this.synthClient = new SynthClient(id, {
+      enableLogging: true,
+      enableVisualizer: true,
+      panPosition: this.panPosition
+    });
   }
 
   async initialize(audioCtx, destination) {
-    // Create additional nodes for ensemble-specific features
-    this.panner = audioCtx.createStereoPanner();
-    this.panner.pan.value = this.panPosition;
-
-    this.analyser = audioCtx.createAnalyser();
-    this.analyser.fftSize = 256;
-
-    // Initialize SynthCore
-    await this.synthCore.initialize(audioCtx, this.analyser);
-
-    // Connect SynthCore output through our panner to destination
-    this.analyser.connect(this.panner);
-    this.panner.connect(destination);
-
-    // Ensure we have the analyser reference
-    this.analyser = this.synthCore.analyserNode || this.analyser;
-
-    this.audioInitialized = true;
-    Logger.log(`[${this.id}] SynthCore initialized with panning`, "lifecycle");
+    // Initialize SynthClient with ensemble destination
+    await this.synthClient.initializeAudio(audioCtx, destination);
     
-    // Start visualizer if we have a canvas
+    // Set canvas for visualizer if available
     if (this.canvas) {
-      this.startVisualizer();
+      this.synthClient.setVisualizerCanvas(this.canvas);
     }
     
-    // Apply any pending program or request one
-    if (this.pendingProgram) {
-      Logger.log(`[${this.id}] Applying pending program after initialization`, "lifecycle");
-      this.synthCore.applyProgram(this.pendingProgram.program, this.pendingProgram.transition);
-      this.pendingProgram = null;
-    } else {
-      this.requestCurrentProgram();
-    }
+    Logger.log(`[${this.id}] SynthClient initialized with panning: ${this.panPosition}`, "lifecycle");
+    
+    // Request current program from controllers
+    this.synthClient.requestCurrentProgram();
   }
 
   createElements(container) {
@@ -121,64 +97,13 @@ class TestSynth {
   }
 
   requestCurrentProgram() {
-    this.controllers.forEach((controller) => {
-      if (controller.channel && controller.channel.readyState === "open") {
-        controller.channel.send(JSON.stringify({
-          type: "command",
-          data: { type: "request-program" },
-          timestamp: Date.now()
-        }));
-      }
-    });
+    // Delegate to SynthClient
+    this.synthClient.requestCurrentProgram();
   }
 
   startVisualizer() {
-    this.isVisualizerRunning = true;
-    this.drawVisualizer();
-  }
-
-  drawVisualizer() {
-    if (!this.isVisualizerRunning) return;
-    requestAnimationFrame(() => this.drawVisualizer());
-
-    if (!this.ctx || !this.analyser) return;
-
-    // Get time domain data for waveform
-    const bufferLength = this.analyser.fftSize;
-    const dataArray = new Float32Array(bufferLength);
-    this.analyser.getFloatTimeDomainData(dataArray);
-    
-    // Clear canvas
-    this.ctx.fillStyle = "rgba(0, 0, 0, 1)";
-    this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-    
-    // Set up drawing style
-    this.ctx.lineWidth = 2;
-    this.ctx.strokeStyle = "#ffffff";
-    this.ctx.lineCap = "round";
-    
-    // Begin path for waveform
-    this.ctx.beginPath();
-    
-    // Draw centered waveform
-    const centerY = this.canvas.height / 2;
-    const sliceWidth = this.canvas.width / bufferLength;
-    let x = 0;
-    
-    for (let i = 0; i < bufferLength; i++) {
-      const v = dataArray[i];
-      const y = centerY + v * centerY * 0.8;
-      
-      if (i === 0) {
-        this.ctx.moveTo(x, y);
-      } else {
-        this.ctx.lineTo(x, y);
-      }
-      
-      x += sliceWidth;
-    }
-    
-    this.ctx.stroke();
+    // SynthClient handles visualizer internally
+    this.synthClient.startVisualizer();
   }
 }
 
@@ -227,13 +152,9 @@ class EnsembleApp {
     document.getElementById("calibrate-btn")?.addEventListener("click", () => this.calibrateAllSynths());
     document.getElementById("join-all-btn")?.addEventListener("click", () => this.joinAllSynths());
     
-    // Handle window resize
+    // Handle window resize (SynthClient handles canvas resizing internally)
     window.addEventListener('resize', () => {
-      this.synths.forEach(synth => {
-        if (synth.resizeCanvas) {
-          synth.resizeCanvas();
-        }
-      });
+      // No action needed - SynthClient handles its own canvas management
     });
   }
 
@@ -386,9 +307,9 @@ class EnsembleApp {
   }
 
   calibrateAllSynths() {
-    this.synths.forEach(synth => {
-      if (synth.synthCore) {
-        synth.synthCore.startCalibrationNoise(0.7);
+    this.synths.forEach(async synth => {
+      if (synth.synthClient && synth.synthClient.audioInitialized) {
+        await synth.synthClient.startCalibration(0.7);
       }
     });
     
@@ -400,9 +321,9 @@ class EnsembleApp {
 
   joinAllSynths() {
     this.synths.forEach(synth => {
-      if (synth.synthCore) {
-        synth.synthCore.stopCalibrationNoise();
-        synth.synthCore.setPower(true);
+      if (synth.synthClient && synth.synthClient.audioInitialized) {
+        synth.synthClient.endCalibration();
+        synth.synthClient.setPower(true);
       }
     });
     
@@ -455,10 +376,7 @@ class EnsembleApp {
       this.synths.forEach(synth => {
         const storageKey = `synth-banks-${synth.id}`;
         localStorage.removeItem(storageKey);
-        synth.synthBanks.clear();
-        if (synth.synthCore) {
-          synth.synthCore.synthBanks.clear();
-        }
+        synth.synthClient.synthBanks.clear();
         console.log(`Cleared localStorage for ${synth.id}`);
       });
       console.log('All synth banks cleared from localStorage');

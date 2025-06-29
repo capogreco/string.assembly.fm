@@ -313,6 +313,18 @@
                 appState.setNested('ui.expressions.selected', 'vibrato');
                 log(`✓ Set UI state`, 'success');
                 
+                // Test banking state  
+                const testProgram = {
+                    parameters: { bowPressure: 0.7 },
+                    chord: { frequencies: [440], expressions: {} },
+                    metadata: { name: 'Migration Test Program' }
+                };
+                const banks = new Map([[1, testProgram]]);
+                appState.setNested('banking.banks', banks);
+                appState.setNested('banking.metadata.version', '2.1');
+                appState.setNested('ui.banking.currentBank', 1);
+                log(`✓ Set banking state with 1 program`, 'success');
+                
                 // Test compatibility mappings
                 const partAssignmentsCompat = appState.partAssignments;
                 log(`✓ Compatibility: partAssignments has ${partAssignmentsCompat.size} assignments`, 'success');
@@ -323,9 +335,19 @@
                 const parametersChanged = appState.parametersChanged;
                 log(`✓ Compatibility: parametersChanged has ${parametersChanged.size} changes`, 'success');
                 
-                // Summary
+                // Summary - test comprehensive state structure
                 const performance = appState.getNested('performance');
-                log(`✓ Full migration test completed. Performance state has ${Object.keys(performance.currentProgram.parameters).length} parameters`, 'success');
+                const system = appState.getNested('system');
+                const connections = appState.getNested('connections');
+                const ui = appState.getNested('ui');
+                const banking = appState.getNested('banking');
+                
+                log(`✓ Performance: ${Object.keys(performance.currentProgram.parameters).length} parameters, ${performance.currentProgram.parts.assignments.size} part assignments`, 'success');
+                log(`✓ System: audio.power=${system.audio.power}, debug.enabled=${system.debug.enabled}`, 'success');
+                log(`✓ Connections: ${connections.synths.size} synths, websocket.connected=${connections.websocket.connected}`, 'success');
+                log(`✓ UI: piano has ${ui.piano.selectedNotes.length} selected notes, ${ui.parameters.changed.size} changed parameters`, 'success');
+                log(`✓ Banking: ${banking.banks.size} saved programs, version=${banking.metadata.version}`, 'success');
+                log(`✓ PHASE 4 COMPLETE: All state migrated to unified AppState structure!`, 'success');
                 
             } catch (error) {
                 log(`✗ Error: ${error.message}`, 'error');
