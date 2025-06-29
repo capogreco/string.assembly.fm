@@ -99,10 +99,11 @@ class SynthApp {
       Logger.log("Connected to server", "connections");
       this.updateStatus(`Connected as ${this.synthId}`);
       
-      // Register with server
+      // Register as a synth (not a controller)
       const registerMsg = {
         type: "register",
-        client_id: this.synthId
+        client_id: this.synthId,
+        client_type: "synth"  // Help server identify this is a synth
       };
       // console.log("[DEBUG] Sending registration:", registerMsg);
       this.ws.send(JSON.stringify(registerMsg));
@@ -307,10 +308,7 @@ class SynthApp {
         state: this.getSynthState()
       }));
 
-      // Request current program if we're ready
-      if (this.synthClient.audioInitialized && !this.synthClient.isCalibrating) {
-        this.synthClient.requestCurrentProgram();
-      }
+      // No need to request program - controller will push automatically
     });
 
     dataChannel.addEventListener("message", (event) => {
@@ -388,15 +386,10 @@ class SynthApp {
       case "program":
         // Receive program from controller
         console.log("[DEBUG] Received program message:", message);
-        const programData = message.program || message.data;
-        if (!programData) {
-          console.error("[ERROR] Program data is undefined in message:", message);
-          break;
-        }
         
-        // Use SynthClient to handle program
-        this.synthClient.handleProgram(programData, null, message.transition);
-        Logger.log("Applied program from controller via SynthClient", "messages");
+        // Use SynthClient to handle complete program message
+        this.synthClient.handleProgram(message);
+        Logger.log("Received program from controller via SynthClient", "messages");
         break;
 
       case "command":
@@ -410,6 +403,7 @@ class SynthApp {
           this.synthClient.setPower(powerOn);
           Logger.log(`Power ${powerOn ? 'on' : 'off'}`, "messages");
         } else if (message.data && message.data.type === "request-state") {
+          // DEPRECATED: State requests removed - use ping/pong for state updates
           this.sendStateToController(controllerId);
         }
         break;
@@ -437,8 +431,9 @@ class SynthApp {
   }
 
   requestCurrentProgram() {
-    // Delegate to SynthClient
-    this.synthClient.requestCurrentProgram();
+    // DEPRECATED: Program requests removed - controllers now push programs automatically
+    Logger.log(`[${this.synthId}] Program request ignored - controllers push programs automatically`, "info");
+    // Do nothing - programs are pushed automatically by controllers
   }
 
   getSynthState() {

@@ -295,6 +295,11 @@ export class NetworkCoordinator {
     this.webRTC.on("commandMessage", (data) => {
       this.handleCommandMessage(data);
     });
+
+    // Listen for synth connections to auto-send programs
+    this.eventBus.on("network:synthConnected", (data) => {
+      this.onSynthConnected(data.synthId, data.channel);
+    });
   }
 
   /**
@@ -341,17 +346,16 @@ export class NetworkCoordinator {
         }
         break;
 
-      case "request_program":
-        if (window.Logger) {
-          window.Logger.log(`Program request from ${peerId}`, "messages");
-        }
-
-        // Emit program request event for handling by other modules
-        this.eventBus.emit("network:programRequested", {
-          synthId: peerId,
-          timestamp: Date.now(),
-        });
-        break;
+      // DEPRECATED: Program requests removed - programs are pushed automatically
+      // case "request_program":
+      //   if (window.Logger) {
+      //     window.Logger.log(`Program request from ${peerId}`, "messages");
+      //   }
+      //   this.eventBus.emit("network:programRequested", {
+      //     synthId: peerId,
+      //     timestamp: Date.now(),
+      //   });
+      //   break;
         
       case "request_bank_program":
         if (window.Logger) {
@@ -486,6 +490,82 @@ export class NetworkCoordinator {
       );
     }
 
+    return successCount;
+  }
+
+  /**
+   * Handle new synth connection - automatically send current program
+   * @param {string} synthId - The synth that connected
+   * @param {RTCDataChannel} channel - The data channel (optional)
+   */
+  onSynthConnected(synthId, channel = null) {
+    if (window.Logger) {
+      window.Logger.log(`Synth ${synthId} connected - sending current program`, 'network');
+    }
+    
+    // Get current program from AppState
+    const currentProgram = this.appState.getNested('performance.currentProgram');
+    const systemState = this.appState.getSystemState();
+    
+    if (currentProgram && Object.keys(currentProgram.parameters || {}).length > 0) {
+      // Send program with power state
+      const sentProgram = {
+        ...currentProgram,
+        power: systemState.audio.power
+      };
+      
+      this.sendProgramToSynth(synthId, sentProgram);
+      
+      // Track that we sent to this synth
+      const connections = this.appState.getNested('connections.synths');
+      const existingConnection = connections.get(synthId) || {};
+      connections.set(synthId, {
+        ...existingConnection,
+        connected: true,
+        lastProgramSent: Date.now()
+      });
+      this.appState.setNested('connections.synths', new Map(connections));
+      
+      if (window.Logger) {
+        window.Logger.log(`Sent current program to synth ${synthId}`, 'network');
+      }
+    } else {
+      if (window.Logger) {
+        window.Logger.log(`No program to send to synth ${synthId} - program is empty`, 'network');
+      }
+    }
+  }
+
+
+  /**
+   * Broadcast program to all connected synths
+   * @param {Object} program - Program to broadcast
+   */
+  broadcastProgram(program) {
+    const systemState = this.appState.getSystemState();
+    
+    // Add power state to program
+    const programWithPower = {
+      ...program,
+      power: systemState.audio.power
+    };
+    
+    // Send to all connected synths
+    const synths = this.appState.getNested('connections.synths');
+    let successCount = 0;
+    
+    synths.forEach((synthInfo, synthId) => {
+      if (synthInfo.connected) {
+        if (this.sendProgramToSynth(synthId, programWithPower)) {
+          successCount++;
+        }
+      }
+    });
+    
+    if (window.Logger) {
+      window.Logger.log(`Broadcast program to ${successCount}/${synths.size} synths`, 'network');
+    }
+    
     return successCount;
   }
 

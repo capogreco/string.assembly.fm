@@ -100,26 +100,37 @@ export class SynthClient {
   }
   
   /**
-   * Handle incoming program from controller
-   * @param {Object} program - Program data
-   * @param {boolean} power - Power state
-   * @param {Object} transition - Transition data (optional)
+   * Handle incoming program message from controller
+   * @param {Object} programMessage - Complete program message with program, power, etc.
    */
-  handleProgram(program, power = null, transition = null) {
+  handleProgram(programMessage) {
+    Logger.log(`[${this.synthId}] Received program update`, 'synth');
+    
+    // Extract program data from message
+    const program = programMessage.program || programMessage;
+    const power = programMessage.power;
+    const transition = programMessage.transition;
+    
+    // Store the program and power state
     this.storedProgram = program;
-    if (power !== null) {
+    if (power !== undefined) {
       this.storedPower = power;
     }
     
     if (!this.audioInitialized) {
       // Store for later application
       this.pendingProgram = { program, transition };
-      Logger.log(`[${this.synthId}] Storing program for later application`, "lifecycle");
+      Logger.log(`[${this.synthId}] Storing program for later application (audio not initialized)`, "lifecycle");
       return;
     }
     
+    // Apply immediately if ready, otherwise wait
     if (!this.isCalibrating && this.synthCore.isInitialized) {
       this.applyStoredProgram(transition);
+    } else {
+      Logger.log(`[${this.synthId}] Storing program for later application (${
+        !this.synthCore.isInitialized ? 'not initialized' : 'calibrating'
+      })`, 'synth');
     }
   }
   
@@ -162,8 +173,9 @@ export class SynthClient {
     this.isCalibrating = false;
     Logger.log(`[${this.synthId}] Calibration ended`, "lifecycle");
     
-    // Apply any stored program
+    // Apply stored program if we have one
     if (this.storedProgram) {
+      Logger.log(`[${this.synthId}] Applying stored program after calibration`, 'synth');
       this.applyStoredProgram();
     }
   }
@@ -249,30 +261,12 @@ export class SynthClient {
   }
   
   /**
-   * Request current program from controllers
+   * DEPRECATED: Program requests removed - controllers now push programs automatically
+   * This method is kept for compatibility but does nothing
    */
   requestCurrentProgram() {
-    if (this.controllers.size === 0) {
-      Logger.log(`[${this.synthId}] No controllers connected to request program from`, "warn");
-      return;
-    }
-    
-    this.controllers.forEach((controller, controllerId) => {
-      if (controller.dataChannel && controller.dataChannel.readyState === 'open') {
-        const message = {
-          type: 'request_program',
-          synthId: this.synthId,
-          timestamp: Date.now()
-        };
-        
-        try {
-          controller.dataChannel.send(JSON.stringify(message));
-          Logger.log(`[${this.synthId}] Requested program from controller ${controllerId}`, "messages");
-        } catch (error) {
-          Logger.log(`[${this.synthId}] Failed to request program from ${controllerId}: ${error}`, "error");
-        }
-      }
-    });
+    Logger.log(`[${this.synthId}] Program request ignored - controllers push programs automatically`, "info");
+    // Do nothing - programs are pushed automatically by controllers
   }
   
   /**

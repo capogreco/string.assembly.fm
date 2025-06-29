@@ -644,19 +644,18 @@ function updateBankDisplay() {
  * Set up network event handlers
  */
 function setupNetworkEventHandlers() {
-  // Handle synth connections - just log, don't send program
+  // Handle synth connections - NetworkCoordinator now automatically sends programs
   networkCoordinator.on("synthConnected", (data) => {
     Logger.log(`Synth connected: ${data.synthId}`, "connections");
-    // Don't send program here - wait for synth to request after initialization
+    // NetworkCoordinator automatically sends current program on connection
+    // No manual program sending needed here anymore
   });
 
-  // Handle program requests from synths
-  eventBus.on("network:programRequested", (data) => {
-    Logger.log(`Program requested by: ${data.synthId}`, "messages");
-
-    // Use PartManager to send the current program with stochastic resolution
-    partManager.sendProgramToSpecificSynth(data.synthId);
-  });
+  // DEPRECATED: Program requests removed - synths receive programs automatically
+  // eventBus.on("network:programRequested", (data) => {
+  //   Logger.log(`Program requested by: ${data.synthId}`, "messages");
+  //   partManager.sendProgramToSpecificSynth(data.synthId);
+  // });
   
   // Handle bank program requests from synths
   eventBus.on("network:bankProgramRequested", (data) => {
