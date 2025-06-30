@@ -1477,6 +1477,14 @@ export class WebRTCManager {
     const peerData = this.peers.get(peerId);
     const channel = peerData?.dataChannel || peerData?.paramChannel;
     
+    console.log(`[WebRTC] sendDataMessage to ${peerId}:`, {
+      hasPeerData: !!peerData,
+      hasDataChannel: !!peerData?.dataChannel,
+      hasParamChannel: !!peerData?.paramChannel,
+      dataChannelState: peerData?.dataChannel?.readyState,
+      paramChannelState: peerData?.paramChannel?.readyState,
+      messageType: message.type
+    });
     
     if (!channel || channel.readyState !== "open") {
       if (window.Logger) {

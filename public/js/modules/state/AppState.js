@@ -287,6 +287,31 @@ export class AppState {
    * @returns {*} State value
    */
   get(key) {
+    // Add deprecation warnings for legacy keys
+    const legacyKeyMappings = {
+      'power': 'system.audio.power',
+      'masterGain': 'system.audio.masterGain', 
+      'volume': 'system.audio.masterGain',
+      'connectionStatus': 'connections.websocket.connected',
+      'averageLatency': 'connections.metrics.averageLatency',
+      'lastHeartbeat': 'connections.metrics.lastHeartbeat',
+      'selectedExpression': 'ui.expressions.selected',
+      'parametersChanged': 'ui.parameters.changed',
+      'selectedNotes': 'ui.piano.selectedNotes',
+      'playingNotes': 'ui.piano.playingNotes',
+      'connectedSynths': 'connections.synths',
+      'currentChord': 'performance.currentProgram.chord.frequencies',
+      'harmonicSelections': 'performance.currentProgram.harmonicSelections',
+      'programBanks': 'banking.banks',
+      'currentProgram': 'performance.currentProgram',
+      'activeProgram': 'performance.activeProgram',
+      'partAssignments': 'performance.currentProgram.parts.assignments'
+    };
+    
+    if (legacyKeyMappings[key]) {
+      console.warn(`DEPRECATED: Direct access to '${key}' - use getNested('${legacyKeyMappings[key]}') instead`);
+    }
+    
     return this.#state[key];
   }
 
@@ -297,6 +322,31 @@ export class AppState {
    * @param {boolean} silent - Skip notifications if true
    */
   set(key, value, silent = false) {
+    // Add deprecation warnings for legacy keys
+    const legacyKeyMappings = {
+      'power': 'system.audio.power',
+      'masterGain': 'system.audio.masterGain', 
+      'volume': 'system.audio.masterGain',
+      'connectionStatus': 'connections.websocket.connected',
+      'averageLatency': 'connections.metrics.averageLatency',
+      'lastHeartbeat': 'connections.metrics.lastHeartbeat',
+      'selectedExpression': 'ui.expressions.selected',
+      'parametersChanged': 'ui.parameters.changed',
+      'selectedNotes': 'ui.piano.selectedNotes',
+      'playingNotes': 'ui.piano.playingNotes',
+      'connectedSynths': 'connections.synths',
+      'currentChord': 'performance.currentProgram.chord.frequencies',
+      'harmonicSelections': 'performance.currentProgram.harmonicSelections',
+      'programBanks': 'banking.banks',
+      'currentProgram': 'performance.currentProgram',
+      'activeProgram': 'performance.activeProgram',
+      'partAssignments': 'performance.currentProgram.parts.assignments'
+    };
+    
+    if (legacyKeyMappings[key]) {
+      console.warn(`DEPRECATED: Direct set of '${key}' - use setNested('${legacyKeyMappings[key]}', value) instead`);
+    }
+    
     const oldValue = this.#state[key];
 
     // Don't update if value hasn't changed (shallow comparison)
@@ -716,48 +766,48 @@ export class AppState {
 
   // Harmonic selections helpers
   addHarmonicSelection(selector, value) {
-    const selections = this.get('harmonicSelections');
-    if (selections[selector]) {
+    const selections = this.getNested('performance.currentProgram.harmonicSelections');
+    if (selections && selections[selector]) {
       selections[selector].add(value);
-      this.set('harmonicSelections', selections);
+      this.setNested('performance.currentProgram.harmonicSelections', selections);
     }
   }
 
   removeHarmonicSelection(selector, value) {
-    const selections = this.get('harmonicSelections');
-    if (selections[selector]) {
+    const selections = this.getNested('performance.currentProgram.harmonicSelections');
+    if (selections && selections[selector]) {
       selections[selector].delete(value);
-      this.set('harmonicSelections', selections);
+      this.setNested('performance.currentProgram.harmonicSelections', selections);
     }
   }
 
   clearHarmonicSelections(selector) {
-    const selections = this.get('harmonicSelections');
-    if (selections[selector]) {
+    const selections = this.getNested('performance.currentProgram.harmonicSelections');
+    if (selections && selections[selector]) {
       selections[selector].clear();
       selections[selector].add(1); // Always keep at least 1:1
-      this.set('harmonicSelections', selections);
+      this.setNested('performance.currentProgram.harmonicSelections', selections);
     }
   }
 
   // Chord helpers
   addNoteToChord(frequency) {
-    const chord = [...this.get('currentChord')];
+    const chord = [...(this.getNested('performance.currentProgram.chord.frequencies') || [])];
     if (!chord.includes(frequency)) {
       chord.push(frequency);
       chord.sort((a, b) => a - b);
-      this.set('currentChord', chord);
+      this.setNested('performance.currentProgram.chord.frequencies', chord);
     }
   }
 
   removeNoteFromChord(frequency) {
-    const chord = this.get('currentChord').filter(f => f !== frequency);
-    this.set('currentChord', chord);
+    const chord = (this.getNested('performance.currentProgram.chord.frequencies') || []).filter(f => f !== frequency);
+    this.setNested('performance.currentProgram.chord.frequencies', chord);
   }
 
   clearChord() {
-    this.set('currentChord', []);
-    this.set('currentChordState', null);
+    this.setNested('performance.currentProgram.chord.frequencies', []);
+    this.setNested('performance.currentProgram.chord.noteNames', []);
   }
 
   // Parameter change tracking
@@ -765,16 +815,16 @@ export class AppState {
    * @deprecated Use programState.markChanged() instead
    */
   markParameterChanged(paramId) {
-    const changed = new Set(this.get('parametersChanged'));
+    const changed = new Set(this.getNested('ui.parameters.changed'));
     changed.add(paramId);
-    this.set('parametersChanged', changed);
+    this.setNested('ui.parameters.changed', changed);
   }
 
   /**
    * @deprecated Use programState methods instead
    */
   clearParameterChanges() {
-    this.set('parametersChanged', new Set());
+    this.setNested('ui.parameters.changed', new Set());
   }
   
   // Active program tracking
@@ -782,8 +832,8 @@ export class AppState {
    * @deprecated Use programState.setActiveProgram() instead
    */
   setActiveProgram(program) {
-    this.set('activeProgram', program);
-    this.set('activeProgramTimestamp', Date.now());
+    this.setNested('performance.activeProgram', program);
+    this.setNested('performance.timestamp', Date.now());
     this.clearParameterChanges();
   }
   
@@ -791,22 +841,21 @@ export class AppState {
    * @deprecated Use programState.activeProgram instead
    */
   getActiveProgram() {
-    return this.get('activeProgram');
+    return this.getNested('performance.activeProgram');
   }
   
   /**
    * @deprecated Use programState.isInSync() instead
    */
   hasUnsyncedChanges() {
-    const parametersChanged = this.get('parametersChanged');
+    const parametersChanged = this.getNested('ui.parameters.changed');
     return parametersChanged && parametersChanged.size > 0;
   }
 
   // Connection state helpers
   addConnectedSynth(synthId, synthData) {
-    // Work with both old and new state locations
-    const synths = new Map(this.get('connectedSynths'));
-    const newSynths = new Map(this.getNested('connections.synths'));
+    // Only use new state location
+    const synths = new Map(this.getNested('connections.synths'));
     
     // Ensure all fields are initialized
     const enrichedData = {
@@ -821,39 +870,29 @@ export class AppState {
       ...synthData
     };
     
-    // Update both locations during migration
+    // Update new location only
     synths.set(synthId, enrichedData);
-    newSynths.set(synthId, enrichedData);
-    
-    this.set('connectedSynths', synths);
-    this.setNested('connections.synths', newSynths);
+    this.setNested('connections.synths', synths);
     
     // Update connection count
-    this.setNested('connections.metrics.connectedCount', newSynths.size);
+    this.setNested('connections.metrics.connectedCount', synths.size);
   }
 
   removeConnectedSynth(synthId) {
-    // Work with both old and new state locations
-    const synths = new Map(this.get('connectedSynths'));
-    const newSynths = new Map(this.getNested('connections.synths'));
+    // Only use new state location
+    const synths = new Map(this.getNested('connections.synths'));
     
     synths.delete(synthId);
-    newSynths.delete(synthId);
-    
-    this.set('connectedSynths', synths);
-    this.setNested('connections.synths', newSynths);
+    this.setNested('connections.synths', synths);
     
     // Update connection count
-    this.setNested('connections.metrics.connectedCount', newSynths.size);
+    this.setNested('connections.metrics.connectedCount', synths.size);
   }
 
   updateSynthLatency(synthId, latency) {
-    // Work with both old and new state locations
-    const synths = new Map(this.get('connectedSynths'));
-    const newSynths = new Map(this.getNested('connections.synths'));
-    
+    // Only use new state location
+    const synths = new Map(this.getNested('connections.synths'));
     const synthData = synths.get(synthId);
-    const newSynthData = newSynths.get(synthId);
     
     if (synthData) {
       synthData.latency = latency;
@@ -871,26 +910,7 @@ export class AppState {
       }
       
       synths.set(synthId, synthData);
-      this.set('connectedSynths', synths);
-    }
-    
-    if (newSynthData) {
-      newSynthData.latency = latency;
-      newSynthData.lastPing = Date.now();
-      
-      // Update connection health
-      if (latency < 50) {
-        newSynthData.connectionHealth = 'excellent';
-      } else if (latency < 100) {
-        newSynthData.connectionHealth = 'good';
-      } else if (latency < 200) {
-        newSynthData.connectionHealth = 'fair';
-      } else {
-        newSynthData.connectionHealth = 'poor';
-      }
-      
-      newSynths.set(synthId, newSynthData);
-      this.setNested('connections.synths', newSynths);
+      this.setNested('connections.synths', synths);
     }
 
     // Update average latency
@@ -898,7 +918,7 @@ export class AppState {
   }
   
   updateSynthState(synthId, stateUpdate) {
-    const synths = new Map(this.get('connectedSynths'));
+    const synths = new Map(this.getNested('connections.synths'));
     const synthData = synths.get(synthId);
     if (synthData) {
       // Update specific state fields
@@ -913,7 +933,7 @@ export class AppState {
       }
       
       synths.set(synthId, synthData);
-      this.set('connectedSynths', synths);
+      this.setNested('connections.synths', synths);
     }
   }
 
@@ -928,11 +948,9 @@ export class AppState {
       const average = latencies.reduce((sum, l) => sum + l, 0) / latencies.length;
       const rounded = Math.round(average);
       
-      // Update both old and new locations
-      this.set('averageLatency', rounded);
+      // Update new location only
       this.setNested('connections.metrics.averageLatency', rounded);
     } else {
-      this.set('averageLatency', 0);
       this.setNested('connections.metrics.averageLatency', 0);
     }
   }

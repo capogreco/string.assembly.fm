@@ -36,7 +36,7 @@ class HarmonicRatioSelector {
     const selectorKey = `${this.expression}-${type}`;
     const harmonicSelections = this.programState 
       ? this.programState.currentProgram.harmonicSelections 
-      : this.appState.get('harmonicSelections');
+      : this.appState.getNested('performance.currentProgram.harmonicSelections');
     const currentSelection = harmonicSelections[selectorKey] 
       ? new Set(harmonicSelections[selectorKey]) 
       : new Set([1]);
@@ -89,7 +89,7 @@ class HarmonicRatioSelector {
     const type = button.dataset.type;
     const selectorKey = `${this.expression}-${type}`;
 
-    const harmonicSelections = this.appState.get('harmonicSelections');
+    const harmonicSelections = this.appState.getNested('performance.currentProgram.harmonicSelections');
     const currentSelection = harmonicSelections[selectorKey];
 
     if (!currentSelection) {
@@ -126,7 +126,7 @@ class HarmonicRatioSelector {
     const type = button.dataset.type;
     const selectorKey = `${this.expression}-${type}`;
 
-    const harmonicSelections = this.appState.get('harmonicSelections');
+    const harmonicSelections = this.appState.getNested('performance.currentProgram.harmonicSelections');
     const currentSelection = harmonicSelections[selectorKey];
 
     if (!currentSelection) return;
@@ -152,7 +152,7 @@ class HarmonicRatioSelector {
 
   updateDragSelection(startValue, endValue, type) {
     const selectorKey = `${this.expression}-${type}`;
-    const harmonicSelections = this.appState.get('harmonicSelections');
+    const harmonicSelections = this.appState.getNested('performance.currentProgram.harmonicSelections');
     const currentSelection = harmonicSelections[selectorKey];
 
     if (!currentSelection) return;
@@ -233,7 +233,7 @@ class HarmonicRatioSelector {
     const selectorKey = `${this.expression}-${type}`;
     const harmonicSelections = this.programState 
       ? this.programState.currentProgram.harmonicSelections 
-      : this.appState.get('harmonicSelections');
+      : this.appState.getNested('performance.currentProgram.harmonicSelections');
     const currentSelection = harmonicSelections[selectorKey] 
       ? new Set(harmonicSelections[selectorKey]) 
       : null;
@@ -272,7 +272,7 @@ class HarmonicRatioSelector {
   // Public method to update selections programmatically
   setSelection(type, values) {
     const selectorKey = `${this.expression}-${type}`;
-    const harmonicSelections = this.appState.get('harmonicSelections');
+    const harmonicSelections = this.appState.getNested('performance.currentProgram.harmonicSelections');
 
     if (harmonicSelections[selectorKey]) {
       harmonicSelections[selectorKey] = new Set(values);
@@ -284,7 +284,7 @@ class HarmonicRatioSelector {
   // Public method to get current selections
   getSelection(type) {
     const selectorKey = `${this.expression}-${type}`;
-    const harmonicSelections = this.appState.get('harmonicSelections');
+    const harmonicSelections = this.appState.getNested('performance.currentProgram.harmonicSelections');
     return harmonicSelections[selectorKey] ? Array.from(harmonicSelections[selectorKey]) : [1];
   }
   
@@ -300,7 +300,7 @@ class HarmonicRatioSelector {
       const values = harmonicSelections[selectorKey] || [1];
       
       // Update internal state in appState to match programState
-      const appHarmonicSelections = this.appState.get('harmonicSelections');
+      const appHarmonicSelections = this.appState.getNested('performance.currentProgram.harmonicSelections');
       if (appHarmonicSelections[selectorKey]) {
         appHarmonicSelections[selectorKey] = new Set(values);
       }

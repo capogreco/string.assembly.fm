@@ -325,6 +325,12 @@ export class SynthCore {
       const glissandoEnabled = !transitionData || transitionData.glissando !== false;
       
       this.log(`Gain transition: glissando=${transitionData?.glissando}, glissandoEnabled=${glissandoEnabled}, crossfade=${!glissandoEnabled}`);
+      
+      // Debug: trace where this is being called from
+      if (this.synthId && this.synthId.startsWith('synth-') && this.synthId !== 'synth-pyn8w48s6') {
+        console.log(`[${this.synthId}] applyProgram called from:`);
+        console.trace();
+      }
 
       if (transitionData && transitionData.duration && !glissandoEnabled) {
         // Crossfade envelope for non-glissando transitions

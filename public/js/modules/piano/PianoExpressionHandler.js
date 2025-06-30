@@ -826,7 +826,7 @@ export class PianoExpressionHandler {
 
       // Update PianoKeyboard's chord
       const currentChord =
-        this.pianoKeyboard.appState.get("currentChord") || [];
+        this.pianoKeyboard.appState.getNested('performance.currentProgram.chord.frequencies') || [];
       if (!currentChord.includes(frequency)) {
         this.pianoKeyboard.addNoteToChord(frequency);
       }
@@ -1202,7 +1202,7 @@ export class PianoExpressionHandler {
    * Sync with current app state
    */
   syncWithAppState() {
-    const currentChord = this.pianoKeyboard.appState.get("currentChord") || [];
+    const currentChord = this.pianoKeyboard.appState.getNested('performance.currentProgram.chord.frequencies') || [];
     const noteNames = currentChord.map((freq) =>
       this.pianoKeyboard.frequencyToNoteName(freq),
     );

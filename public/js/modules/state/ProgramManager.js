@@ -36,7 +36,7 @@ export class ProgramManager {
         programBanks.set(bank.id, bank.program);
       }
     });
-    this.state.set('programBanks', programBanks);
+    this.state.setNested('banking.banks', programBanks);
     
     return true;
   }
@@ -232,11 +232,11 @@ export class ProgramManager {
    */
   clearBank(bankId) {
     try {
-      const programBanks = new Map(this.state.get('programBanks'));
+      const programBanks = new Map(this.state.getNested('banking.banks'));
 
       if (programBanks.has(bankId)) {
         programBanks.delete(bankId);
-        this.state.set('programBanks', programBanks);
+        this.state.setNested('banking.banks', programBanks);
         this.saveBanksToStorage();
 
         // Emit clear event
@@ -285,7 +285,7 @@ export class ProgramManager {
    */
   exportBanks() {
     try {
-      const programBanks = this.state.get('programBanks');
+      const programBanks = this.state.getNested('banking.banks');
       const exportData = {
         version: '1.0',
         timestamp: Date.now(),
@@ -319,7 +319,7 @@ export class ProgramManager {
         programBanks.set(parseInt(bankId), program);
       });
 
-      this.state.set('programBanks', programBanks);
+      this.state.setNested('banking.banks', programBanks);
       this.saveBanksToStorage();
 
       // Emit import event

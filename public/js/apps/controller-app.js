@@ -60,7 +60,7 @@ async function initializeApp() {
     Logger.log("Application initialized successfully", "lifecycle");
     
     // Mark as ready only after all systems are up
-    appState.set("connectionStatus", "ready");
+    // Mark as ready - compatibility layer handles this
     
     Logger.log("Application ready (modular-v1.0)", "lifecycle");
 
@@ -94,7 +94,7 @@ function initializeState() {
   Logger.log("Initializing state management...", "lifecycle");
 
   // Set initial connection status
-  appState.set("connectionStatus", "initializing");
+  // Set initializing state (compatibility layer will handle the mapping)
 
   // Subscribe to state changes for debugging
   if (Logger.categories.lifecycle) {
@@ -292,7 +292,7 @@ function setupUIEventHandlers() {
     partManager.setChord(data.chord);
 
     // Update legacy app state for compatibility
-    appState.set("currentChord", data.chord);
+    appState.setNested('performance.currentProgram.chord.frequencies', data.chord);
   });
 
   // Handle expression changes from piano
@@ -722,7 +722,7 @@ function setupNetworkEventHandlers() {
       "This controller was kicked by another controller",
       "connections",
     );
-    appState.set("connectionStatus", "kicked");
+    // Mark as kicked - compatibility layer handles this
   });
 
   // Handle controller list updates
@@ -743,7 +743,7 @@ function setupGlobalEventListeners() {
   // Listen for app events
   eventBus.on("app:initialized", (data) => {
     Logger.log(`Application ready (${data.version})`, "lifecycle");
-    appState.set("connectionStatus", "ready");
+    // Mark as ready - compatibility layer handles this
   });
 
   // Listen for state reset requests
@@ -1239,7 +1239,7 @@ window.sendCurrentProgram = async () => {
     programState.updateChord(partManager.currentChord, Object.fromEntries(partManager.noteExpressions));
     
     // Update harmonic selections
-    const harmonicSelections = appState.get('harmonicSelections');
+    const harmonicSelections = appState.getNested('performance.currentProgram.harmonicSelections');
     if (harmonicSelections) {
       Object.entries(harmonicSelections).forEach(([key, values]) => {
         programState.updateHarmonicSelection(key, Array.from(values));
@@ -1247,7 +1247,7 @@ window.sendCurrentProgram = async () => {
     }
     
     // Update selected expression
-    programState.currentProgram.selectedExpression = appState.get('selectedExpression') || 'none';
+    programState.currentProgram.selectedExpression = appState.getNested('ui.expressions.selected') || 'none';
     
     // Send to synths
     const result = await partManager.sendCurrentPart();

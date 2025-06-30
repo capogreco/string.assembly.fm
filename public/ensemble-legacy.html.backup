@@ -1,0 +1,1500 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>String Assembly FM - Multi-Synth Test Client</title>
+        <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+
+            body {
+                font-family: monospace;
+                background: #000;
+                min-height: 100vh;
+                color: white;
+                margin: 0;
+                padding: 0;
+                overflow: hidden;
+            }
+
+            .container {
+                width: 100vw;
+                height: 100vh;
+                position: relative;
+            }
+
+            h1 {
+                text-align: center;
+                margin-bottom: 30px;
+                text-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+            }
+
+            .controls {
+                background: rgba(255, 255, 255, 0.1);
+                border-radius: 12px;
+                padding: 20px;
+                margin-bottom: 30px;
+                backdrop-filter: blur(10px);
+                border: 1px solid rgba(255, 255, 255, 0.2);
+            }
+
+            .control-row {
+                display: flex;
+                gap: 20px;
+                align-items: center;
+                margin-bottom: 15px;
+            }
+
+            button {
+                padding: 10px 20px;
+                border: none;
+                border-radius: 6px;
+                background: #3498db;
+                color: white;
+                font-weight: 500;
+                cursor: pointer;
+                transition: all 0.3s ease;
+            }
+
+            button:hover {
+                background: #2980b9;
+                transform: translateY(-2px);
+            }
+
+            button:disabled {
+                background: #7f8c8d;
+                cursor: not-allowed;
+                transform: none;
+            }
+
+            .status-message {
+                position: absolute;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                text-align: center;
+                padding: 30px;
+                background: rgba(42, 42, 42, 0.9);
+                border-radius: 8px;
+                z-index: 100;
+                color: #f0f0f0;
+                font-size: 1.1em;
+            }
+            
+            #start-ensemble:hover:not(:disabled) {
+                background: #2ecc71 !important;
+                transform: translateY(-2px);
+            }
+            
+            #start-ensemble:disabled {
+                opacity: 0.7;
+                cursor: not-allowed;
+            }
+
+            @keyframes pulse {
+                0% {
+                    opacity: 1;
+                }
+                50% {
+                    opacity: 0.7;
+                }
+                100% {
+                    opacity: 1;
+                }
+            }
+
+            #calibration_phase,
+            #join_phase {
+                position: absolute;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                text-align: center;
+                padding: 30px;
+                background: rgba(42, 42, 42, 0.9);
+                border-radius: 8px;
+                z-index: 100;
+            }
+
+            .synth-grid {
+                display: flex;
+                flex-direction: row;
+                gap: 0;
+                height: 100vh;
+                width: 100vw;
+                position: fixed;
+                top: 0;
+                left: 0;
+                background: #000;
+            }
+
+            .synth-unit {
+                flex: 1;
+                position: relative;
+                overflow: hidden;
+                background: #000;
+            }
+            
+            .synth-visualizer {
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                z-index: 1;
+            }
+            
+            .synth-info {
+                position: absolute;
+                top: 10px;
+                left: 10px;
+                z-index: 10;
+                background: rgba(51, 51, 51, 0.8);
+                padding: 10px;
+                border-radius: 4px;
+                font-size: 12px;
+                color: #f0f0f0;
+            }
+
+            .synth-unit.active {
+                /* Remove active styling since we're using full-screen visualizers */
+            }
+
+            .synth-header {
+                display: none; /* Not needed for visualizer view */
+            }
+
+            .synth-id {
+                font-weight: bold;
+                font-size: 1.1em;
+            }
+
+            .status-dot {
+                width: 12px;
+                height: 12px;
+                border-radius: 50%;
+                background: #e74c3c;
+            }
+
+            .status-dot.connected {
+                background: #2ecc71;
+            }
+
+            .note-display {
+                display: none; /* Not needed for visualizer view */
+            }
+
+            .expression-display {
+                display: none; /* Not needed for visualizer view */
+            }
+
+            .level-meter {
+                display: none; /* Not needed for visualizer view */
+            }
+
+            .level-bar {
+                position: absolute;
+                bottom: 0;
+                left: 0;
+                right: 0;
+                background: linear-gradient(to top, #2ecc71, #f1c40f, #e74c3c);
+                transition: height 0.1s ease;
+            }
+
+            .pan-control {
+                display: none; /* Not needed for visualizer view */
+            }
+
+            .pan-slider {
+                flex: 1;
+            }
+
+            .log-area {
+                background: rgba(0, 0, 0, 0.3);
+                border-radius: 6px;
+                padding: 15px;
+                margin-top: 30px;
+                font-family: monospace;
+                font-size: 0.9em;
+                max-height: 200px;
+                overflow-y: auto;
+            }
+
+            .log-entry {
+                margin-bottom: 5px;
+                opacity: 0.8;
+            }
+
+            .log-entry.error {
+                color: #e74c3c;
+            }
+
+            .log-entry.info {
+                color: #3498db;
+            }
+
+            input[type="number"] {
+                width: 60px;
+                padding: 5px;
+                border: 1px solid rgba(255, 255, 255, 0.3);
+                background: rgba(255, 255, 255, 0.1);
+                color: white;
+                border-radius: 4px;
+            }
+
+            input[type="range"] {
+                width: 100%;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>🎼 Multi-Synth Test Ensemble</h1>
+
+            <div id="setup-phase" class="status-message">
+                <p>🎵 Set the number of synths for your ensemble</p>
+                <div style="margin: 20px 0;">
+                    <label style="margin-right: 10px;">Number of Synths:</label>
+                    <input
+                        type="number"
+                        id="synth-count-setup"
+                        value="6"
+                        min="1"
+                        max="12"
+                        style="width: 60px; padding: 5px; margin-right: 20px;"
+                    />
+                </div>
+                <button id="start-ensemble" style="padding: 12px 40px; background: #27ae60; border: none; border-radius: 6px; color: white; font-size: 18px; cursor: pointer; font-weight: bold;">
+                    Start Ensemble
+                </button>
+            </div>
+
+            <div id="running-phase" class="controls" style="display: none;">
+                <div class="control-row">
+                    <label>Master Volume:</label>
+                    <input
+                        type="range"
+                        id="master-volume"
+                        min="0"
+                        max="1"
+                        step="0.01"
+                        value="0.7"
+                    />
+                    <span id="volume-display">70%</span>
+                </div>
+            </div>
+
+            <div class="synth-grid" id="synth-grid">
+                <!-- Synth units will be generated here -->
+            </div>
+
+            <div class="log-area" id="log-area">
+                <div class="log-entry info">
+                    Multi-synth test client initializing...
+                </div>
+            </div>
+        </div>
+
+        <script type="module">
+            // Import SynthCore
+            import { SynthCore } from "../src/synth/synth-core.js";
+
+            // Global state
+            let audioContext = null;
+            let synths = [];
+            let controllerConnection = null;
+            let masterGain = null;
+            let isInitialized = false;
+            let audioInitialized = false;
+
+            // Real WebRTC configuration
+            const rtcConfig = {
+                iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+            };
+
+            // Wrapper class for SynthCore in ensemble
+            class TestSynth {
+                constructor(id, index, totalSynths) {
+                    this.id = id;
+                    this.index = index;
+                    this.element = null;
+                    this.noteDisplay = null;
+                    this.expressionDisplay = null;
+                    this.levelMeter = null;
+                    this.panControl = null;
+
+                    // State
+                    this.currentNote = null;
+                    this.currentExpression = null;
+                    this.isActive = false;
+                    this.currentProgram = null;
+
+                    // Banking
+                    this.synthBanks = new Map();
+
+                    // WebRTC connections (will be set up later)
+                    this.ws = null;
+                    this.controllers = new Map();
+
+                    // Calculate pan position
+                    this.panPosition =
+                        totalSynths === 1
+                            ? 0
+                            : (index / (totalSynths - 1)) * 2 - 1;
+
+                    // Create SynthCore instance
+                    this.synthCore = new SynthCore(id, { enableLogging: true });
+                }
+
+                async initialize(audioCtx, destination) {
+                    // Create additional nodes for ensemble-specific features
+                    this.panner = audioCtx.createStereoPanner();
+                    this.panner.pan.value = this.panPosition;
+
+                    this.analyser = audioCtx.createAnalyser();
+                    this.analyser.fftSize = 256;
+
+                    // Initialize SynthCore
+                    await this.synthCore.initialize(audioCtx, this.analyser);
+
+                    // Connect SynthCore output through our panner to destination
+                    this.analyser.connect(this.panner);
+                    this.panner.connect(destination);
+
+                    // Ensure we have the analyser reference for level meters
+                    this.analyser =
+                        this.synthCore.analyserNode || this.analyser;
+
+                    this.audioInitialized = true;
+                    log(
+                        `[${this.id}] SynthCore initialized with panning`,
+                        "info",
+                    );
+                    
+                    // Start visualizer if we have a canvas
+                    if (this.canvas) {
+                        this.startVisualizer();
+                    }
+                    
+                    // Apply any pending program that arrived before initialization
+                    if (this.pendingProgram) {
+                        log(`[${this.id}] Applying pending program after initialization`, "info");
+                        this.synthCore.applyProgram(this.pendingProgram.program, this.pendingProgram.transition);
+                        this.pendingProgram = null;
+                    } else {
+                        // Now that SynthCore is initialized, request current program from controller
+                        this.requestCurrentProgram();
+                    }
+                }
+
+                createElements(container) {
+                    this.element = this.createUI();
+                    container.appendChild(this.element);
+                    
+                    // Update display with stored values if they exist
+                    if (this.currentNote && this.noteDisplay) {
+                        this.noteDisplay.textContent = this.currentNote;
+                    }
+                    if (this.currentExpression && this.expressionDisplay) {
+                        this.expressionDisplay.textContent = this.currentExpression;
+                    }
+                    if (this.isActive && this.element) {
+                        this.element.classList.add("active");
+                    }
+                }
+
+                async ensureAudioInitialized(audioCtx, destination) {
+                    if (!this.audioInitialized) {
+                        await this.initialize(audioCtx, destination);
+                    }
+                }
+
+                handleParamMessage(event) {
+                    const data =
+                        typeof event.data === "string"
+                            ? JSON.parse(event.data)
+                            : event.data;
+
+                    log(
+                        `[${this.id}] Received param message: ${data.type}`,
+                        "info",
+                    );
+
+                    if (data.type === "program") {
+                        log(
+                            `[${this.id}] Received program message with transition: ${JSON.stringify(data.transition)}`,
+                            "info",
+                        );
+                        
+                        // Calculate individual timing if stagger/spread are present
+                        if (data.transition && (data.transition.stagger || data.transition.durationSpread)) {
+                            const calculatedTransition = this.calculateTransitionTiming(data.transition);
+                            log(`[${this.id}] Calculated transition: delay=${calculatedTransition.delay?.toFixed(3)}s, duration=${calculatedTransition.duration?.toFixed(3)}s`, "info");
+                            this.applyProgram(data.program, calculatedTransition);
+                        } else {
+                            this.applyProgram(data.program, data.transition);
+                        }
+                    } else if (data.type === "setTransitionConfig") {
+                        // Forward transition config to worklet
+                        if (this.bowedString) {
+                            this.bowedString.port.postMessage({
+                                type: "setTransitionConfig",
+                                config: data.config,
+                            });
+                            log(
+                                `[${this.id}] Applied transition config: ${JSON.stringify(data.config)}`,
+                                "info",
+                            );
+                        }
+                    } else if (data.type === "ping") {
+                        if (
+                            this.paramChannel &&
+                            this.paramChannel.readyState === "open"
+                        ) {
+                            this.paramChannel.send(
+                                JSON.stringify({
+                                    type: "pong",
+                                    timestamp: data.timestamp,
+                                    state: {
+                                        audio_enabled: true,
+                                        joined: this.isActive,
+                                    },
+                                }),
+                            );
+                        }
+                    }
+                }
+
+                handleCommandMessage(event) {
+                    const data =
+                        typeof event.data === "string"
+                            ? JSON.parse(event.data)
+                            : event.data;
+
+                    if (data.type === "command") {
+                        if (data.name === "power") {
+                            this.setPower(data.value);
+                        } else if (data.name === "save") {
+                            this.handleSaveCommand(data.bank || data.value);
+                        } else if (data.name === "load") {
+                            // Extract bank ID and transition from value object
+                            const loadData = data.value || {};
+                            this.handleLoadCommand(
+                                loadData.bank,
+                                loadData.transition,
+                                loadData.fallbackProgram,
+                            );
+                        }
+                    }
+                }
+
+                async applyProgram(program, transition) {
+                    log(
+                        `[${this.id}] Applying program via SynthCore: freq=${program.fundamentalFrequency?.toFixed(1)}Hz${transition ? " with transition" : ""}`,
+                        "info",
+                    );
+
+                    // Ensure audio is initialized before applying program
+                    if (!this.audioInitialized) {
+                        log(`[${this.id}] Audio not initialized, initializing now...`, "info");
+                        // Initialize audio context if needed
+                        if (!audioContext) {
+                            await initializeAudioSystem();
+                        }
+                        if (audioContext && masterGain) {
+                            await this.ensureAudioInitialized(audioContext, masterGain);
+                        } else {
+                            log(`[${this.id}] Cannot initialize audio - no audio context available`, "error");
+                            return;
+                        }
+                    }
+
+                    // Debug log expression parameters being applied
+                    if (program.trillEnabled) {
+                        log(`[${this.id}] Applying trill: speed=${program.trillSpeed}, interval=${program.trillInterval}`, "info");
+                    }
+
+                    if (transition) {
+                        log(
+                            `[${this.id}] Transition data: delay=${transition.delay?.toFixed(3)}s, duration=${transition.duration?.toFixed(3)}s`,
+                            "info",
+                        );
+                    }
+
+                    // Store current program for banking
+                    this.currentProgram = program;
+
+                    // Update display only if UI elements exist
+                    if (this.noteDisplay && this.expressionDisplay) {
+                        if (program.fundamentalFrequency) {
+                            const noteInfo = this.frequencyToNote(
+                                program.fundamentalFrequency,
+                            );
+                            this.currentNote = noteInfo.note;
+                            this.noteDisplay.textContent = noteInfo.note;
+
+                            // Update expression display with specific expression
+                            if (program.vibratoEnabled) {
+                                this.currentExpression = "Vibrato";
+                            } else if (program.tremoloEnabled) {
+                                this.currentExpression = "Tremolo";
+                            } else if (program.trillEnabled) {
+                                this.currentExpression = "Trill";
+                            } else {
+                                this.currentExpression = "None";
+                            }
+                            this.expressionDisplay.textContent =
+                                this.currentExpression;
+                        } else {
+                            this.noteDisplay.textContent = "-";
+                            this.expressionDisplay.textContent = "None";
+                        }
+                    } else {
+                        // Store the values for later display when UI is ready
+                        if (program.fundamentalFrequency) {
+                            const noteInfo = this.frequencyToNote(
+                                program.fundamentalFrequency,
+                            );
+                            this.currentNote = noteInfo.note;
+
+                            // Update expression display with specific expression
+                            if (program.vibratoEnabled) {
+                                this.currentExpression = "Vibrato";
+                            } else if (program.tremoloEnabled) {
+                                this.currentExpression = "Tremolo";
+                            } else if (program.trillEnabled) {
+                                this.currentExpression = "Trill";
+                            } else {
+                                this.currentExpression = "None";
+                            }
+                        }
+                    }
+
+                    // Mark as active
+                    this.isActive = true;
+
+                    // Delegate to SynthCore for all synthesis logic
+                    if (this.synthCore && this.synthCore.isInitialized) {
+                        this.synthCore.applyProgram(program, transition);
+                    } else {
+                        log(
+                            `[${this.id}] Cannot apply program yet - synthCore not ready. Will be applied after initialization.`,
+                            "warn"
+                        );
+                        // Store program to apply after initialization
+                        this.pendingProgram = { program, transition };
+                        return;
+                    }
+
+                    if (this.element) {
+                        this.element.classList.add("active");
+                    }
+                    log(
+                        `[${this.id}] Program applied and synth UI activated`,
+                        "info",
+                    );
+                } // End of applyProgram method
+                
+                requestCurrentProgram() {
+                    // Send request to controller for current program
+                    for (const [controllerId, controller] of this.controllers) {
+                        if (controller.channel && controller.channel.readyState === "open") {
+                            controller.channel.send(
+                                JSON.stringify({
+                                    type: "request_program",
+                                    timestamp: Date.now()
+                                })
+                            );
+                            log(`[${this.id}] Requested current program from controller`, "info");
+                            break;
+                        }
+                    }
+                }
+                
+                requestProgramForBank(bankId, transition) {
+                    // Send request to controller for this specific bank
+                    for (const [controllerId, controller] of this.controllers) {
+                        if (controller.channel && controller.channel.readyState === "open") {
+                            controller.channel.send(
+                                JSON.stringify({
+                                    type: "request_bank_program",
+                                    bank: bankId,
+                                    transition: transition
+                                })
+                            );
+                            log(`[${this.id}] Requested program for bank ${bankId} from controller`, "info");
+                            break;
+                        }
+                    }
+                }
+
+                setPower(on) {
+                    this.isActive = on;
+
+                    if (this.synthCore) {
+                        this.synthCore.setPower(on);
+                    }
+
+                    if (on) {
+                        this.element.classList.add("active");
+                    } else {
+                        this.element.classList.remove("active");
+                    }
+
+                    log(`[${this.id}] Power: ${on ? "ON" : "OFF"}`, "info");
+                }
+
+                handleSaveCommand(bankId) {
+                    // Save current program to memory (not localStorage)
+                    if (this.synthCore && this.synthCore.currentProgram) {
+                        // Log the FULL program being saved
+                        log(`[${this.id}] Saving to bank ${bankId} - FULL PROGRAM:`, "info");
+                        console.log(`[${this.id}] Bank ${bankId} save:`, JSON.parse(JSON.stringify(this.synthCore.currentProgram)));
+                        
+                        // Store in synthCore's memory map
+                        this.synthCore.synthBanks.set(bankId, JSON.parse(JSON.stringify(this.synthCore.currentProgram)));
+                        log(`[${this.id}] Saved current program to bank ${bankId} (in memory)`, "info");
+                    }
+                }
+
+                handleLoadCommand(bankId, transition, fallbackProgram) {
+                    // Check memory first
+                    if (this.synthCore && this.synthCore.synthBanks.has(bankId)) {
+                        const savedProgram = this.synthCore.synthBanks.get(bankId);
+                        log(`[${this.id}] Loading bank ${bankId} from memory`, "info");
+                        
+                        // Comprehensive debug logging
+                        console.log(`[${this.id}] Bank ${bankId} load - FULL SAVED PROGRAM:`, JSON.parse(JSON.stringify(savedProgram)));
+                        
+                        // Debug log expression parameters in saved program
+                        if (savedProgram.trillEnabled) {
+                            log(`[${this.id}] Saved program has trill: enabled=${savedProgram.trillEnabled}, speed=${savedProgram.trillSpeed}, interval=${savedProgram.trillInterval}, articulation=${savedProgram.trillArticulation}`, "info");
+                        }
+                        if (savedProgram.vibratoEnabled) {
+                            log(`[${this.id}] Saved program has vibrato: enabled=${savedProgram.vibratoEnabled}, rate=${savedProgram.vibratoRate}, depth=${savedProgram.vibratoDepth}`, "info");
+                        }
+                        if (savedProgram.tremoloEnabled) {
+                            log(`[${this.id}] Saved program has tremolo: enabled=${savedProgram.tremoloEnabled}, speed=${savedProgram.tremoloSpeed}, depth=${savedProgram.tremoloDepth}, articulation=${savedProgram.tremoloArticulation}`, "info");
+                        }
+                        
+                        // Apply with transition if specified
+                        if (transition) {
+                            const calculatedTransition = this.calculateTransitionTiming(transition);
+                            this.applyProgram(savedProgram, calculatedTransition);
+                        } else {
+                            this.applyProgram(savedProgram);
+                        }
+                    } else {
+                        // Bank not found in memory - request from controller
+                        log(`[${this.id}] Bank ${bankId} not found in memory, requesting from controller`, "info");
+                        this.requestProgramForBank(bankId, transition);
+                    }
+                }
+
+                calculateTransitionTiming(config, synthIndex = 0) {
+                    if (!config) {
+                        return { delay: 0, duration: 1.0 };
+                    }
+                    
+                    const baseDuration = config.duration || 1.0;
+                    const stagger = config.stagger || 0;
+                    const durationSpread = config.durationSpread || 0;
+                    
+                    // Calculate stagger delay
+                    let delay = 0;
+                    if (stagger > 0) {
+                        const staggerExponent = (Math.random() * 2 - 1) * stagger * Math.log(2);
+                        const staggerMultiplier = Math.exp(staggerExponent);
+                        delay = baseDuration * staggerMultiplier;
+                    }
+                    
+                    // Calculate duration variation
+                    let finalDuration = baseDuration;
+                    if (durationSpread > 0) {
+                        const durationExponent = (Math.random() * 2 - 1) * durationSpread * Math.log(2);
+                        const durationMultiplier = Math.exp(durationExponent);
+                        finalDuration = baseDuration * durationMultiplier;
+                    }
+                    
+                    return {
+                        delay: Math.max(0, delay),
+                        duration: finalDuration,
+                        glissando: config.glissando // preserve glissando parameter
+                    };
+                }
+
+                loadSynthBanksFromStorage() {
+                    // No longer loading from localStorage - synths request from controller
+                    log(
+                        `[${this.id}] Synth banks will be requested from controller as needed`,
+                        "info",
+                    );
+                }
+
+                frequencyToNote(freq) {
+                    const A4 = 440;
+                    const semitones = Math.round(12 * Math.log2(freq / A4));
+                    const noteNames = [
+                        "C",
+                        "C#",
+                        "D",
+                        "D#",
+                        "E",
+                        "F",
+                        "F#",
+                        "G",
+                        "G#",
+                        "A",
+                        "A#",
+                        "B",
+                    ];
+                    const octave = Math.floor((semitones + 57) / 12);
+                    const noteIndex = (semitones + 69) % 12;
+                    return { note: noteNames[noteIndex] + octave, semitones };
+                }
+
+                updateLevel() {
+                    if (!this.levelMeter) return;
+
+                    // Use SynthCore's getAudioLevel method if available
+                    let level = 0;
+                    if (this.synthCore && this.synthCore.isInitialized) {
+                        level = this.synthCore.getAudioLevel();
+                    } else if (this.analyser) {
+                        // Fallback to manual calculation
+                        const dataArray = new Uint8Array(
+                            this.analyser.frequencyBinCount,
+                        );
+                        this.analyser.getByteFrequencyData(dataArray);
+
+                        let sum = 0;
+                        for (let i = 0; i < dataArray.length; i++) {
+                            sum += dataArray[i];
+                        }
+                        level = sum / dataArray.length / 255;
+                    }
+
+                    this.levelMeter.style.height = `${level * 100}%`;
+                }
+
+                createUI() {
+                    const unit = document.createElement("div");
+                    unit.className = "synth-unit";
+
+                    // Create canvas for visualizer
+                    const canvas = document.createElement("canvas");
+                    canvas.className = "synth-visualizer";
+                    unit.appendChild(canvas);
+                    
+                    // Create info overlay
+                    const info = document.createElement("div");
+                    info.className = "synth-info";
+                    
+                    const synthId = document.createElement("div");
+                    synthId.textContent = this.id;
+                    synthId.style.fontWeight = "bold";
+                    synthId.style.marginBottom = "5px";
+                    
+                    const noteDisplay = document.createElement("div");
+                    noteDisplay.textContent = "--";
+                    noteDisplay.style.fontSize = "1.2em";
+                    noteDisplay.style.marginBottom = "3px";
+                    
+                    const expressionDisplay = document.createElement("div");
+                    expressionDisplay.textContent = "None";
+                    expressionDisplay.style.fontSize = "0.9em";
+                    expressionDisplay.style.opacity = "0.8";
+                    
+                    info.appendChild(synthId);
+                    info.appendChild(noteDisplay);
+                    info.appendChild(expressionDisplay);
+                    unit.appendChild(info);
+
+                    this.element = unit;
+                    this.canvas = canvas;
+                    this.noteDisplay = noteDisplay;
+                    this.expressionDisplay = expressionDisplay;
+                    
+                    // Setup canvas context
+                    this.ctx = canvas.getContext("2d");
+                    
+                    // Handle canvas resize
+                    this.resizeCanvas = () => {
+                        const rect = unit.getBoundingClientRect();
+                        canvas.width = rect.width;
+                        canvas.height = rect.height;
+                    };
+                    
+                    // Initial resize
+                    setTimeout(this.resizeCanvas, 0);
+                    
+                    return unit;
+                }
+
+                disconnect() {
+                    // Close WebSocket connection
+                    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                        this.ws.close();
+                        log(`[${this.id}] WebSocket disconnected`, "info");
+                    }
+
+                    // Close all controller connections
+                    this.controllers.forEach((controller, controllerId) => {
+                        if (controller.connection) {
+                            // Close data channels
+                            if (controller.channel && controller.channel.readyState === 'open') {
+                                controller.channel.close();
+                            }
+                            if (controller.command_channel && controller.command_channel.readyState === 'open') {
+                                controller.command_channel.close();
+                            }
+                            // Close peer connection
+                            controller.connection.close();
+                            log(`[${this.id}] Disconnected from controller ${controllerId}`, "info");
+                        }
+                    });
+                    this.controllers.clear();
+
+                    // Disconnect audio nodes
+                    if (this.panner) {
+                        this.panner.disconnect();
+                    }
+                    if (this.analyser) {
+                        this.analyser.disconnect();
+                    }
+                    if (this.synthCore && this.synthCore.isInitialized) {
+                        // SynthCore might have its own cleanup
+                        if (this.synthCore.disconnect) {
+                            this.synthCore.disconnect();
+                        }
+                    }
+
+                    // Clear UI references
+                    this.element = null;
+                    this.noteDisplay = null;
+                    this.expressionDisplay = null;
+                    this.levelMeter = null;
+                    this.panControl = null;
+
+                    this.audioInitialized = false;
+                    
+                    log(`[${this.id}] Fully disconnected and cleaned up`, "info");
+                }
+                
+                drawVisualizer() {
+                    if (!this.isVisualizerRunning) return;
+                    requestAnimationFrame(() => this.drawVisualizer());
+                    
+                    if (!this.ctx || !this.canvas) return;
+                    
+                    // Use SynthCore's analyser if available
+                    const activeAnalyser = this.synthCore && this.synthCore.analyserNode
+                        ? this.synthCore.analyserNode
+                        : this.analyser;
+                    if (!activeAnalyser) return;
+                    
+                    // Get time domain data for waveform
+                    const bufferLength = activeAnalyser.fftSize;
+                    const dataArray = new Float32Array(bufferLength);
+                    activeAnalyser.getFloatTimeDomainData(dataArray);
+                    
+                    // Clear canvas
+                    this.ctx.fillStyle = "rgba(0, 0, 0, 1)";
+                    this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+                    
+                    // Set up drawing style
+                    this.ctx.lineWidth = 3; // Thinner for multiple synths
+                    this.ctx.strokeStyle = "#ffffff";
+                    this.ctx.lineCap = "round";
+                    this.ctx.lineJoin = "round";
+                    
+                    // Begin path for waveform
+                    this.ctx.beginPath();
+                    
+                    // Center x position
+                    const centerX = this.canvas.width / 2;
+                    const maxAmplitude = this.canvas.width * 2; // Smaller amplitude for multiple displays
+                    
+                    // Number of points to sample from the buffer
+                    const samples = 256;
+                    const step = Math.floor(bufferLength / samples);
+                    
+                    // Move to top center
+                    this.ctx.moveTo(centerX, 0);
+                    
+                    // Draw waveform with cosine envelope
+                    for (let i = 0; i < samples; i++) {
+                        const dataIndex = i * step;
+                        const sample = dataArray[dataIndex] || 0;
+                        
+                        // Y position (0 to canvas.height)
+                        const y = (i / (samples - 1)) * this.canvas.height;
+                        
+                        // Cosine envelope: 1 at center, 0 at top/bottom
+                        const envelope = Math.cos((i / (samples - 1) - 0.5) * Math.PI * 2) * 0.5 + 0.5;
+                        
+                        // Apply envelope to the sample amplitude
+                        const amplitude = sample * envelope * maxAmplitude;
+                        
+                        // X position with amplitude offset
+                        const x = centerX + amplitude;
+                        
+                        this.ctx.lineTo(x, y);
+                    }
+                    
+                    this.ctx.stroke();
+                }
+                
+                startVisualizer() {
+                    this.isVisualizerRunning = true;
+                    this.drawVisualizer();
+                }
+                
+                stopVisualizer() {
+                    this.isVisualizerRunning = false;
+                }
+            }
+
+            // Initialize audio system when needed (user interaction required)
+            async function initializeAudioSystem() {
+                if (!audioContext) {
+                    audioContext = new (window.AudioContext ||
+                        window.webkitAudioContext)();
+
+                    if (audioContext.state === "suspended") {
+                        await audioContext.resume();
+                        log("Audio context resumed", "info");
+                    }
+
+                    masterGain = audioContext.createGain();
+                    masterGain.gain.value = 0.7;
+                    masterGain.connect(audioContext.destination);
+
+                    log("Loading audio worklets...", "info");
+                    await audioContext.audioWorklet.addModule(
+                        "../src/worklets/bowed_string_worklet.js",
+                    );
+                    await audioContext.audioWorklet.addModule(
+                        "../src/worklets/reverb_worklet.js",
+                    );
+                    await audioContext.audioWorklet.addModule(
+                        "../src/worklets/pink_noise.js",
+                    );
+                    log("Audio worklets loaded successfully", "info");
+                }
+            }
+
+
+            async function initializeEnsembleAudio() {
+                if (audioInitialized) return;
+                
+                try {
+                    // Initialize audio system
+                    await initializeAudioSystem();
+
+                    // Initialize audio for all synths
+                    for (const synth of synths) {
+                        await synth.ensureAudioInitialized(
+                            audioContext,
+                            masterGain,
+                        );
+                    }
+
+                    // Set synths to synthesis mode (powered on)
+                    for (const synth of synths) {
+                        if (synth.synthCore && synth.synthCore.isInitialized) {
+                            await synth.synthCore.setPower(true);
+                        }
+                    }
+
+                    audioInitialized = true;
+                    log("Audio initialized and synths powered on", "info");
+                    
+                    // Visualizers are started when individual synths initialize
+                } catch (error) {
+                    log(`Failed to initialize audio: ${error.message}`, "error");
+                    console.error(error);
+                }
+            }
+
+            // Connect all synths to controller
+            function connectAllSynthsToController() {
+                log(
+                    `Attempting to connect ${synths.length} synths to controller`,
+                    "info",
+                );
+                for (const synth of synths) {
+                    log(`Connecting synth: ${synth.id}`, "info");
+                    connectSynthToController(synth);
+                }
+            }
+
+            // Helper function to connect a single synth
+            function connectSynthToController(synth) {
+                if (!synth.ws) {
+                    const protocol =
+                        window.location.protocol === "https:" ? "wss:" : "ws:";
+                    const wsUrl = `${protocol}//${window.location.host}/ws`;
+                    log(
+                        `[${synth.id}] Attempting WebSocket connection to ${wsUrl}`,
+                        "info",
+                    );
+
+                    synth.ws = new WebSocket(wsUrl);
+
+                    synth.ws.addEventListener("open", () => {
+                        log(
+                            `[${synth.id}] WebSocket connected successfully`,
+                            "info",
+                        );
+
+                        // Register with server
+                        const registerMsg = {
+                            type: "register",
+                            client_id: synth.id,
+                            client_type: "synth",
+                        };
+                        log(
+                            `[${synth.id}] Sending registration: ${JSON.stringify(registerMsg)}`,
+                            "info",
+                        );
+                        synth.ws.send(JSON.stringify(registerMsg));
+
+                        // Request list of active controllers
+                        const requestMsg = {
+                            type: "request-controllers",
+                            source: synth.id,
+                            target: "server",
+                        };
+                        log(
+                            `[${synth.id}] Requesting controllers: ${JSON.stringify(requestMsg)}`,
+                            "info",
+                        );
+                        synth.ws.send(JSON.stringify(requestMsg));
+                    });
+
+                    synth.ws.addEventListener("message", async (event) => {
+                        const message = JSON.parse(event.data);
+                        await handleSynthMessage(synth, message);
+                    });
+
+                    synth.ws.addEventListener("close", (event) => {
+                        log(
+                            `[${synth.id}] WebSocket disconnected (code: ${event.code}, reason: ${event.reason}) - reconnecting...`,
+                            "info",
+                        );
+                        synth.ws = null;
+
+                        // Reconnect after 2 seconds
+                        setTimeout(() => {
+                            log(
+                                `[${synth.id}] Attempting reconnection...`,
+                                "info",
+                            );
+                            connectSynthToController(synth);
+                        }, 2000);
+                    });
+
+                    synth.ws.addEventListener("error", (error) => {
+                        log(
+                            `[${synth.id}] WebSocket error: ${JSON.stringify(error)}`,
+                            "error",
+                        );
+                        console.error(
+                            `WebSocket error for ${synth.id}:`,
+                            error,
+                        );
+                    });
+                } else {
+                    log(
+                        `[${synth.id}] WebSocket already exists, skipping connection`,
+                        "info",
+                    );
+                }
+            }
+
+            async function handleSynthMessage(synth, message) {
+                log(`[${synth.id}] Received message: ${message.type}`, "info");
+                console.log(`[${synth.id}] Full message:`, message);
+
+                switch (message.type) {
+                    case "controllers-list":
+                        // Available controllers list received
+                        log(
+                            `[${synth.id}] Received controllers list: ${message.controllers.join(", ")}`,
+                            "info",
+                        );
+                        for (const controllerId of message.controllers) {
+                            if (!synth.controllers.has(controllerId)) {
+                                log(
+                                    `[${synth.id}] Discovered controller: ${controllerId}`,
+                                    "info",
+                                );
+                                synth.controllers.set(controllerId, {
+                                    connected: false,
+                                    connection: null,
+                                    channel: null,
+                                    command_channel: null,
+                                    ice_queue: [],
+                                });
+                                // Auto-connect to controllers
+                                connectSynthToSpecificController(
+                                    synth,
+                                    controllerId,
+                                );
+                            }
+                        }
+                        break;
+                    case "answer":
+                        await handleControllerAnswer(synth, message);
+                        break;
+                    case "ice":
+                        await handleIceCandidate(synth, message);
+                        break;
+                    case "controller-joined":
+                        // New controller joined - auto-connect
+                        log(
+                            `[${synth.id}] New controller joined: ${message.controller_id}`,
+                            "info",
+                        );
+                        if (!synth.controllers.has(message.controller_id)) {
+                            synth.controllers.set(message.controller_id, {
+                                connected: false,
+                                connection: null,
+                                channel: null,
+                                command_channel: null,
+                                ice_queue: [],
+                            });
+                            // Auto-connect to new controller
+                            connectSynthToSpecificController(
+                                synth,
+                                message.controller_id,
+                            );
+                        }
+                        break;
+                    case "controller-left":
+                        // Controller disconnected
+                        log(
+                            `[${synth.id}] Controller left: ${message.controller_id}`,
+                            "info",
+                        );
+                        if (synth.controllers.has(message.controller_id)) {
+                            const controller = synth.controllers.get(
+                                message.controller_id,
+                            );
+                            // Close connection if exists
+                            if (controller.connection) {
+                                controller.connection.close();
+                            }
+                            synth.controllers.delete(message.controller_id);
+                        }
+                        break;
+                    default:
+                        console.log(
+                            `[${synth.id}] Unknown message type: ${message.type}`,
+                        );
+                }
+            }
+
+            async function connectSynthToSpecificController(
+                synth,
+                controllerId,
+            ) {
+                log(
+                    `[${synth.id}] Initiating connection to controller ${controllerId}`,
+                    "info",
+                );
+
+                const pc = new RTCPeerConnection(rtcConfig);
+                const controller = synth.controllers.get(controllerId);
+                controller.connection = pc;
+                controller.ice_queue = [];
+
+                // Create unified data channel
+                const data_channel = pc.createDataChannel("data", {
+                    ordered: true,  // Reliable for all message types
+                });
+                // Keep legacy references for compatibility
+                const param_channel = data_channel;
+                const command_channel = data_channel;
+
+                controller.channel = param_channel;
+                controller.command_channel = command_channel;
+
+                // Set up data channel handlers
+                data_channel.addEventListener("open", () => {
+                    log(
+                        `[${synth.id}] Data channel open to ${controllerId}`,
+                        "info",
+                    );
+                    controller.connected = true;
+
+                    // Send immediate state update
+                    data_channel.send(
+                        JSON.stringify({
+                            type: "pong",
+                            timestamp: Date.now(),
+                            state: {
+                                audio_enabled: true,
+                                joined: synth.isActive,
+                            },
+                        }),
+                    );
+                    
+                    // Don't request program here - wait for SynthCore initialization
+                });
+
+                data_channel.addEventListener("message", (event) => {
+                    const data = JSON.parse(event.data);
+                    // Route to appropriate handler based on message type
+                    if (data.type === "command" || data.name === "save_to_bank" || data.name === "load_from_bank") {
+                        synth.handleCommandMessage(event);
+                    } else {
+                        synth.handleParamMessage(event);
+                    }
+                });
+
+                data_channel.addEventListener("close", () => {
+                    log(
+                        `[${synth.id}] Data channel closed to ${controllerId}`,
+                        "info",
+                    );
+                    controller.connected = false;
+                });
+
+                // Handle ICE candidates
+                pc.addEventListener("icecandidate", (event) => {
+                    if (event.candidate) {
+                        synth.ws.send(
+                            JSON.stringify({
+                                type: "ice",
+                                source: synth.id,
+                                target: controllerId,
+                                data: event.candidate,
+                            }),
+                        );
+                    }
+                });
+
+                // Handle connection state
+                pc.addEventListener("connectionstatechange", () => {
+                    log(
+                        `[${synth.id}] Connection state to ${controllerId}: ${pc.connectionState}`,
+                        "info",
+                    );
+
+                    if (
+                        pc.connectionState === "failed" ||
+                        pc.connectionState === "closed"
+                    ) {
+                        controller.connected = false;
+                    }
+                });
+
+                // Create and send offer
+                const offer = await pc.createOffer();
+                await pc.setLocalDescription(offer);
+
+                synth.ws.send(
+                    JSON.stringify({
+                        type: "offer",
+                        source: synth.id,
+                        target: controllerId,
+                        data: offer,
+                    }),
+                );
+            }
+
+            async function handleControllerAnswer(synth, message) {
+                const controller = synth.controllers.get(message.source);
+                if (controller && controller.connection) {
+                    await controller.connection.setRemoteDescription(
+                        message.data,
+                    );
+
+                    // Process any queued ICE candidates
+                    if (
+                        controller.ice_queue &&
+                        controller.ice_queue.length > 0
+                    ) {
+                        log(
+                            `[${synth.id}] Processing ${controller.ice_queue.length} queued ICE candidates`,
+                            "info",
+                        );
+                        for (const candidate of controller.ice_queue) {
+                            await controller.connection.addIceCandidate(
+                                candidate,
+                            );
+                        }
+                        controller.ice_queue = [];
+                    }
+                }
+            }
+
+            async function handleIceCandidate(synth, message) {
+                const controller = synth.controllers.get(message.source);
+                if (controller && controller.connection) {
+                    if (controller.connection.remoteDescription) {
+                        await controller.connection.addIceCandidate(
+                            message.data,
+                        );
+                    } else {
+                        // Queue ICE candidate if remote description isn't set yet
+                        if (!controller.ice_queue) {
+                            controller.ice_queue = [];
+                        }
+                        controller.ice_queue.push(message.data);
+                        log(
+                            `[${synth.id}] Queued ICE candidate from ${message.source}`,
+                            "info",
+                        );
+                    }
+                }
+            }
+
+            // Start ensemble button handler
+            async function handleStartEnsemble() {
+                const button = document.getElementById("start-ensemble");
+                const synthCount = parseInt(document.getElementById("synth-count-setup").value);
+                
+                button.disabled = true;
+                button.textContent = "Starting...";
+                
+                try {
+                    // Create synths
+                    await recreateSynths(synthCount);
+                    
+                    // Initialize connections
+                    isInitialized = true;
+                    connectAllSynthsToController();
+                    
+                    // Initialize audio
+                    await initializeEnsembleAudio();
+                    
+                    // Switch phases
+                    document.getElementById("setup-phase").style.display = "none";
+                    document.getElementById("running-phase").style.display = "block";
+                    
+                    log(`Ensemble started with ${synthCount} synths`, "info");
+                } catch (error) {
+                    button.disabled = false;
+                    button.textContent = "Start Ensemble";
+                    log(`Failed to start ensemble: ${error.message}`, "error");
+                }
+            }
+
+            // Level meters removed in favor of waveform visualizers
+
+            function log(message, type = "info") {
+                const logArea = document.getElementById("log-area");
+                const entry = document.createElement("div");
+                entry.className = `log-entry ${type}`;
+                entry.textContent = `${new Date().toLocaleTimeString()}: ${message}`;
+                logArea.appendChild(entry);
+                logArea.scrollTop = logArea.scrollHeight;
+
+                // Keep only last 100 entries
+                while (logArea.children.length > 100) {
+                    logArea.removeChild(logArea.firstChild);
+                }
+            }
+
+            // Volume control
+            document
+                .getElementById("master-volume")
+                .addEventListener("input", (e) => {
+                    const value = parseFloat(e.target.value);
+                    if (masterGain) {
+                        masterGain.gain.value = value;
+                    }
+                    document.getElementById("volume-display").textContent =
+                        `${Math.round(value * 100)}%`;
+                });
+
+            // Automatic initialization on page load
+            // Function to recreate synths with new count
+            async function recreateSynths(newCount) {
+                log(`Recreating ensemble with ${newCount} synths`, "info");
+                
+                // Disconnect and clean up existing synths
+                synths.forEach((synth) => {
+                    synth.disconnect();
+                    if (synth.element && synth.element.parentNode) {
+                        synth.element.parentNode.removeChild(synth.element);
+                    }
+                });
+                synths = [];
+                audioInitialized = false; // Reset audio initialization flag
+
+                const synthGrid = document.getElementById("synth-grid");
+                synthGrid.innerHTML = "";
+
+                // Create new synth objects
+                for (let i = 0; i < newCount; i++) {
+                    const synthId = `synth-${i}`;
+                    log(`Creating synth: ${synthId}`, "info");
+                    const synth = new TestSynth(synthId, i, newCount);
+                    synth.createElements(synthGrid);
+                    synth.loadSynthBanksFromStorage();
+                    synths.push(synth);
+                    log(`Synth created with ID: ${synth.id}`, "info");
+                }
+
+                log(`Recreated ${newCount} synths`, "info");
+                
+                // Initialize audio system for all synths (if user has interacted)
+                if (audioContext) {
+                    await initializeEnsembleAudio();
+                }
+                
+                // If already initialized and connected, reconnect
+                if (isInitialized) {
+                    connectAllSynthsToController();
+                }
+            }
+
+            document.addEventListener("DOMContentLoaded", async function () {
+                log("Page loaded - waiting for user to start ensemble", "info");
+
+                // Add event listener for start button
+                document.getElementById("start-ensemble").addEventListener("click", handleStartEnsemble);
+                
+                // Add window resize handler
+                window.addEventListener('resize', () => {
+                    synths.forEach(synth => {
+                        if (synth.resizeCanvas) {
+                            synth.resizeCanvas();
+                        }
+                    });
+                });
+
+                try {
+                    
+                    // Add utility function to window
+                    window.clearAllSynthBanks = function() {
+                        synths.forEach(synth => {
+                            const storageKey = `synth-banks-${synth.id}`;
+                            localStorage.removeItem(storageKey);
+                            synth.synthBanks.clear();
+                            if (synth.synthCore) {
+                                synth.synthCore.synthBanks.clear();
+                            }
+                            console.log(`Cleared localStorage for ${synth.id}`);
+                        });
+                        console.log('All synth banks cleared from localStorage');
+                    };
+                } catch (error) {
+                    log(
+                        `Failed to initialize ensemble: ${error.message}`,
+                        "error",
+                    );
+                    console.error(error);
+                }
+            });
+        </script>
+    </body>
+</html>

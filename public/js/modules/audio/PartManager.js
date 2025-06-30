@@ -26,7 +26,7 @@ export class PartManager {
    * @private
    */
   get currentChord() {
-    return this.appState.get('currentChord') || [];
+    return this.appState.getNested('performance.currentProgram.chord.frequencies') || [];
   }
 
   /**
@@ -43,7 +43,7 @@ export class PartManager {
    * @private
    */
   get harmonicSelections() {
-    return this.appState.get('harmonicSelections') || {
+    return this.appState.getNested('performance.currentProgram.harmonicSelections') || {
       "vibrato-numerator": new Set([1]),
       "vibrato-denominator": new Set([1]),
       "tremolo-numerator": new Set([1]),
@@ -83,7 +83,7 @@ export class PartManager {
         this.setChord(data.frequencies);
       } else {
         // Just update AppState without sending to synths
-        this.appState.set('currentChord', [...data.frequencies]);
+        this.appState.setNested('performance.currentProgram.chord.frequencies', [...data.frequencies]);
         // Logger.log(`Updated chord from bank load: ${data.frequencies.length} notes (not redistributing)`, "parts");
       }
     });
@@ -119,7 +119,7 @@ export class PartManager {
    */
   setChord(frequencies) {
     // Update app state
-    this.appState.set("currentChord", [...frequencies]);
+    this.appState.setNested('performance.currentProgram.chord.frequencies', [...frequencies]);
     
     // Clean up expressions for notes no longer in chord
     const currentNotes = new Set(
@@ -137,7 +137,6 @@ export class PartManager {
     
     // Update expressions in AppState
     this.appState.setNested('performance.currentProgram.chord.expressions', newExpressions);
-    this.appState.set("expressions", newExpressions); // Legacy compatibility
 
     // Update ProgramState
     programState.updateChord(frequencies, newExpressions);
@@ -174,7 +173,6 @@ export class PartManager {
 
     // Update AppState
     this.appState.setNested('performance.currentProgram.chord.expressions', newExpressions);
-    this.appState.set("expressions", newExpressions); // Legacy compatibility
 
     // Update ProgramState
     programState.updateNoteExpression(noteName, expression);
@@ -205,7 +203,7 @@ export class PartManager {
       selections[key] = new Set(data.selection);
       
       // Update AppState
-      this.appState.set('harmonicSelections', selections);
+      this.appState.setNested('performance.currentProgram.harmonicSelections', selections);
       
       // Update ProgramState
       programState.updateHarmonicSelection(key, Array.from(data.selection));
@@ -260,7 +258,7 @@ export class PartManager {
    * Redistribute current chord to connected synths
    */
   redistributeToSynths() {
-    const connectedSynths = this.appState.get("connectedSynths");
+    const connectedSynths = this.appState.getNested('connections.synths');
     if (!connectedSynths || connectedSynths.size === 0) {
       this.setSynthAssignments(new Map());
       return;
@@ -317,68 +315,48 @@ export class PartManager {
       baseProgram.powerOn = powerCheckbox.checked;
     }
     
-    // Assign synth to chord if not already assigned
-    if (!this.synthAssignments.has(synthId)) {
-      // Find next available note in chord
-      const assignedNotes = new Set(
-        Array.from(this.synthAssignments.values()).map(a => a.frequency)
-      );
-      
-      let assignment = null;
-      for (const frequency of this.currentChord) {
-        if (!assignedNotes.has(frequency)) {
-          const noteName = this.frequencyToNoteName(frequency);
-          const expression = this.noteExpressions.get(noteName) || { type: "none" };
-          assignment = { frequency, expression };
-          break;
-        }
-      }
-      
-      // If no unassigned notes, use round-robin
-      if (!assignment && this.currentChord.length > 0) {
-        const synthIds = Array.from(this.synthAssignments.keys());
-        const index = synthIds.length % this.currentChord.length;
-        const frequency = this.currentChord[index];
-        const noteName = this.frequencyToNoteName(frequency);
-        const expression = this.noteExpressions.get(noteName) || { type: "none" };
-        assignment = { frequency, expression };
-      }
-      
-      if (assignment) {
-        this.synthAssignments.set(synthId, assignment);
-        Logger.log(`Assigned ${synthId} to ${assignment.frequency.toFixed(1)}Hz`, "parts");
-      } else {
-        Logger.log(`No chord available to assign ${synthId}`, "warn");
-        return;
-      }
+    // Use default transition config if not provided
+    if (!transitionConfig) {
+      transitionConfig = {
+        duration: baseProgram.transitionDuration || 10,
+        stagger: baseProgram.transitionStagger || 0,
+        durationSpread: baseProgram.transitionDurationSpread || 0,
+        glissando: baseProgram.glissando !== undefined ? baseProgram.glissando : true
+      };
     }
     
-    // Get assignment for this synth
-    const assignment = this.synthAssignments.get(synthId);
-    if (!assignment) {
-      Logger.log(`No assignment found for ${synthId}`, "error");
-      return;
-    }
+    // Use the powerCheckbox already declared above
+    const powerState = powerCheckbox ? powerCheckbox.checked : true;
     
-    // Create synth-specific program
-    const synthProgram = { ...baseProgram };
-    synthProgram.fundamentalFrequency = assignment.frequency;
+    // Create the program message with current state (may have empty assignments!)
+    const programMessage = {
+      ...baseProgram,
+      chord: {
+        frequencies: [...this.currentChord],
+        expressions: Object.fromEntries(this.noteExpressions)
+      },
+      parts: Object.fromEntries(this.synthAssignments),
+      transition: transitionConfig,
+      power: powerState  // Include power state in program
+    };
     
-    // Apply expression with stochastic resolution
-    this.applyExpressionToProgram(synthProgram, assignment.expression);
-    
-    // Send with transition
+    // Send program - synth will handle empty assignment case
     const success = networkCoordinator.sendProgramToSynth(
       synthId,
-      synthProgram,
+      programMessage,
       transitionConfig
     );
     
     if (success) {
-      // Logger.log(
-      //   `Sent to ${synthId}: ${assignment.frequency.toFixed(1)}Hz, expression: ${assignment.expression.type || 'none'}`,
-      //   "parts"
-      // );
+      const assignment = this.synthAssignments.get(synthId);
+      if (assignment) {
+        Logger.log(
+          `Sent to ${synthId}: ${assignment.frequency.toFixed(1)}Hz, expression: ${assignment.expression.type || 'none'}`,
+          "parts"
+        );
+      } else {
+        Logger.log(`Sent empty assignment to ${synthId} (will silence)`, "parts");
+      }
     } else {
       Logger.log(`Failed to send program to ${synthId}`, "error");
     }
@@ -436,62 +414,55 @@ export class PartManager {
     );
 
 
-    // Send to each synth
-    let successCount = 0;
-    const synthIds = Array.from(this.synthAssignments.keys());
+    // Always get connected synths, even if no assignments
+    const connectedSynths = this.appState.getNested('connections.synths');
+    const allSynthIds = Array.from(connectedSynths.keys());
     
-    // Check if we have any assignments
-    if (synthIds.length === 0) {
-      Logger.log(`No synth assignments available. Current chord: ${JSON.stringify(this.currentChord)}`, "error");
-      throw new Error("No synth assignments. Please ensure a chord is loaded.");
+    if (allSynthIds.length === 0) {
+      Logger.log("No synths connected", "warn");
+      return;
     }
 
-    for (let i = 0; i < synthIds.length; i++) {
-      const synthId = synthIds[i];
-      const assignment = this.synthAssignments.get(synthId);
+    // Get current power state (powerCheckbox already declared above)
+    const powerState = powerCheckbox ? powerCheckbox.checked : true;
+    
+    // Create the program message with current assignments (may be empty!)
+    const programMessage = {
+      ...baseProgram,
+      chord: {
+        frequencies: [...this.currentChord],
+        expressions: Object.fromEntries(this.noteExpressions)
+      },
+      parts: Object.fromEntries(this.synthAssignments),
+      transition: transitionConfig,
+      power: powerState  // Include power state in program
+    };
 
-      if (!assignment) {
-        continue;
-      }
-
-      // Create synth-specific program
-      const synthProgram = { ...baseProgram };
-      synthProgram.fundamentalFrequency = assignment.frequency;
-
-
-      // Apply expression parameters
-      let targetExpression = "NONE";
-      this.applyExpressionToProgram(synthProgram, assignment.expression);
-
-      if (assignment.expression.type === "vibrato")
-        targetExpression = "VIBRATO";
-      else if (assignment.expression.type === "tremolo")
-        targetExpression = "TREMOLO";
-      else if (assignment.expression.type === "trill")
-        targetExpression = "TRILL";
-
-      // Calculate transition timing
-      const transitionTiming = this.calculateTransitionTiming(
-        transitionConfig,
-        i,
-      );
-
-
+    // Send to ALL connected synths (not just assigned ones)
+    // Synths with no assignment will silence themselves
+    let successCount = 0;
+    for (let i = 0; i < allSynthIds.length; i++) {
+      const synthId = allSynthIds[i];
+      
       try {
-        // Send program
+        // Send program with MessageProtocol format
         const success = networkCoordinator.sendProgramToSynth(
           synthId,
-          synthProgram,
-          transitionTiming,
+          programMessage,
+          transitionConfig
         );
 
         if (success) {
           successCount++;
-
-          Logger.log(
-            `Sent to ${synthId}: ${assignment.frequency.toFixed(1)}Hz, expression type: ${assignment.expression.type || 'MISSING'}`,
-            "parts",
-          );
+          const assignment = this.synthAssignments.get(synthId);
+          if (assignment) {
+            Logger.log(
+              `Sent to ${synthId}: ${assignment.frequency.toFixed(1)}Hz, expression: ${assignment.expression.type || 'none'}`,
+              "parts"
+            );
+          } else {
+            Logger.log(`Sent empty assignment to ${synthId} (will silence)`, "parts");
+          }
         } else {
           Logger.log(`Failed to send to ${synthId}`, "error");
         }
@@ -499,6 +470,8 @@ export class PartManager {
         Logger.log(`Failed to send to ${synthId}: ${error.message}`, "error");
       }
     }
+    
+    Logger.log(`Sent program to ${successCount}/${allSynthIds.length} synths (${this.synthAssignments.size} with assignments)`, 'parts');
 
 
     if (successCount === 0) {
@@ -511,11 +484,11 @@ export class PartManager {
       timestamp: Date.now(),
     };
     Logger.log(
-      `Part sent successfully to ${successCount}/${synthIds.length} synths`,
+      `Part sent successfully to ${successCount}/${allSynthIds.length} synths`,
       "parts",
     );
 
-    return { successCount, totalSynths: synthIds.length };
+    return { successCount, totalSynths: allSynthIds.length };
   }
 
   /**
@@ -717,9 +690,8 @@ export class PartManager {
    * Clear current chord and expressions
    */
   clearPart() {
-    this.appState.set("currentChord", []);
+    this.appState.setNested('performance.currentProgram.chord.frequencies', []);
     this.appState.setNested('performance.currentProgram.chord.expressions', {});
-    this.appState.set("expressions", {}); // Legacy compatibility
     this.setSynthAssignments(new Map());
     Logger.log("Part cleared", "parts");
   }
@@ -729,7 +701,7 @@ export class PartManager {
    * @returns {Object} Statistics
    */
   getStatistics() {
-    const connectedSynths = this.appState.get("connectedSynths") || new Map();
+    const connectedSynths = this.appState.getNested('connections.synths') || new Map();
     const chord = this.currentChord;
     const expressions = this.noteExpressions;
 

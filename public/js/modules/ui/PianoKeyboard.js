@@ -440,10 +440,8 @@ export class PianoKeyboard {
    * @private
    */
   setupStateSubscriptions() {
-    // Subscribe to chord changes
-    this.appState.subscribe("currentChord", (newChord) => {
-      this.updateKeyStates(newChord);
-    });
+    // Chord changes are handled via chord:changed event in setupEventListeners()
+    // No need to subscribe to state directly
 
     // Subscribe to body type changes
     this.appState.subscribe("bodyType", (newBodyType) => {
@@ -601,7 +599,7 @@ export class PianoKeyboard {
     programState.updateChord(frequencies);
     
     // Update appState for compatibility
-    this.appState.set("currentChord", frequencies);
+    // Don't set directly - PartManager handles chord state
 
     // Emit chord change event
     this.eventBus.emit("piano:chordChanged", {
@@ -750,7 +748,7 @@ export class PianoKeyboard {
    * @returns {Object} Chord information
    */
   getChordInfo() {
-    const chord = this.appState.get("currentChord") || [];
+    const chord = this.appState.getNested('performance.currentProgram.chord.frequencies') || [];
     return {
       frequencies: chord,
       noteNames: chord.map((f) => this.frequencyToNoteName(f)),

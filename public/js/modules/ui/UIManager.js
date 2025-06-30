@@ -189,9 +189,7 @@ export class UIManager {
     });
 
     // Current chord changes
-    this.appState.subscribe("currentChord", (newChord) => {
-      this.updateChordDisplay(newChord);
-    });
+    // Chord display is updated via events, not state subscription
 
     // Expression changes
     this.appState.subscribe("selectedExpression", (newExpression) => {

@@ -7,6 +7,7 @@ export const MessageTypes = {
   // Controller → Synth
   PROGRAM: 'program',
   COMMAND: 'command',
+  PING: 'ping',
   
   // Synth → Controller  
   PONG: 'pong',
@@ -100,6 +101,15 @@ export const MessageSchemas = {
       value: { type: 'any' }, // Depends on command
       bank: { type: 'number' }, // For save/load commands
       data: { type: 'object' }, // Additional command data
+      timestamp: { type: 'number' }
+    }
+  },
+  
+  // Ping message for latency monitoring
+  [MessageTypes.PING]: {
+    required: ['type', 'timestamp'],
+    properties: {
+      type: { const: MessageTypes.PING },
       timestamp: { type: 'number' }
     }
   },
@@ -304,7 +314,15 @@ export const MessageBuilders = {
       timestamp: pingTimestamp, // Echo back the ping timestamp
       state
     };
-  }
+  },
+  
+  /**
+   * Build a ping message
+   */
+  ping: () => ({
+    type: MessageTypes.PING,
+    timestamp: Date.now()
+  })
 };
 
 /**

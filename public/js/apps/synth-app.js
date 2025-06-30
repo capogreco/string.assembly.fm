@@ -393,6 +393,8 @@ class SynthApp {
       case MessageTypes.PROGRAM:
         // Receive program from controller
         console.log("[DEBUG] Received program message:", message);
+        console.log("[DEBUG] Program has parts:", !!message.program?.parts);
+        console.log("[DEBUG] Program parts:", message.program?.parts);
         
         // Use SynthClient to handle complete program message
         this.synthClient.handleProgram(message);

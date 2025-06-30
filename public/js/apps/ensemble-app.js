@@ -159,7 +159,7 @@ class EnsembleApp {
 
   async handleStartEnsemble() {
     const button = document.getElementById("start-ensemble");
-    const synthCount = parseInt(document.getElementById("synth-count-setup").value);
+    const synthCount = parseInt(document.getElementById("synth-count").value);
     
     button.disabled = true;
     button.textContent = "Starting...";
@@ -175,9 +175,8 @@ class EnsembleApp {
       // Initialize audio
       await this.initializeEnsembleAudio();
       
-      // Switch phases
-      document.getElementById("setup-phase").style.display = "none";
-      document.getElementById("running-phase").style.display = "block";
+      // Update status
+      document.getElementById("status").textContent = "Running";
       
       this.log(`Ensemble started with ${synthCount} synths`, "info");
     } catch (error) {
@@ -227,7 +226,8 @@ class EnsembleApp {
       this.log("All synths audio initialized", "info");
       
       // Update UI
-      document.getElementById("calibrate-btn").disabled = false;
+      const calibrateBtn = document.getElementById("calibrate-btn");
+      if (calibrateBtn) calibrateBtn.disabled = false;
     } catch (error) {
       this.log(`Audio initialization error: ${error.message}`, "error");
       throw error;
@@ -325,13 +325,18 @@ class EnsembleApp {
     try {
       const pc = new RTCPeerConnection(this.rtcConfig);
       controller.connection = pc;
+      console.log(`[${synth.id}] Created RTCPeerConnection`);
 
       // Create unified data channel
       const dataChannel = pc.createDataChannel("data");
       controller.channel = dataChannel;
+      console.log(`[${synth.id}] Created data channel with label: "data"`);
+      console.log(`[${synth.id}] Initial channel state:`, dataChannel.readyState);
 
       dataChannel.addEventListener("open", () => {
         console.log(`[${synth.id}] Data channel OPENED to controller ${controllerId}`);
+        console.log(`[${synth.id}] Channel readyState:`, dataChannel.readyState);
+        console.log(`[${synth.id}] Channel label:`, dataChannel.label);
         Logger.log(`[${synth.id}] Data channel open to controller ${controllerId}`, "connections");
         controller.connected = true;
         
@@ -348,7 +353,7 @@ class EnsembleApp {
           state: {
             synthId: synth.id,
             ready: synth.synthClient.audioInitialized,
-            power: synth.synthClient.getPower()
+            power: synth.synthClient.synthCore.isPoweredOn
           }
         }));
 
@@ -359,10 +364,15 @@ class EnsembleApp {
       dataChannel.addEventListener("message", (event) => {
         const message = JSON.parse(event.data);
         console.log(`[${synth.id}] Received data channel message:`, message.type);
+        console.log(`[${synth.id}] Full message:`, message);
+        console.log(`[${synth.id}] Has synthClient:`, !!synth.synthClient);
         
         // Pass message to SynthClient for handling
         if (synth.synthClient) {
+          console.log(`[${synth.id}] Calling synthClient.handleControllerMessage`);
           synth.synthClient.handleControllerMessage(controllerId, message);
+        } else {
+          console.log(`[${synth.id}] ERROR: No synthClient available!`);
         }
       });
 
@@ -388,6 +398,33 @@ class EnsembleApp {
         }
       });
 
+      // Handle incoming data channels from controller
+      pc.addEventListener("datachannel", (event) => {
+        console.log(`[${synth.id}] Incoming data channel from controller:`, event.channel.label);
+        const incomingChannel = event.channel;
+        
+        // Replace our outgoing channel with the incoming one
+        controller.channel = incomingChannel;
+        
+        incomingChannel.addEventListener("open", () => {
+          console.log(`[${synth.id}] Incoming channel OPENED from controller ${controllerId}`);
+        });
+        
+        incomingChannel.addEventListener("message", (event) => {
+          const message = JSON.parse(event.data);
+          console.log(`[${synth.id}] Received message on incoming channel:`, message.type);
+          console.log(`[${synth.id}] Full message:`, message);
+          
+          if (synth.synthClient) {
+            synth.synthClient.handleControllerMessage(controllerId, message);
+          }
+        });
+        
+        incomingChannel.addEventListener("close", () => {
+          console.log(`[${synth.id}] Incoming channel closed from controller ${controllerId}`);
+        });
+      });
+      
       // Handle connection state changes
       pc.addEventListener("connectionstatechange", () => {
         Logger.log(`[${synth.id}] Connection state to ${controllerId}: ${pc.connectionState}`, "connections");
@@ -525,8 +562,10 @@ class EnsembleApp {
       }
     });
     
-    document.getElementById("calibrate-btn").style.display = "none";
-    document.getElementById("join-all-btn").style.display = "inline-block";
+    const calibrateBtn = document.getElementById("calibrate-btn");
+    const joinBtn = document.getElementById("join-all-btn");
+    if (calibrateBtn) calibrateBtn.style.display = "none";
+    if (joinBtn) joinBtn.style.display = "inline-block";
     
     this.log("Started calibration for all synths", "info");
   }
@@ -535,11 +574,12 @@ class EnsembleApp {
     this.synths.forEach(synth => {
       if (synth.synthClient && synth.synthClient.audioInitialized) {
         synth.synthClient.endCalibration();
-        synth.synthClient.setPower(true);
+        synth.synthClient.synthCore.setPower(true);
       }
     });
     
-    document.getElementById("join-all-btn").style.display = "none";
+    const joinBtn = document.getElementById("join-all-btn");
+    if (joinBtn) joinBtn.style.display = "none";
     
     this.log("All synths joined instrument", "info");
   }
@@ -560,7 +600,10 @@ class EnsembleApp {
     if (this.masterGain) {
       this.masterGain.gain.value = volume;
     }
-    document.getElementById("volume-display").textContent = Math.round(volume * 100) + "%";
+    const volumeDisplay = document.getElementById("volume-display");
+    if (volumeDisplay) {
+      volumeDisplay.textContent = Math.round(volume * 100) + "%";
+    }
   }
 
   log(message, type = "info") {
@@ -596,15 +639,7 @@ class EnsembleApp {
   }
 }
 
-// Initialize on load
-const ensembleApp = new EnsembleApp();
+// Don't create instance here - ensemble.html will create and initialize it
 
-// Wait for DOM to be ready
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', () => ensembleApp.init());
-} else {
-  ensembleApp.init();
-}
-
-// Export for debugging
-window.ensembleApp = ensembleApp;
+// Export the class for use in ensemble.html
+export { EnsembleApp };
