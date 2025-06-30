@@ -129,28 +129,13 @@ export class AppState {
         enabled: false
       },
 
-      // ==============================================
-      // LEGACY COMPATIBILITY - TO BE REMOVED
-      // ==============================================
-      currentChord: [],
-      harmonicSelections: this.#initializeHarmonicSelections(),
-      connectionStatus: 'disconnected',
-      connectedSynths: new Map(),
-      selectedExpression: 'none',
-      parametersChanged: new Set(),
-      averageLatency: 0,
-      lastHeartbeat: null,
-      currentProgram: null,
-      activeProgram: null,
-      programBanks: new Map()
     };
 
     this.#subscribers = new Map();
     this.#history = [];
     this.#maxHistorySize = 50;
 
-    // Set up compatibility layer
-    this.#setupCompatibilityLayer();
+    // Compatibility layer removed - use getNested/setNested for all access
   }
 
   #state = {};
@@ -173,113 +158,6 @@ export class AppState {
     };
   }
 
-  /**
-   * Set up compatibility layer for gradual migration
-   * @private
-   */
-  #setupCompatibilityLayer() {
-    // Create property descriptors for legacy access patterns
-    const compatibilityMappings = {
-      // System state mappings
-      'power': 'system.audio.power',
-      'masterGain': 'system.audio.masterGain',
-      'volume': 'system.audio.masterGain',
-      
-      // Connection state mappings
-      'connectionStatus': {
-        get: () => this.#state.connections.websocket.connected ? 'connected' : 'disconnected',
-        set: (v) => this.#state.connections.websocket.connected = (v === 'connected')
-      },
-      'averageLatency': 'connections.metrics.averageLatency',
-      'lastHeartbeat': 'connections.metrics.lastHeartbeat',
-      
-      // UI state mappings
-      'selectedExpression': 'ui.expressions.selected',
-      'parametersChanged': 'ui.parameters.changed',
-      'selectedNotes': 'ui.piano.selectedNotes',
-      'playingNotes': 'ui.piano.playingNotes',
-      
-      // These are already at root level for compatibility
-      // 'currentChord', 'harmonicSelections', 'connectedSynths', 'currentProgram', 'activeProgram', 'programBanks'
-    };
-
-    // Apply compatibility mappings
-    Object.entries(compatibilityMappings).forEach(([oldKey, mapping]) => {
-      if (typeof mapping === 'string') {
-        // Simple path mapping
-        Object.defineProperty(this, oldKey, {
-          get: () => {
-            console.warn(`DEPRECATED: Direct access to '${oldKey}', use getNested('${mapping}') instead`);
-            return this.getNested(mapping);
-          },
-          set: (value) => {
-            console.warn(`DEPRECATED: Direct set of '${oldKey}', use setNested('${mapping}', value) instead`);
-            this.setNested(mapping, value);
-          },
-          configurable: true
-        });
-      } else if (typeof mapping === 'object') {
-        // Custom getter/setter
-        Object.defineProperty(this, oldKey, {
-          get: () => {
-            console.warn(`DEPRECATED: Direct access to '${oldKey}'`);
-            return mapping.get();
-          },
-          set: (v) => {
-            console.warn(`DEPRECATED: Direct set of '${oldKey}'`);
-            mapping.set(v);
-          },
-          configurable: true
-        });
-      }
-    });
-
-    // Additional compatibility for complex state
-    // Note: currentProgram is already at root level in the state object for compatibility
-    
-    // Expressions compatibility
-    Object.defineProperty(this, 'expressions', {
-      get: () => {
-        console.warn("DEPRECATED: Direct access to 'expressions', use getNested('performance.currentProgram.chord.expressions') instead");
-        return this.#state.performance.currentProgram.chord.expressions;
-      },
-      set: (v) => {
-        console.warn("DEPRECATED: Direct set of 'expressions', use setNested('performance.currentProgram.chord.expressions', value) instead");
-        this.#state.performance.currentProgram.chord.expressions = v;
-      },
-      configurable: true
-    });
-    
-    // Per-note expressions (used by ChordManager)
-    Object.defineProperty(this, 'perNoteExpressions', {
-      get: () => {
-        console.warn("DEPRECATED: Direct access to 'perNoteExpressions', use getNested('performance.currentProgram.chord.expressions') instead");
-        return this.#state.performance.currentProgram.chord.expressions;
-      },
-      set: (v) => {
-        console.warn("DEPRECATED: Direct set of 'perNoteExpressions', use setNested('performance.currentProgram.chord.expressions', value) instead");
-        this.#state.performance.currentProgram.chord.expressions = v;
-      },
-      configurable: true
-    });
-    
-    // Part assignments compatibility (used by PartManager)
-    Object.defineProperty(this, 'partAssignments', {
-      get: () => {
-        console.warn("DEPRECATED: Direct access to 'partAssignments', use getNested('performance.currentProgram.parts.assignments') instead");
-        return this.#state.performance.currentProgram.parts.assignments;
-      },
-      set: (v) => {
-        console.warn("DEPRECATED: Direct set of 'partAssignments', use setNested('performance.currentProgram.parts.assignments', value) instead");
-        this.#state.performance.currentProgram.parts.assignments = v;
-      },
-      configurable: true
-    });
-
-    if (window.Logger) {
-      window.Logger.log('AppState compatibility layer initialized', 'lifecycle');
-    }
-  }
 
   /**
    * Get state value by key
@@ -287,31 +165,6 @@ export class AppState {
    * @returns {*} State value
    */
   get(key) {
-    // Add deprecation warnings for legacy keys
-    const legacyKeyMappings = {
-      'power': 'system.audio.power',
-      'masterGain': 'system.audio.masterGain', 
-      'volume': 'system.audio.masterGain',
-      'connectionStatus': 'connections.websocket.connected',
-      'averageLatency': 'connections.metrics.averageLatency',
-      'lastHeartbeat': 'connections.metrics.lastHeartbeat',
-      'selectedExpression': 'ui.expressions.selected',
-      'parametersChanged': 'ui.parameters.changed',
-      'selectedNotes': 'ui.piano.selectedNotes',
-      'playingNotes': 'ui.piano.playingNotes',
-      'connectedSynths': 'connections.synths',
-      'currentChord': 'performance.currentProgram.chord.frequencies',
-      'harmonicSelections': 'performance.currentProgram.harmonicSelections',
-      'programBanks': 'banking.banks',
-      'currentProgram': 'performance.currentProgram',
-      'activeProgram': 'performance.activeProgram',
-      'partAssignments': 'performance.currentProgram.parts.assignments'
-    };
-    
-    if (legacyKeyMappings[key]) {
-      console.warn(`DEPRECATED: Direct access to '${key}' - use getNested('${legacyKeyMappings[key]}') instead`);
-    }
-    
     return this.#state[key];
   }
 
@@ -322,31 +175,6 @@ export class AppState {
    * @param {boolean} silent - Skip notifications if true
    */
   set(key, value, silent = false) {
-    // Add deprecation warnings for legacy keys
-    const legacyKeyMappings = {
-      'power': 'system.audio.power',
-      'masterGain': 'system.audio.masterGain', 
-      'volume': 'system.audio.masterGain',
-      'connectionStatus': 'connections.websocket.connected',
-      'averageLatency': 'connections.metrics.averageLatency',
-      'lastHeartbeat': 'connections.metrics.lastHeartbeat',
-      'selectedExpression': 'ui.expressions.selected',
-      'parametersChanged': 'ui.parameters.changed',
-      'selectedNotes': 'ui.piano.selectedNotes',
-      'playingNotes': 'ui.piano.playingNotes',
-      'connectedSynths': 'connections.synths',
-      'currentChord': 'performance.currentProgram.chord.frequencies',
-      'harmonicSelections': 'performance.currentProgram.harmonicSelections',
-      'programBanks': 'banking.banks',
-      'currentProgram': 'performance.currentProgram',
-      'activeProgram': 'performance.activeProgram',
-      'partAssignments': 'performance.currentProgram.parts.assignments'
-    };
-    
-    if (legacyKeyMappings[key]) {
-      console.warn(`DEPRECATED: Direct set of '${key}' - use setNested('${legacyKeyMappings[key]}', value) instead`);
-    }
-    
     const oldValue = this.#state[key];
 
     // Don't update if value hasn't changed (shallow comparison)
@@ -373,9 +201,6 @@ export class AppState {
       });
 
       // Log state changes in debug mode
-      if (window.Logger) {
-        window.Logger.log(`State updated: ${key}`, 'lifecycle');
-      }
     }
   }
 
@@ -451,9 +276,6 @@ export class AppState {
       });
 
       // Log state changes in debug mode
-      if (window.Logger) {
-        window.Logger.log(`State updated: ${path}`, 'lifecycle');
-      }
     }
   }
 
@@ -511,9 +333,6 @@ export class AppState {
         timestamp: Date.now()
       });
 
-      if (window.Logger) {
-        window.Logger.log(`Batch state update: ${changes.length} changes`, 'lifecycle');
-      }
     }
   }
 
@@ -689,8 +508,7 @@ export class AppState {
 
     this.#history = [];
 
-    // Re-setup compatibility layer
-    this.#setupCompatibilityLayer();
+    // Compatibility layer removed
 
     if (!silent) {
       eventBus.emit('state:reset', {

@@ -19,6 +19,7 @@ class TestSynth {
     this.currentNote = null;
     this.currentExpression = null;
     this.isActive = false;
+    this.hasInitialized = false;  // Track if audio has been initialized
 
     // WebRTC connections
     this.ws = null;
@@ -43,6 +44,12 @@ class TestSynth {
     if (this.canvas) {
       this.synthClient.setVisualizerCanvas(this.canvas);
     }
+    
+    // Mark as initialized - ensemble synths are ready immediately
+    this.hasInitialized = true;
+    
+    // Set power on by default for ensemble synths
+    this.synthClient.setPower(true);
     
     Logger.log(`[${this.id}] SynthClient initialized with panning: ${this.panPosition}`, "lifecycle");
     
@@ -225,6 +232,11 @@ class EnsembleApp {
       this.audioInitialized = true;
       this.log("All synths audio initialized", "info");
       
+      // Broadcast state update to all connected controllers for each synth
+      this.synths.forEach(synth => {
+        this.broadcastSynthState(synth);
+      });
+      
       // Update UI
       const calibrateBtn = document.getElementById("calibrate-btn");
       if (calibrateBtn) calibrateBtn.disabled = false;
@@ -232,6 +244,29 @@ class EnsembleApp {
       this.log(`Audio initialization error: ${error.message}`, "error");
       throw error;
     }
+  }
+
+  // Broadcast state update for a synth to all connected controllers
+  broadcastSynthState(synth) {
+    const stateMessage = {
+      type: "state_update",
+      state: {
+        synthId: synth.id,
+        ready: synth.synthClient.audioInitialized,
+        power: synth.synthClient.synthCore.isPoweredOn,
+        hasProgram: synth.synthClient.getState().isActive,
+        // Required fields for controller UI indicators
+        audio_enabled: synth.hasInitialized,
+        joined: synth.hasInitialized
+      }
+    };
+    
+    synth.controllers.forEach((controller, controllerId) => {
+      if (controller.connected && controller.dataChannel && controller.dataChannel.readyState === 'open') {
+        controller.dataChannel.send(JSON.stringify(stateMessage));
+        this.log(`State update sent from ${synth.id} to controller ${controllerId}`, "messages");
+      }
+    });
   }
 
   async recreateSynths(count) {
@@ -353,7 +388,10 @@ class EnsembleApp {
           state: {
             synthId: synth.id,
             ready: synth.synthClient.audioInitialized,
-            power: synth.synthClient.synthCore.isPoweredOn
+            power: synth.synthClient.synthCore.isPoweredOn,
+            // Required fields for controller UI indicators
+            audio_enabled: synth.hasInitialized,  // Ensemble synths have audio enabled after initialization
+            joined: synth.hasInitialized  // Ensemble synths auto-join when initialized (no calibration phase)
           }
         }));
 
@@ -367,8 +405,25 @@ class EnsembleApp {
         console.log(`[${synth.id}] Full message:`, message);
         console.log(`[${synth.id}] Has synthClient:`, !!synth.synthClient);
         
-        // Pass message to SynthClient for handling
-        if (synth.synthClient) {
+        // Handle ping messages directly
+        if (message.type === "ping") {
+          const pongMessage = {
+            type: "pong",
+            timestamp: message.timestamp,
+            state: {
+              synthId: synth.id,
+              ready: synth.synthClient.audioInitialized,
+              power: synth.synthClient.synthCore.isPoweredOn,
+              hasProgram: synth.synthClient.getState().isActive,
+              // Required fields for controller UI indicators
+              audio_enabled: synth.hasInitialized,  // Ensemble synths have audio enabled after initialization
+              joined: synth.hasInitialized  // Ensemble synths auto-join when initialized (no calibration phase)
+            }
+          };
+          dataChannel.send(JSON.stringify(pongMessage));
+          console.log(`[${synth.id}] Sent pong response to ${controllerId}`);
+        } else if (synth.synthClient) {
+          // Pass other messages to SynthClient for handling
           console.log(`[${synth.id}] Calling synthClient.handleControllerMessage`);
           synth.synthClient.handleControllerMessage(controllerId, message);
         } else {
@@ -415,7 +470,24 @@ class EnsembleApp {
           console.log(`[${synth.id}] Received message on incoming channel:`, message.type);
           console.log(`[${synth.id}] Full message:`, message);
           
-          if (synth.synthClient) {
+          // Handle ping messages directly
+          if (message.type === "ping") {
+            const pongMessage = {
+              type: "pong",
+              timestamp: message.timestamp,
+              state: {
+                synthId: synth.id,
+                ready: synth.synthClient.audioInitialized,
+                power: synth.synthClient.synthCore.isPoweredOn,
+                hasProgram: synth.synthClient.getState().isActive,
+                // Required fields for controller UI indicators
+                audio_enabled: synth.hasInitialized,  // Ensemble synths have audio enabled after initialization
+                joined: synth.hasInitialized  // Ensemble synths auto-join when initialized (no calibration phase)
+              }
+            };
+            incomingChannel.send(JSON.stringify(pongMessage));
+            console.log(`[${synth.id}] Sent pong response to ${controllerId} on incoming channel`);
+          } else if (synth.synthClient) {
             synth.synthClient.handleControllerMessage(controllerId, message);
           }
         });

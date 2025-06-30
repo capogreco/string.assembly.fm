@@ -112,7 +112,6 @@ export class SynthClient {
    * @param {Object} message - Message object
    */
   handleControllerMessage(controllerId, message) {
-    Logger.log(`[${this.synthId}] Received message from ${controllerId}: ${message.type}`, 'synth');
     
     // Route based on message type
     switch (message.type) {
@@ -156,7 +155,6 @@ export class SynthClient {
    * @param {Object} programMessage - Complete program message conforming to protocol
    */
   handleProgram(programMessage) {
-    Logger.log(`[${this.synthId}] Received program update`, 'synth');
     
     // Handle protocol-compliant messages
     if (isMessageType(programMessage, MessageTypes.PROGRAM)) {
@@ -226,19 +224,15 @@ export class SynthClient {
    * @param {Object} transition - Transition data (optional)
    */
   applyStoredProgram(transition = null) {
-    console.log(`[${this.synthId}] applyStoredProgram called with transition:`, transition);
     
     if (!this.storedProgram) {
       Logger.log(`[${this.synthId}] No stored program to apply`, 'synth');
       return;
     }
     
-    console.log(`[${this.synthId}] Stored program keys:`, Object.keys(this.storedProgram));
-    console.log(`[${this.synthId}] storedPower:`, this.storedPower);
     
     // Check if we have a valid assignment
     const hasAssignment = this.hasValidAssignment(this.storedProgram);
-    console.log(`[${this.synthId}] hasAssignment result:`, hasAssignment);
     
     if (!hasAssignment) {
       Logger.log(`[${this.synthId}] No assignment for this synth - staying silent`, 'synth');
@@ -250,18 +244,9 @@ export class SynthClient {
     const assignment = this.storedProgram.parts[this.synthId];
     Logger.log(`[${this.synthId}] Applying assignment: freq=${assignment.frequency}Hz, expr=${assignment.expression?.type || 'none'}`, 'synth');
     
-    // Add fundamental frequency to program
-    const programToApply = {
-      ...this.storedProgram,
-      fundamentalFrequency: assignment.frequency
-    };
-    
-    console.log(`[${this.synthId}] Program to apply has fundamentalFrequency:`, programToApply.fundamentalFrequency);
-    
-    // Apply expression parameters if present
-    if (assignment.expression && assignment.expression.type !== 'none') {
-      this.applyExpressionToProgram(programToApply, assignment.expression);
-    }
+    // Programs now come pre-resolved from ParameterResolver
+    // Just use the program as-is, it already has all expression parameters applied
+    const programToApply = this.storedProgram;
     
     // Check other silence conditions
     if (!this.shouldPlaySound(programToApply)) {
@@ -270,20 +255,14 @@ export class SynthClient {
       return;
     }
     
-    console.log(`[${this.synthId}] All checks passed, applying program to synthCore`);
-    console.log(`[${this.synthId}] isPoweredOn before:`, this.synthCore.isPoweredOn);
-    
     // Apply the program normally
     if (this.storedPower) {
       this.synthCore.applyProgram(programToApply, transition);
       this.synthCore.setPower(true);
-      console.log(`[${this.synthId}] Called applyProgram and setPower(true)`);
     } else {
       this.synthCore.setPower(false);
-      console.log(`[${this.synthId}] storedPower is false, called setPower(false)`);
     }
     
-    console.log(`[${this.synthId}] isPoweredOn after:`, this.synthCore.isPoweredOn);
   }
   
   /**
@@ -321,55 +300,11 @@ export class SynthClient {
   }
   
   /**
-   * Apply expression parameters to program
-   * @param {Object} program - Program to modify
-   * @param {Object} expression - Expression configuration
-   */
-  applyExpressionToProgram(program, expression) {
-    // Reset all expression flags
-    program.vibratoEnabled = 0;
-    program.tremoloEnabled = 0;
-    program.trillEnabled = 0;
-    
-    if (!expression || expression.type === 'none') {
-      return;
-    }
-    
-    switch (expression.type) {
-      case 'vibrato':
-        program.vibratoEnabled = 1;
-        program.vibratoDepth = expression.depth || 0.01;
-        // Note: Harmonic ratios would be applied by PartManager
-        break;
-        
-      case 'tremolo':
-        program.tremoloEnabled = 1;
-        program.tremoloDepth = expression.depth || 0.3;
-        program.tremoloArticulation = expression.articulation || 0.8;
-        break;
-        
-      case 'trill':
-        program.trillEnabled = 1;
-        program.trillInterval = expression.interval || 2;
-        program.trillArticulation = expression.articulation || 0.7;
-        break;
-    }
-  }
-  
-  /**
    * Check if this synth has a valid part assignment in the program
    * @param {Object} program - Program to check
    * @returns {boolean} True if this synth has an assignment
    */
   hasValidAssignment(program) {
-    console.log(`[${this.synthId}] Checking assignment:`, {
-      hasParts: !!program.parts,
-      partsType: typeof program.parts,
-      partsKeys: program.parts ? Object.keys(program.parts) : 'no parts',
-      myId: this.synthId,
-      hasMyAssignment: program.parts ? !!program.parts[this.synthId] : false,
-      myAssignment: program.parts ? program.parts[this.synthId] : 'none'
-    });
     
     if (!program) return false;
     
@@ -379,7 +314,6 @@ export class SynthClient {
     }
     
     const assignment = program.parts[this.synthId];
-    console.log(`[${this.synthId}] Assignment details:`, assignment);
     
     // Validate assignment has required fields
     return assignment && 
@@ -393,14 +327,6 @@ export class SynthClient {
    * @returns {boolean} True if sound should be played
    */
   shouldPlaySound(program) {
-    console.log(`[${this.synthId}] shouldPlaySound check:`, {
-      hasProgram: !!program,
-      bowPressure: program?.bowPressure,
-      bowForce: program?.bowForce,
-      hasChord: !!program?.chord,
-      chordFrequencies: program?.chord?.frequencies,
-      chordLength: program?.chord?.frequencies?.length
-    });
     
     if (!program) return false;
     

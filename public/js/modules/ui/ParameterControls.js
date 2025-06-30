@@ -94,7 +94,6 @@ export class ParameterControls {
         });
       } else if (window.Logger) {
         // Only log as debug - some parameters are synth-only without UI elements
-        window.Logger.log(`Parameter element not found: ${paramId}`, "debug");
       }
     });
     
@@ -126,7 +125,6 @@ export class ParameterControls {
         this.updateDisplayValue(paramId, initialValue);
       } else {
         if (window.Logger) {
-          window.Logger.log(`Transition parameter element not found: ${paramId}`, "debug");
         }
       }
     });
@@ -143,17 +141,6 @@ export class ParameterControls {
     }
 
     if (window.Logger) {
-      window.Logger.log(
-        `Cached ${this.paramElements.size} parameter elements`,
-        "parameters",
-      );
-      const transitionParams = Array.from(this.paramElements.keys()).filter(
-        (id) => id.includes("transition"),
-      );
-      window.Logger.log(
-        `Transition parameters cached: ${transitionParams.join(", ")}`,
-        "debug",
-      );
     }
   }
 
@@ -295,7 +282,6 @@ export class ParameterControls {
     this.debounceParameterChange(paramId, value);
 
     if (window.Logger) {
-      window.Logger.log(`Parameter input: ${paramId} = ${value}`, "parameters");
     }
   }
 
@@ -413,7 +399,6 @@ export class ParameterControls {
     });
 
     if (window.Logger) {
-      window.Logger.log(`Expression changed: ${expression}`, "expressions");
     }
   }
 
@@ -880,7 +865,6 @@ export class ParameterControls {
     this.appState.set("harmonicSelections", defaultHarmonics);
 
     if (window.Logger) {
-      window.Logger.log("Parameters reset to defaults", "parameters");
     }
   }
 

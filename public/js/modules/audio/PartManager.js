@@ -12,6 +12,7 @@ import { eventBus } from "../core/EventBus.js";
 import { appState } from "../state/AppState.js";
 import { Logger } from "../core/Logger.js";
 import { programState } from "../state/ProgramState.js";
+import { ParameterResolver } from "./ParameterResolver.js";
 
 export class PartManager {
   constructor() {
@@ -19,6 +20,7 @@ export class PartManager {
     this.appState = appState;
     this.isInitialized = false;
     this.lastSentProgram = null;
+    this.parameterResolver = new ParameterResolver(appState);
   }
 
   /**
@@ -84,7 +86,6 @@ export class PartManager {
       } else {
         // Just update AppState without sending to synths
         this.appState.setNested('performance.currentProgram.chord.frequencies', [...data.frequencies]);
-        // Logger.log(`Updated chord from bank load: ${data.frequencies.length} notes (not redistributing)`, "parts");
       }
     });
 
@@ -152,7 +153,6 @@ export class PartManager {
     // Redistribute if we have synths
     this.redistributeToSynths();
 
-    // Logger.log(`Chord set: ${frequencies.length} notes`, "parts");
   }
 
   /**
@@ -208,35 +208,9 @@ export class PartManager {
       // Update ProgramState
       programState.updateHarmonicSelection(key, Array.from(data.selection));
       
-      Logger.log(`Harmonic selection updated: ${key}`, "expressions");
     }
   }
 
-  /**
-   * Get random harmonic ratio for expression
-   * @param {string} expression - Expression type
-   * @returns {number} Harmonic ratio
-   */
-  getRandomHarmonicRatio(expression) {
-    const numeratorKey = `${expression}-numerator`;
-    const denominatorKey = `${expression}-denominator`;
-
-    const numerators = Array.from(this.harmonicSelections[numeratorKey] || new Set([1]));
-    const denominators = Array.from(this.harmonicSelections[denominatorKey] || new Set([1]));
-
-
-    if (numerators.length === 0 || denominators.length === 0) {
-      return 1.0;
-    }
-
-    const randomNumerator =
-      numerators[Math.floor(Math.random() * numerators.length)];
-    const randomDenominator =
-      denominators[Math.floor(Math.random() * denominators.length)];
-
-    const ratio = randomNumerator / randomDenominator;
-    return ratio;
-  }
 
   /**
    * Get synth assignments from AppState
@@ -325,22 +299,27 @@ export class PartManager {
       };
     }
     
-    // Use the powerCheckbox already declared above
     const powerState = powerCheckbox ? powerCheckbox.checked : true;
     
-    // Create the program message with current state (may have empty assignments!)
-    const programMessage = {
-      ...baseProgram,
+    // Get assignment for this synth
+    const assignment = this.synthAssignments.get(synthId);
+    
+    // Use ParameterResolver to build complete program
+    const resolvedProgram = assignment 
+      ? this.parameterResolver.resolveForSynth(synthId, assignment, baseProgram, transitionConfig)
+      : baseProgram; // Send base program without assignment to silence
+    
+    // Build complete message
+    const programMessage = this.parameterResolver.buildProgramMessage(resolvedProgram, {
       chord: {
         frequencies: [...this.currentChord],
         expressions: Object.fromEntries(this.noteExpressions)
       },
       parts: Object.fromEntries(this.synthAssignments),
-      transition: transitionConfig,
-      power: powerState  // Include power state in program
-    };
+      power: powerState
+    });
     
-    // Send program - synth will handle empty assignment case
+    // Send program
     const success = networkCoordinator.sendProgramToSynth(
       synthId,
       programMessage,
@@ -348,7 +327,6 @@ export class PartManager {
     );
     
     if (success) {
-      const assignment = this.synthAssignments.get(synthId);
       if (assignment) {
         Logger.log(
           `Sent to ${synthId}: ${assignment.frequency.toFixed(1)}Hz, expression: ${assignment.expression.type || 'none'}`,
@@ -382,8 +360,6 @@ export class PartManager {
 
     const baseProgram = parameterControls.getAllParameterValues();
     
-    Logger.log(`BaseProgram keys: ${Object.keys(baseProgram).join(', ')}`, "parts");
-    Logger.log(`transitionDuration in baseProgram: ${baseProgram.transitionDuration}`, "parts");
 
     // Add power state
     const powerCheckbox = document.getElementById("power");
@@ -399,19 +375,6 @@ export class PartManager {
       glissando: baseProgram.glissando !== undefined ? baseProgram.glissando : true, // default true
     };
 
-    // Check if transition values are valid
-    if (transitionConfig.duration === undefined || transitionConfig.duration === null) {
-      Logger.log(`WARNING: transitionDuration is ${transitionConfig.duration}`, "parts");
-    }
-
-    Logger.log(
-      `Sending part with transition config: ${JSON.stringify(transitionConfig)}`,
-      "parts",
-    );
-    Logger.log(
-      `Glissando value from baseProgram: ${baseProgram.glissando}`,
-      "parts"
-    );
 
 
     // Always get connected synths, even if no assignments
@@ -422,6 +385,8 @@ export class PartManager {
       Logger.log("No synths connected", "warn");
       return;
     }
+    
+    Logger.log(`Sending current part: ${this.currentChord.length} notes, ${this.synthAssignments.size} assignments`, "parts");
 
     // Get current power state (powerCheckbox already declared above)
     const powerState = powerCheckbox ? powerCheckbox.checked : true;
@@ -439,30 +404,37 @@ export class PartManager {
     };
 
     // Send to ALL connected synths (not just assigned ones)
-    // Synths with no assignment will silence themselves
+    // Use ParameterResolver for each synth
     let successCount = 0;
     for (let i = 0; i < allSynthIds.length; i++) {
       const synthId = allSynthIds[i];
+      const assignment = this.synthAssignments.get(synthId);
       
       try {
-        // Send program with MessageProtocol format
+        // Use ParameterResolver to build complete program for this synth
+        const resolvedProgram = assignment 
+          ? this.parameterResolver.resolveForSynth(synthId, assignment, baseProgram, transitionConfig)
+          : baseProgram; // Send base program without assignment to silence
+        
+        // Build complete message
+        const synthProgramMessage = this.parameterResolver.buildProgramMessage(resolvedProgram, {
+          chord: {
+            frequencies: [...this.currentChord],
+            expressions: Object.fromEntries(this.noteExpressions)
+          },
+          parts: Object.fromEntries(this.synthAssignments),
+          power: powerState
+        });
+        
+        // Send resolved program
         const success = networkCoordinator.sendProgramToSynth(
           synthId,
-          programMessage,
+          synthProgramMessage,
           transitionConfig
         );
 
         if (success) {
           successCount++;
-          const assignment = this.synthAssignments.get(synthId);
-          if (assignment) {
-            Logger.log(
-              `Sent to ${synthId}: ${assignment.frequency.toFixed(1)}Hz, expression: ${assignment.expression.type || 'none'}`,
-              "parts"
-            );
-          } else {
-            Logger.log(`Sent empty assignment to ${synthId} (will silence)`, "parts");
-          }
         } else {
           Logger.log(`Failed to send to ${synthId}`, "error");
         }
@@ -471,7 +443,6 @@ export class PartManager {
       }
     }
     
-    Logger.log(`Sent program to ${successCount}/${allSynthIds.length} synths (${this.synthAssignments.size} with assignments)`, 'parts');
 
 
     if (successCount === 0) {
@@ -491,97 +462,7 @@ export class PartManager {
     return { successCount, totalSynths: allSynthIds.length };
   }
 
-  /**
-   * Apply expression parameters to synth program
-   * @param {Object} synthProgram - Program object to modify
-   * @param {Object} expression - Expression object
-   * @private
-   */
-  applyExpressionToProgram(synthProgram, expression) {
-    // Reset all expression flags
-    synthProgram.vibratoEnabled = 0;
-    synthProgram.tremoloEnabled = 0;
-    synthProgram.trillEnabled = 0;
 
-    if (!expression || expression.type === "none") {
-      return;
-    }
-
-    switch (expression.type) {
-      case "vibrato":
-        synthProgram.vibratoEnabled = 1;
-        synthProgram.vibratoDepth =
-          expression.depth || synthProgram.vibratoDepth || 0.01;
-        const vibratoRatio = this.getRandomHarmonicRatio("vibrato");
-        const baseVibratoRate = synthProgram.vibratoRate || 5;
-        synthProgram.vibratoRate = baseVibratoRate * vibratoRatio;
-        break;
-
-      case "tremolo":
-        synthProgram.tremoloEnabled = 1;
-        synthProgram.tremoloDepth =
-          expression.depth || synthProgram.tremoloDepth || 0.3;
-        synthProgram.tremoloArticulation =
-          expression.articulation || synthProgram.tremoloArticulation || 0.8;
-        const tremoloRatio = this.getRandomHarmonicRatio("tremolo");
-        const baseTremoloSpeed = synthProgram.tremoloSpeed || 10;
-        synthProgram.tremoloSpeed = baseTremoloSpeed * tremoloRatio;
-        break;
-
-      case "trill":
-        synthProgram.trillEnabled = 1;
-        synthProgram.trillInterval =
-          expression.interval || synthProgram.trillInterval || 2;
-        synthProgram.trillArticulation =
-          expression.articulation || synthProgram.trillArticulation || 0.7;
-        const trillRatio = this.getRandomHarmonicRatio("trill");
-        const baseTrillSpeed = synthProgram.trillSpeed || 8;
-        synthProgram.trillSpeed = baseTrillSpeed * trillRatio;
-        // Logger.log(`Trill: base=${baseTrillSpeed}, ratio=${trillRatio}, final=${synthProgram.trillSpeed}`, "parts");
-        break;
-    }
-  }
-
-  /**
-   * Calculate transition timing for a synth
-   * @param {Object} config - Transition configuration
-   * @param {number} synthIndex - Index of synth in list
-   * @returns {Object} Timing object
-   * @private
-   */
-  calculateTransitionTiming(config, synthIndex = 0) {
-    const baseDuration = config.duration;
-    const stagger = config.stagger; // 0 to 1 (0% to 100%)
-    const durationSpread = config.durationSpread; // 0 to 1 (0% to 100%)
-
-    // Calculate stagger delay using exponential algorithm
-    // stagger = 0 means no stagger (all synths start together)
-    // stagger = 1 means full 0.5x to 2x range of base duration
-    let delay = 0;
-    if (stagger > 0) {
-      const staggerExponent = (Math.random() * 2 - 1) * stagger * Math.log(2);
-      const staggerMultiplier = Math.exp(staggerExponent);
-      delay = baseDuration * staggerMultiplier;
-    }
-
-    // Calculate duration variation using same exponential algorithm
-    // durationSpread = 0 means no variation (all synths use base duration)
-    // durationSpread = 1 means full 0.5x to 2x range of base duration
-    let finalDuration = baseDuration;
-    if (durationSpread > 0) {
-      const durationExponent =
-        (Math.random() * 2 - 1) * durationSpread * Math.log(2);
-      const durationMultiplier = Math.exp(durationExponent);
-      finalDuration = baseDuration * durationMultiplier;
-    }
-
-    return {
-      delay: Math.max(0, delay),
-      duration: finalDuration,
-      stagger: stagger,
-      durationSpread: durationSpread,
-    };
-  }
 
   /**
    * Handle synth connection
@@ -600,7 +481,6 @@ export class PartManager {
    * @private
    */
   handleSynthDisconnected(synthId) {
-    Logger.log(`Synth disconnected: ${synthId}`, "parts");
     this.synthAssignments.delete(synthId);
     this.redistributeToSynths();
   }
@@ -616,26 +496,34 @@ export class PartManager {
     if (this.lastSentProgram && this.currentChord.length > 0) {
       const assignment = this.synthAssignments.get(synthId);
       if (assignment) {
-        // Create a program for this specific synth with its assigned frequency and expression
-        const synthProgram = { ...this.lastSentProgram.baseProgram };
-        synthProgram.fundamentalFrequency = assignment.frequency;
+        // Use ParameterResolver to build complete program
+        const resolvedProgram = this.parameterResolver.resolveForSynth(
+          synthId, 
+          assignment, 
+          this.lastSentProgram.baseProgram,
+          { duration: 0, stagger: 0, durationSpread: 0 } // No transition for request
+        );
         
-        // Apply expression with stochastic resolution
-        this.applyExpressionToProgram(synthProgram, assignment.expression);
+        // Build complete message
+        const programMessage = this.parameterResolver.buildProgramMessage(resolvedProgram, {
+          chord: {
+            frequencies: [...this.currentChord],
+            expressions: Object.fromEntries(this.noteExpressions)
+          },
+          parts: Object.fromEntries(this.synthAssignments),
+          power: this.lastSentProgram.baseProgram.powerOn || false
+        });
         
-        // Send with no transition (immediate)
+        // Send resolved program
         const networkCoordinator = this.appState.get("networkCoordinator");
         if (networkCoordinator) {
-          networkCoordinator.sendProgramToSynth(synthId, synthProgram, {
+          networkCoordinator.sendProgramToSynth(synthId, programMessage, {
             duration: 0,
             stagger: 0,
             durationSpread: 0
           });
-          
-          // Logger.log(`Sent program to ${synthId}: ${assignment.frequency.toFixed(1)}Hz, expression: ${assignment.expression?.type || 'none'}`, "parts");
         }
       }
-    } else {
     }
     // If no active program, synth will remain waiting
   }

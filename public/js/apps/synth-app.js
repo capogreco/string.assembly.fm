@@ -17,6 +17,7 @@ class SynthApp {
     this.audioContext = null;
     this.controllers = new Map();
     this.rtcConfig = SystemConfig.network.webrtc;
+    this.hasJoinedInstrument = false;
     
     // UI elements
     this.statusEl = document.getElementById("status");
@@ -138,7 +139,6 @@ class SynthApp {
 
   async handleMessage(message) {
     // console.log("[DEBUG] Received WebSocket message:", message);
-    Logger.log(`Received message: ${message.type}`, "messages");
 
     switch (message.type) {
       case "controllers-list":
@@ -378,7 +378,6 @@ class SynthApp {
       return;
     }
     
-    Logger.log(`Data channel message from ${controllerId}: ${message.type}`, "messages");
 
     switch (message.type) {
       case MessageTypes.PING:
@@ -398,7 +397,6 @@ class SynthApp {
         
         // Use SynthClient to handle complete program message
         this.synthClient.handleProgram(message);
-        Logger.log("Received program from controller via SynthClient", "messages");
         break;
 
       case MessageTypes.COMMAND:
@@ -410,7 +408,6 @@ class SynthApp {
           const powerOn = message.value;
           console.log(`[DEBUG] Setting power to: ${powerOn}`);
           this.synthClient.setPower(powerOn);
-          Logger.log(`Power ${powerOn ? 'on' : 'off'}`, "messages");
         } else if (message.data && message.data.type === "request-state") {
           // DEPRECATED: State requests removed - use ping/pong for state updates
           this.sendStateToController(controllerId);
@@ -418,12 +415,10 @@ class SynthApp {
         break;
         
       case MessageTypes.SAVE_TO_BANK:
-        Logger.log(`Save to bank ${message.bankNumber} command received`, "messages");
         // TODO: Implement bank saving
         break;
         
       case MessageTypes.LOAD_FROM_BANK:
-        Logger.log(`Load from bank ${message.bankNumber} command received`, "messages");
         // TODO: Implement bank loading
         break;
         
@@ -476,8 +471,27 @@ class SynthApp {
       isCalibrating: clientState.isCalibrating,
       isPowered: clientState.isPoweredOn,
       hasProgram: clientState.isActive,
-      audioContextState: this.audioContext ? this.audioContext.state : 'none'
+      audioContextState: this.audioContext ? this.audioContext.state : 'none',
+      // These are the fields expected by the controller for UI indicators
+      audio_enabled: clientState.audioInitialized && this.audioContext && this.audioContext.state === 'running',
+      joined: this.hasJoinedInstrument
     };
+  }
+
+  broadcastStateUpdate() {
+    // Send state update to all connected controllers
+    const state = this.getSynthState();
+    const stateMessage = {
+      type: "state_update",
+      state: state
+    };
+    
+    this.controllers.forEach((controller, controllerId) => {
+      if (controller.connected && controller.channel && controller.channel.readyState === 'open') {
+        controller.channel.send(JSON.stringify(stateMessage));
+        Logger.log(`State update sent to controller ${controllerId}`, "messages");
+      }
+    });
   }
 
   setupUI() {
@@ -516,6 +530,9 @@ class SynthApp {
     }
     
     Logger.log("Started calibration", "lifecycle");
+    
+    // Send state update to notify controllers that audio is enabled
+    this.broadcastStateUpdate();
   }
 
   async joinInstrument() {
@@ -527,6 +544,9 @@ class SynthApp {
     // End calibration and set power
     this.synthClient.endCalibration();
     this.synthClient.setPower(true);
+    
+    // Set joined flag
+    this.hasJoinedInstrument = true;
     
     // Request program from controllers if none stored
     if (!this.synthClient.storedProgram) {
@@ -544,6 +564,9 @@ class SynthApp {
     }
     
     Logger.log("Joined instrument", "lifecycle");
+    
+    // Send state update to all connected controllers
+    this.broadcastStateUpdate();
     
     // Request wake lock
     this.requestWakeLock();
