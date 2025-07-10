@@ -662,7 +662,7 @@ function setupGlobalEventListeners() {
 
   // Handle keyboard shortcuts for bank save/load
   document.addEventListener("keydown", (event) => {
-    console.log(`[KEYBOARD DEBUG] Key pressed: ${event.key}, Shift: ${event.shiftKey}, Target: ${event.target.tagName}`);
+    Logger.log(`[KEYBOARD DEBUG] Key pressed: ${event.key}, Shift: ${event.shiftKey}, Target: ${event.target.tagName}`, 'debug');
     
     // Ignore if user is typing in an input field
     const activeElement = document.activeElement;
@@ -672,7 +672,7 @@ function setupGlobalEventListeners() {
       activeElement.tagName === "SELECT" ||
       activeElement.isContentEditable
     )) {
-      console.log(`[KEYBOARD DEBUG] Ignoring - user is in ${activeElement.tagName}`);
+      Logger.log(`[KEYBOARD DEBUG] Ignoring - user is in ${activeElement.tagName}`, 'debug');
       return;
     }
     
@@ -698,7 +698,7 @@ function setupGlobalEventListeners() {
       // Debug log
       if (event.shiftKey) {
         Logger.log(`Shift+${digit} pressed`, "lifecycle");
-        console.log(`[KEYBOARD] Shift+${digit} pressed - saving to bank`);
+        Logger.log(`[KEYBOARD] Shift+${digit} pressed - saving to bank`, 'lifecycle');
       }
       
       // Map 0 to bank 10, 1-9 to banks 1-9
@@ -1235,7 +1235,7 @@ if (SystemConfig.system.logging.enabled) {
     testSend: () => partManager.sendCurrentPart(),
     testParam: () => parameterControls.setParameterValue("masterGain", 0.8),
     testTransitions: () => {
-      console.log("=== Testing Transition Controls ===");
+      Logger.log("=== Testing Transition Controls ===", 'lifecycle');
 
       // Set up a chord and expressions
       partManager.setChord([261.63, 329.63, 392.0]);
@@ -1248,7 +1248,7 @@ if (SystemConfig.system.logging.enabled) {
 
       durations.forEach((duration, i) => {
         setTimeout(() => {
-          console.log(`Testing transition duration: ${duration}s`);
+          Logger.log(`Testing transition duration: ${duration}s`, 'lifecycle');
           document.getElementById("transitionDuration").value =
             duration.toString();
           document.getElementById("transitionDurationValue").textContent =
@@ -1257,28 +1257,28 @@ if (SystemConfig.system.logging.enabled) {
           partManager
             .sendCurrentPart()
             .then((result) => {
-              console.log(`Duration ${duration}s - Success:`, result);
+              Logger.log(`Duration ${duration}s - Success:`, result, 'lifecycle');
               results.push({ duration, result });
             })
             .catch((error) => {
-              console.error(`Duration ${duration}s - Failed:`, error);
+              Logger.log(`Duration ${duration}s - Failed:`, error, 'error');
               results.push({ duration, error });
             });
         }, i * 4000); // 4 seconds apart
       });
 
-      console.log("Transition tests scheduled. Check results in 20 seconds.");
+      Logger.log("Transition tests scheduled. Check results in 20 seconds.", 'lifecycle');
       return Promise.resolve("Tests scheduled");
     },
     testPartManager: () => {
-      console.log("=== PartManager Test ===");
+      Logger.log("=== PartManager Test ===", 'lifecycle');
 
       // Test chord setting
-      console.log("1. Setting chord to C major...");
+      Logger.log("1. Setting chord to C major...", 'parameters');
       partManager.setChord([261.63, 329.63, 392.0]);
 
       // Test expression assignment
-      console.log("2. Adding vibrato to C4...");
+      Logger.log("2. Adding vibrato to C4...", 'lifecycle');
       partManager.setNoteExpression("C4", {
         type: "vibrato",
         depth: 0.02,
@@ -1286,7 +1286,7 @@ if (SystemConfig.system.logging.enabled) {
       });
 
       // Test harmonic selection
-      console.log("3. Setting harmonic ratios...");
+      Logger.log("3. Setting harmonic ratios...", 'parameters');
       partManager.updateHarmonicSelection({
         expression: "vibrato",
         type: "numerator",
@@ -1294,34 +1294,34 @@ if (SystemConfig.system.logging.enabled) {
       });
 
       // Test info retrieval
-      console.log("4. Getting chord info...");
+      Logger.log("4. Getting chord info...", 'expressions');
       const info = partManager.getChordInfo();
-      console.log("Chord info:", info);
+      Logger.log(`"Chord info:", info`, 'expressions');
 
       // Test statistics
-      console.log("5. Getting statistics...");
+      Logger.log("5. Getting statistics...", 'lifecycle');
       const stats = partManager.getStatistics();
-      console.log("Stats:", stats);
+      Logger.log(`"Stats:", stats`, 'lifecycle');
 
       // Test program send (if synths connected)
       const connectedSynths = appState.get("connectedSynths");
       if (connectedSynths && connectedSynths.size > 0) {
-        console.log("6. Sending current part...");
+        Logger.log("6. Sending current part...", 'parts');
         return partManager
           .sendCurrentPart()
           .then((result) => {
-            console.log("Send result:", result);
-            console.log("=== Test Complete ===");
+            Logger.log(`"Send result:", result`, 'messages');
+            Logger.log("=== Test Complete ===", 'lifecycle');
             return result;
           })
           .catch((error) => {
-            console.error("Send failed:", error);
-            console.log("=== Test Complete (with error) ===");
+            Logger.log("Send failed:", error, 'error');
+            Logger.log("=== Test Complete (with error) ===", 'errors');
             return error;
           });
       } else {
-        console.log("6. No synths connected, skipping send test");
-        console.log("=== Test Complete ===");
+        Logger.log(`"6. No synths connected, skipping send test"`, 'messages');
+        Logger.log("=== Test Complete ===", 'lifecycle');
         return Promise.resolve("No synths to test");
       }
     },
@@ -1346,12 +1346,12 @@ function debugModuleLoading() {
 
 // Enhanced error handling
 window.addEventListener("error", (event) => {
-  console.error("Global error:", event.error);
-  console.error("Stack:", event.error?.stack);
+  Logger.log("Global error:", event.error, 'error');
+  Logger.log("Stack:", event.error?.stack, 'error');
 });
 
 window.addEventListener("unhandledrejection", (event) => {
-  console.error("Unhandled promise rejection:", event.reason);
+  Logger.log("Unhandled promise rejection:", event.reason, 'error');
 });
 
 // Start the application with better error handling
@@ -1380,7 +1380,7 @@ window.debugWebRTC = {
   // Test different ICE configurations
   testICE: async (peerId, mode = "all") => {
     if (!window.webRTCManager) {
-      console.error("WebRTCManager not initialized");
+      Logger.log("WebRTCManager not initialized", 'error');
       return;
     }
     return await window.webRTCManager.testICEConfiguration(peerId, mode);
@@ -1395,7 +1395,7 @@ window.debugWebRTC = {
   // Get detailed peer info
   getPeerInfo: (peerId) => {
     if (!window.webRTCManager) {
-      console.error("WebRTCManager not initialized");
+      Logger.log("WebRTCManager not initialized", 'error');
       return;
     }
     return window.webRTCManager.getPeerInfo(peerId);
@@ -1404,7 +1404,7 @@ window.debugWebRTC = {
   // Get all peers
   getAllPeers: () => {
     if (!window.webRTCManager) {
-      console.error("WebRTCManager not initialized");
+      Logger.log("WebRTCManager not initialized", 'error');
       return;
     }
     return window.webRTCManager.getAllPeers();
@@ -1413,12 +1413,12 @@ window.debugWebRTC = {
   // Get ICE candidate stats for a peer
   getICEStats: async (peerId) => {
     if (!window.webRTCManager) {
-      console.error("WebRTCManager not initialized");
+      Logger.log("WebRTCManager not initialized", 'error');
       return;
     }
     const peerData = window.webRTCManager.peers.get(peerId);
     if (!peerData) {
-      console.error(`No peer found with ID: ${peerId}`);
+      Logger.log(`No peer found with ID: ${peerId}`, 'error');
       return;
     }
     return await window.webRTCManager.getICECandidatePairStats(
@@ -1430,7 +1430,7 @@ window.debugWebRTC = {
   // Force disconnect a peer
   disconnect: (peerId) => {
     if (!window.webRTCManager) {
-      console.error("WebRTCManager not initialized");
+      Logger.log("WebRTCManager not initialized", 'error');
       return;
     }
     window.webRTCManager.handlePeerDisconnection(peerId);

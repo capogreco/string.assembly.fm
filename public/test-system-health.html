@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>System Health Tests - String Assembly FM</title>
+    <style>
+        body {
+            font-family: monospace;
+            background: #1a1a1a;
+            color: #fff;
+            padding: 20px;
+            margin: 0;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #333;
+            border-radius: 5px;
+        }
+        .test-result {
+            margin: 5px 0;
+            padding: 5px 10px;
+        }
+        .pass {
+            background: #1e4620;
+            color: #4ade80;
+        }
+        .fail {
+            background: #4c1f1f;
+            color: #ef4444;
+        }
+        .info {
+            background: #1e3a4c;
+            color: #60a5fa;
+        }
+        button {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            margin: 5px;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #2563eb;
+        }
+        #results {
+            margin-top: 20px;
+        }
+        .metric {
+            display: inline-block;
+            margin: 10px;
+            padding: 10px;
+            background: #262626;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <h1>System Health Tests</h1>
+    
+    <div class="test-section">
+        <h2>Test Controls</h2>
+        <button onclick="SystemTests.runAll()">Run All Tests</button>
+        <button onclick="SystemTests.testStateStructure()">Test State Structure</button>
+        <button onclick="SystemTests.testMessageValidation()">Test Message Protocol</button>
+        <button onclick="SystemTests.testMemoryLeaks()">Test Memory Leaks</button>
+        <button onclick="SystemTests.testPerformance()">Test Performance</button>
+        <button onclick="SystemTests.clearResults()">Clear Results</button>
+    </div>
+
+    <div class="test-section">
+        <h2>System Metrics</h2>
+        <div id="metrics">
+            <div class="metric">Synths Connected: <span id="synth-count">0</span></div>
+            <div class="metric">WebSocket Status: <span id="ws-status">Disconnected</span></div>
+            <div class="metric">Memory Usage: <span id="memory-usage">0 MB</span></div>
+            <div class="metric">Message Rate: <span id="message-rate">0/s</span></div>
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h2>Test Results</h2>
+        <div id="results"></div>
+    </div>
+
+    <script type="module">
+        import { appState } from './js/modules/state/AppState.js';
+        import { networkCoordinator } from './js/modules/network/NetworkCoordinator.js';
+        import { partManager } from './js/modules/audio/PartManager.js';
+        import { validateMessage } from './js/protocol/MessageProtocol.js';
+        import { Logger } from './js/modules/core/Logger.js';
+
+        // Make available globally for button clicks
+        window.appState = appState;
+        window.networkCoordinator = networkCoordinator;
+        window.validateMessage = validateMessage;
+
+        // System Health Tests
+        window.SystemTests = {
+            results: [],
+            startTime: Date.now(),
+            messageCount: 0,
+
+            log(message, status = 'info') {
+                const resultDiv = document.getElementById('results');
+                const entry = document.createElement('div');
+                entry.className = `test-result ${status}`;
+                entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+                resultDiv.appendChild(entry);
+                this.results.push({ message, status, timestamp: Date.now() });
+            },
+
+            clearResults() {
+                document.getElementById('results').innerHTML = '';
+                this.results = [];
+                this.log('Results cleared', 'info');
+            },
+
+            async runAll() {
+                this.log('Starting all tests...', 'info');
+                await this.testStateStructure();
+                await this.testMessageValidation();
+                await this.testMemoryLeaks();
+                await this.testPerformance();
+                this.log('All tests completed!', 'info');
+            },
+
+            testStateStructure() {
+                this.log('Testing state structure...', 'info');
+                
+                try {
+                    // Check performance state
+                    const perfState = appState.getNested('performance');
+                    console.assert(perfState, 'Missing performance state');
+                    console.assert(perfState.currentProgram, 'Missing currentProgram');
+                    console.assert(perfState.currentProgram.parts, 'Missing parts');
+                    this.log('✓ Performance state structure valid', 'pass');
+
+                    // Check connections state
+                    const connState = appState.getNested('connections');
+                    console.assert(connState, 'Missing connections state');
+                    console.assert(connState.synths instanceof Map, 'Synths should be a Map');
+                    this.log('✓ Connections state structure valid', 'pass');
+
+                    // Check banking state
+                    const bankState = appState.getNested('banking');
+                    console.assert(bankState, 'Missing banking state');
+                    console.assert(bankState.banks instanceof Map, 'Banks should be a Map');
+                    this.log('✓ Banking state structure valid', 'pass');
+
+                    // Check for deprecated properties
+                    const deprecated = ['connectedSynths', 'currentProgram', 'selectedExpression'];
+                    deprecated.forEach(prop => {
+                        if (appState.state[prop]) {
+                            this.log(`✗ Deprecated property still exists: ${prop}`, 'fail');
+                        }
+                    });
+
+                } catch (error) {
+                    this.log(`✗ State structure test failed: ${error.message}`, 'fail');
+                }
+            },
+
+            testMessageValidation() {
+                this.log('Testing message protocol...', 'info');
+                
+                try {
+                    // Valid messages
+                    const validMessages = [
+                        { type: 'program', program: {}, power: true },
+                        { type: 'ping', timestamp: Date.now() },
+                        { type: 'pong', timestamp: Date.now(), state: {} },
+                        { type: 'command', name: 'power', value: true }
+                    ];
+
+                    validMessages.forEach(msg => {
+                        try {
+                            validateMessage(msg);
+                            this.log(`✓ Valid message passed: ${msg.type}`, 'pass');
+                        } catch (e) {
+                            this.log(`✗ Valid message failed: ${msg.type} - ${e.message}`, 'fail');
+                        }
+                    });
+
+                    // Invalid messages
+                    const invalidMessages = [
+                        { type: 'invalid_type' },
+                        { type: 'program' }, // missing required fields
+                        { type: 'ping' }, // missing timestamp
+                        {} // missing type
+                    ];
+
+                    invalidMessages.forEach((msg, i) => {
+                        try {
+                            validateMessage(msg);
+                            this.log(`✗ Invalid message ${i} should have failed`, 'fail');
+                        } catch (e) {
+                            this.log(`✓ Invalid message ${i} correctly rejected`, 'pass');
+                        }
+                    });
+
+                } catch (error) {
+                    this.log(`✗ Message validation test failed: ${error.message}`, 'fail');
+                }
+            },
+
+            async testMemoryLeaks() {
+                this.log('Testing for memory leaks...', 'info');
+                
+                if (!performance.memory) {
+                    this.log('⚠ Memory API not available in this browser', 'info');
+                    return;
+                }
+
+                const initialMemory = performance.memory.usedJSHeapSize / 1048576;
+                this.log(`Initial memory: ${initialMemory.toFixed(2)} MB`, 'info');
+
+                // Simulate operations that could leak memory
+                for (let i = 0; i < 100; i++) {
+                    // Create and destroy state updates
+                    appState.set(`test_${i}`, { data: new Array(1000).fill(0) });
+                    appState.set(`test_${i}`, null);
+                }
+
+                // Force garbage collection if available
+                if (window.gc) {
+                    window.gc();
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                }
+
+                const finalMemory = performance.memory.usedJSHeapSize / 1048576;
+                const memoryIncrease = finalMemory - initialMemory;
+
+                if (memoryIncrease > 10) {
+                    this.log(`✗ Possible memory leak: ${memoryIncrease.toFixed(2)} MB increase`, 'fail');
+                } else {
+                    this.log(`✓ Memory stable: ${memoryIncrease.toFixed(2)} MB change`, 'pass');
+                }
+            },
+
+            async testPerformance() {
+                this.log('Testing performance...', 'info');
+                
+                const tests = [
+                    {
+                        name: 'State update',
+                        fn: () => {
+                            for (let i = 0; i < 1000; i++) {
+                                appState.setNested('performance.test', i);
+                            }
+                        }
+                    },
+                    {
+                        name: 'Message validation',
+                        fn: () => {
+                            const msg = { type: 'ping', timestamp: Date.now() };
+                            for (let i = 0; i < 1000; i++) {
+                                validateMessage(msg);
+                            }
+                        }
+                    },
+                    {
+                        name: 'Parameter resolution',
+                        fn: () => {
+                            if (partManager.parameterResolver) {
+                                const assignment = { frequency: 440, expression: { type: 'vibrato' } };
+                                for (let i = 0; i < 100; i++) {
+                                    partManager.parameterResolver.resolveForSynth('test', assignment, {}, {});
+                                }
+                            }
+                        }
+                    }
+                ];
+
+                for (const test of tests) {
+                    const start = performance.now();
+                    try {
+                        test.fn();
+                        const duration = performance.now() - start;
+                        if (duration > 100) {
+                            this.log(`✗ ${test.name}: ${duration.toFixed(2)}ms (slow)`, 'fail');
+                        } else {
+                            this.log(`✓ ${test.name}: ${duration.toFixed(2)}ms`, 'pass');
+                        }
+                    } catch (e) {
+                        this.log(`✗ ${test.name}: ${e.message}`, 'fail');
+                    }
+                }
+            },
+
+            updateMetrics() {
+                // Update synth count
+                const synths = appState.getNested('connections.synths') || new Map();
+                document.getElementById('synth-count').textContent = synths.size;
+
+                // Update WebSocket status
+                const wsStatus = networkCoordinator?.webSocket?.isConnected ? 'Connected' : 'Disconnected';
+                document.getElementById('ws-status').textContent = wsStatus;
+
+                // Update memory usage
+                if (performance.memory) {
+                    const memoryMB = (performance.memory.usedJSHeapSize / 1048576).toFixed(2);
+                    document.getElementById('memory-usage').textContent = `${memoryMB} MB`;
+                }
+
+                // Update message rate
+                const elapsed = (Date.now() - this.startTime) / 1000;
+                const rate = (this.messageCount / elapsed).toFixed(1);
+                document.getElementById('message-rate').textContent = `${rate}/s`;
+            }
+        };
+
+        // Update metrics every second
+        setInterval(() => SystemTests.updateMetrics(), 1000);
+
+        // Track messages
+        if (window.eventBus) {
+            window.eventBus.on('network:message', () => {
+                SystemTests.messageCount++;
+            });
+        }
+
+        console.log('System health tests loaded. Use SystemTests.runAll() to start.');
+    </script>
+</body>
+</html>

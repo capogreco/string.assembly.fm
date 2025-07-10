@@ -306,7 +306,7 @@ class EnsembleApp {
 
       synth.ws.addEventListener("open", () => {
         this.log(`[${synth.id}] Connected to server`, "info");
-        console.log(`[${synth.id}] Registering with server as synth type`);
+        Logger.log(`[${synth.id}] Registering with server as synth type`, 'parts');
         synth.updateConnectionStatus(true);
         
         // Register with server as a synth (not a controller)
@@ -336,7 +336,7 @@ class EnsembleApp {
   }
 
   async connectSynthToController(synth, controllerId) {
-    console.log(`[${synth.id}] Connecting to controller ${controllerId}`);
+    Logger.log(`[${synth.id}] Connecting to controller ${controllerId}`, 'parts');
     const controller = synth.controllers.get(controllerId);
     if (!controller) {
       Logger.log(`[${synth.id}] Controller ${controllerId} not found in map`, "error");
@@ -360,18 +360,18 @@ class EnsembleApp {
     try {
       const pc = new RTCPeerConnection(this.rtcConfig);
       controller.connection = pc;
-      console.log(`[${synth.id}] Created RTCPeerConnection`);
+      Logger.log(`[${synth.id}] Created RTCPeerConnection`, 'parts');
 
       // Create unified data channel
       const dataChannel = pc.createDataChannel("data");
       controller.channel = dataChannel;
-      console.log(`[${synth.id}] Created data channel with label: "data"`);
-      console.log(`[${synth.id}] Initial channel state:`, dataChannel.readyState);
+      Logger.log(`[${synth.id}] Created data channel with label: "data"`, 'messages');
+      Logger.log(`[${synth.id}] Initial channel state:`, dataChannel.readyState, 'parts');
 
       dataChannel.addEventListener("open", () => {
-        console.log(`[${synth.id}] Data channel OPENED to controller ${controllerId}`);
-        console.log(`[${synth.id}] Channel readyState:`, dataChannel.readyState);
-        console.log(`[${synth.id}] Channel label:`, dataChannel.label);
+        Logger.log(`[${synth.id}] Data channel OPENED to controller ${controllerId}`, 'messages');
+        Logger.log(`[${synth.id}] Channel readyState:`, dataChannel.readyState, 'parts');
+        Logger.log(`[${synth.id}] Channel label:`, dataChannel.label, 'parts');
         Logger.log(`[${synth.id}] Data channel open to controller ${controllerId}`, "connections");
         controller.connected = true;
         
@@ -401,9 +401,9 @@ class EnsembleApp {
 
       dataChannel.addEventListener("message", (event) => {
         const message = JSON.parse(event.data);
-        console.log(`[${synth.id}] Received data channel message:`, message.type);
-        console.log(`[${synth.id}] Full message:`, message);
-        console.log(`[${synth.id}] Has synthClient:`, !!synth.synthClient);
+        Logger.log(`[${synth.id}] Received data channel message:`, message.type, 'messages');
+        Logger.log(`[${synth.id}] Full message:`, message, 'messages');
+        Logger.log(`[${synth.id}] Has synthClient:`, !!synth.synthClient, 'parts');
         
         // Handle ping messages directly
         if (message.type === "ping") {
@@ -421,13 +421,13 @@ class EnsembleApp {
             }
           };
           dataChannel.send(JSON.stringify(pongMessage));
-          console.log(`[${synth.id}] Sent pong response to ${controllerId}`);
+          Logger.log(`[${synth.id}] Sent pong response to ${controllerId}`, 'messages');
         } else if (synth.synthClient) {
           // Pass other messages to SynthClient for handling
-          console.log(`[${synth.id}] Calling synthClient.handleControllerMessage`);
+          Logger.log(`[${synth.id}] Calling synthClient.handleControllerMessage`, 'parts');
           synth.synthClient.handleControllerMessage(controllerId, message);
         } else {
-          console.log(`[${synth.id}] ERROR: No synthClient available!`);
+          Logger.log(`[${synth.id}] ERROR: No synthClient available!`, 'errors');
         }
       });
 
@@ -455,20 +455,20 @@ class EnsembleApp {
 
       // Handle incoming data channels from controller
       pc.addEventListener("datachannel", (event) => {
-        console.log(`[${synth.id}] Incoming data channel from controller:`, event.channel.label);
+        Logger.log(`[${synth.id}] Incoming data channel from controller:`, event.channel.label, 'messages');
         const incomingChannel = event.channel;
         
         // Replace our outgoing channel with the incoming one
         controller.channel = incomingChannel;
         
         incomingChannel.addEventListener("open", () => {
-          console.log(`[${synth.id}] Incoming channel OPENED from controller ${controllerId}`);
+          Logger.log(`[${synth.id}] Incoming channel OPENED from controller ${controllerId}`, 'parts');
         });
         
         incomingChannel.addEventListener("message", (event) => {
           const message = JSON.parse(event.data);
-          console.log(`[${synth.id}] Received message on incoming channel:`, message.type);
-          console.log(`[${synth.id}] Full message:`, message);
+          Logger.log(`[${synth.id}] Received message on incoming channel:`, message.type, 'messages');
+          Logger.log(`[${synth.id}] Full message:`, message, 'messages');
           
           // Handle ping messages directly
           if (message.type === "ping") {
@@ -486,14 +486,14 @@ class EnsembleApp {
               }
             };
             incomingChannel.send(JSON.stringify(pongMessage));
-            console.log(`[${synth.id}] Sent pong response to ${controllerId} on incoming channel`);
+            Logger.log(`[${synth.id}] Sent pong response to ${controllerId} on incoming channel`, 'messages');
           } else if (synth.synthClient) {
             synth.synthClient.handleControllerMessage(controllerId, message);
           }
         });
         
         incomingChannel.addEventListener("close", () => {
-          console.log(`[${synth.id}] Incoming channel closed from controller ${controllerId}`);
+          Logger.log(`[${synth.id}] Incoming channel closed from controller ${controllerId}`, 'parts');
         });
       });
       
@@ -517,7 +517,7 @@ class EnsembleApp {
         data: offer
       }));
       
-      console.log(`[${synth.id}] Sent offer to controller ${controllerId}`);
+      Logger.log(`[${synth.id}] Sent offer to controller ${controllerId}`, 'messages');
       
     } catch (error) {
       Logger.log(`[${synth.id}] Failed to connect to controller ${controllerId}: ${error.message}`, "error");
@@ -528,13 +528,13 @@ class EnsembleApp {
 
   async handleSynthMessage(synth, message) {
     // Debug logging
-    console.log(`[${synth.id}] Received WebSocket message:`, message.type, message);
+    Logger.log(`[${synth.id}] Received WebSocket message:`, message.type, message, 'connections');
     Logger.log(`[${synth.id}] Received message: ${message.type}`, "messages");
     
     switch (message.type) {
       case "controllers-list":
         // Received list of active controllers
-        console.log(`[${synth.id}] Controllers available:`, message.controllers);
+        Logger.log(`[${synth.id}] Controllers available:`, message.controllers, 'messages');
         this.log(`[${synth.id}] Controllers: ${message.controllers.join(", ")}`, "info");
         
         // Connect to each controller
@@ -554,7 +554,7 @@ class EnsembleApp {
         
       case "controller-joined":
         // New controller joined
-        console.log(`[${synth.id}] New controller joined:`, message.controller_id);
+        Logger.log(`[${synth.id}] New controller joined:`, message.controller_id, 'messages');
         this.log(`[${synth.id}] Controller ${message.controller_id} joined`, "info");
         
         // Connect to new controller
@@ -572,7 +572,7 @@ class EnsembleApp {
         
       case "controller-left":
         // Controller left
-        console.log(`[${synth.id}] Controller left:`, message.controller_id);
+        Logger.log(`[${synth.id}] Controller left:`, message.controller_id, 'messages');
         this.log(`[${synth.id}] Controller ${message.controller_id} left`, "info");
         
         // Clean up connection
@@ -588,7 +588,7 @@ class EnsembleApp {
         
       case "answer":
         // Handle WebRTC answer from controller
-        console.log(`[${synth.id}] Received answer from ${message.source}`);
+        Logger.log(`[${synth.id}] Received answer from ${message.source}`, 'messages');
         const controller = synth.controllers.get(message.source);
         if (controller && controller.connection) {
           await controller.connection.setRemoteDescription(message.data);
@@ -605,7 +605,7 @@ class EnsembleApp {
         
       case "ice":
         // Handle ICE candidate from controller
-        console.log(`[${synth.id}] Received ICE candidate from ${message.source}`);
+        Logger.log(`[${synth.id}] Received ICE candidate from ${message.source}`, 'messages');
         const targetController = synth.controllers.get(message.source);
         if (targetController && targetController.connection) {
           try {
@@ -616,13 +616,13 @@ class EnsembleApp {
               targetController.iceQueue.push(message.data);
             }
           } catch (error) {
-            console.error(`[${synth.id}] Error adding ICE candidate:`, error);
+            Logger.log(`[${synth.id}] Error adding ICE candidate:`, error, 'error');
           }
         }
         break;
         
       default:
-        console.log(`[${synth.id}] Unknown message type:`, message.type);
+        Logger.log(`[${synth.id}] Unknown message type:`, message.type, 'messages');
         break;
     }
   }
@@ -704,9 +704,9 @@ class EnsembleApp {
         const storageKey = `synth-banks-${synth.id}`;
         localStorage.removeItem(storageKey);
         synth.synthClient.synthBanks.clear();
-        console.log(`Cleared localStorage for ${synth.id}`);
+        Logger.log(`Cleared localStorage for ${synth.id}`, 'parts');
       });
-      console.log('All synth banks cleared from localStorage');
+      Logger.log('All synth banks cleared from localStorage', 'parts');
     };
   }
 }

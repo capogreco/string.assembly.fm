@@ -374,7 +374,7 @@ class SynthApp {
       validateMessage(message);
     } catch (error) {
       Logger.log(`Invalid message from ${controllerId}: ${error.message}`, "error");
-      console.error("[ERROR] Invalid message:", message, error);
+      Logger.log("[ERROR] Invalid message:", message, error, 'error');
       return;
     }
     
@@ -391,9 +391,9 @@ class SynthApp {
 
       case MessageTypes.PROGRAM:
         // Receive program from controller
-        console.log("[DEBUG] Received program message:", message);
-        console.log("[DEBUG] Program has parts:", !!message.program?.parts);
-        console.log("[DEBUG] Program parts:", message.program?.parts);
+        Logger.log(`"[DEBUG] Received program message:", message`, 'messages');
+        Logger.log(`"[DEBUG] Program has parts:", !!message.program?.parts`, 'messages');
+        Logger.log(`"[DEBUG] Program parts:", message.program?.parts`, 'messages');
         
         // Use SynthClient to handle complete program message
         this.synthClient.handleProgram(message);
@@ -401,12 +401,12 @@ class SynthApp {
 
       case MessageTypes.COMMAND:
         // Handle commands
-        console.log("[DEBUG] Received command:", message);
+        Logger.log(`"[DEBUG] Received command:", message`, 'messages');
         
         if (message.name === "power") {
           // Handle power on/off
           const powerOn = message.value;
-          console.log(`[DEBUG] Setting power to: ${powerOn}`);
+          Logger.log(`[DEBUG] Setting power to: ${powerOn}`, 'parameters');
           this.synthClient.setPower(powerOn);
         } else if (message.data && message.data.type === "request-state") {
           // DEPRECATED: State requests removed - use ping/pong for state updates
@@ -641,30 +641,30 @@ window.synthApp = synthApp;
 // Add debug functions
 window.debugSynth = {
   showControllers: () => {
-    console.log("[DEBUG] Current controllers:");
+    Logger.log("[DEBUG] Current controllers:", 'debug');
     synthApp.controllers.forEach((controller, id) => {
-      console.log(`  ${id}: connected=${controller.connected}, state=${controller.connection?.connectionState}`);
+      Logger.log(`  ${id}: connected=${controller.connected}, state=${controller.connection?.connectionState}`, 'lifecycle');
     });
   },
   
   requestControllers: () => {
-    console.log("[DEBUG] Manually requesting controllers list");
+    Logger.log("[DEBUG] Manually requesting controllers list", 'debug');
     if (synthApp.ws && synthApp.ws.readyState === WebSocket.OPEN) {
       synthApp.ws.send(JSON.stringify({
         type: "request-controllers",
         source: synthApp.synthId
       }));
     } else {
-      console.log("[DEBUG] WebSocket not connected");
+      Logger.log("[DEBUG] WebSocket not connected", 'connections');
     }
   },
   
   showCanvasInfo: () => {
-    console.log("[DEBUG] Canvas info:");
-    console.log("  Element:", synthApp.canvas);
-    console.log("  Visualizer:", synthApp.visualizer);
-    console.log("  Dimensions:", synthApp.canvas?.width, "x", synthApp.canvas?.height);
-    console.log("  Class:", synthApp.canvas?.className);
-    console.log("  Computed style opacity:", window.getComputedStyle(synthApp.canvas).opacity);
+    Logger.log("[DEBUG] Canvas info:", 'debug');
+    Logger.log(`"  Element:", synthApp.canvas`, 'lifecycle');
+    Logger.log(`"  Visualizer:", synthApp.visualizer`, 'lifecycle');
+    Logger.log(`"  Dimensions:", synthApp.canvas?.width, "x", synthApp.canvas?.height`, 'lifecycle');
+    Logger.log(`"  Class:", synthApp.canvas?.className`, 'lifecycle');
+    Logger.log(`"  Computed style opacity:", window.getComputedStyle(synthApp.canvas).opacity`, 'lifecycle');
   }
 };
