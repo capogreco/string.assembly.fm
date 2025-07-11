@@ -105,13 +105,17 @@ function initializeState() {
   // Subscribe to state changes for debugging
   if (Logger.categories.lifecycle) {
     appState.subscribeAll((key, newValue, oldValue) => {
-      // Only log high-level state changes, skip verbose synth data
-      if (key === "connections.synths") {
-        // Just log count changes instead of full synth data
-        const synthCount = newValue instanceof Map ? newValue.size : 0;
-        Logger.log(`State change: ${key} = ${synthCount} synths connected`, "lifecycle");
-      } else if (!key.includes(".synths.") && !key.includes("latency")) {
-        // Log other state changes but skip individual synth updates and latency spam
+      // Filter out verbose/repetitive state changes
+      const skipKeys = [
+        'connections.synths',
+        'connections.metrics.averageLatency',
+        'ui.parameters.changed',
+        'performance.currentProgram.chord.frequencies',
+        'performance.currentProgram.parts.assignments'
+      ];
+      
+      // Skip if it's a key we want to filter or if it contains synth-specific data
+      if (!skipKeys.includes(key) && !key.includes(".synths.") && !key.includes("latency")) {
         let formattedValue;
         if (newValue instanceof Map) {
           formattedValue = `Map(${newValue.size})`;
@@ -251,6 +255,11 @@ async function initializeUI() {
   // Update bank display to show any saved banks
   updateBankDisplay();
   updateActiveProgramDisplay();
+  
+  // Update expression group visibility on startup (with a small delay to ensure DOM is ready)
+  setTimeout(() => {
+    updateExpressionGroupVisibility();
+  }, 100);
 
   Logger.log("UI layer initialized", "lifecycle");
 }
@@ -477,25 +486,78 @@ function setupUIEventHandlers() {
   pianoKeyboard.on("chordChanged", (data) => {
     Logger.log(`Chord updated: ${data.noteNames.join(", ")}`, "expressions");
 
-    // Update part manager
-    partManager.setChord(data.chord);
-
+    // NOTE: In the new parts paradigm, chord changes should happen through
+    // part:added and part:removed events. This handler is kept for compatibility
+    // but should not modify parts directly.
+    
     // Update legacy app state for compatibility
     appState.setNested('performance.currentProgram.chord.frequencies', data.chord);
+    
+    // Do NOT call partManager.setChord here as it would wipe out expressions
+    // Parts are managed through part:added/part:removed events
+    
+    // Update expression group visibility
+    setTimeout(() => {
+      updateExpressionGroupVisibility();
+    }, 10);
   });
 
-  // Handle expression changes from piano
+  // Handle part added from piano
+  eventBus.on("part:added", (data) => {
+    Logger.log(`Part added: ${data.note} (${data.part.frequency}Hz) with ${data.part.expression.type}`, "expressions");
+    
+    // Add the complete part using new parts paradigm
+    partManager.addPartNew(data.part);
+    
+    // Update expression group visibility immediately
+    updateExpressionGroupVisibility();
+    // Do NOT update active program display - that only shows what was sent/loaded
+  });
+  
+  // Handle part removed from piano
+  eventBus.on("part:removed", (data) => {
+    Logger.log(`Part removed: ${data.partId}`, "expressions");
+    
+    // Remove the part using new parts paradigm
+    partManager.removePart(data.partId);
+    
+    // Update expression group visibility immediately
+    updateExpressionGroupVisibility();
+    // Do NOT update active program display - that only shows what was sent/loaded
+  });
+  
+  // Handle parts updated event (e.g., from bank load)
+  eventBus.on("parts:updated", (data) => {
+    Logger.log(`Parts updated from ${data.source}`, "expressions");
+    // Only update active program display if this is from a bank load
+    if (data.source === 'bankLoad') {
+      updateActiveProgramDisplay();
+    }
+    updateExpressionGroupVisibility();
+  });
+  
+  // Keep expression:changed handler for backwards compatibility
+  // This will be removed once all code is using the parts paradigm
   eventBus.on("expression:changed", (data) => {
+    Logger.log(`expression:changed event received (legacy): note=${data.note}, type=${data.expression?.type || 'null'}`, "expressions");
+    
+    // Note: This handler will be removed in the final cleanup
+    // For now, log a warning that old paradigm is still in use
+    Logger.log("WARNING: expression:changed event is deprecated. Use part:added/part:removed instead", "warn");
+    
     if (data.note && data.expression) {
       Logger.log(
-        `Expression assigned: ${data.note} = ${data.expression.type}`,
+        `Expression assigned (legacy): ${data.note} = ${data.expression.type}`,
         "expressions",
       );
       partManager.setNoteExpression(data.note, data.expression);
     } else if (data.note && !data.expression) {
-      Logger.log(`Expression removed: ${data.note}`, "expressions");
+      Logger.log(`Expression removed (legacy): ${data.note}`, "expressions");
       partManager.setNoteExpression(data.note, null);
     }
+    
+    // Update expression group visibility
+    updateExpressionGroupVisibility();
   });
 
   // Handle program save/load UI feedback
@@ -535,12 +597,13 @@ function setupUIEventHandlers() {
  */
 
 /**
- * Update active program display
+ * Update active program display (shows what was last sent/loaded)
  */
 function updateActiveProgramDisplay() {
   const activeProgramDisplay = document.getElementById('active-program-display');
   if (!activeProgramDisplay) return;
   
+  // Get the ACTIVE program from programState (not current editing state)
   const activeProgram = programState.activeProgram;
   
   if (!activeProgram) {
@@ -558,12 +621,41 @@ function updateActiveProgramDisplay() {
   
   let chordDisplay = '<span style="color: #64748b;">No chord</span>';
   
-  if (activeProgram.chord && activeProgram.chord.frequencies && activeProgram.chord.frequencies.length > 0) {
-    // Convert frequencies to note names with expressions
+  // Check if activeProgram has parts (new paradigm)
+  if (activeProgram.parts && activeProgram.parts.length > 0) {
+    Logger.log(`Active program has ${activeProgram.parts.length} parts`, 'ui');
+    
+    // Convert parts to display strings
+    const noteStrings = activeProgram.parts.map(part => {
+      const noteName = AudioUtilities.frequencyToNoteName(part.frequency);
+      
+      // Check if this part has an expression
+      if (part.expression && part.expression.type !== 'none') {
+        const expr = part.expression;
+        switch (expr.type) {
+          case 'vibrato':
+            return `<span style="color: ${EXPRESSION_COLORS.vibrato};">${noteName}v${Math.round((expr.depth || 0.01) * 100)}</span>`;
+          case 'tremolo':
+            return `<span style="color: ${EXPRESSION_COLORS.tremolo};">${noteName}t${Math.round((expr.articulation || 0.8) * 100)}</span>`;
+          case 'trill':
+            const trillNote = expr.targetNote || AudioUtilities.frequencyToNoteName(part.frequency * Math.pow(2, (expr.interval || 2) / 12));
+            return `<span style="color: ${EXPRESSION_COLORS.trill};">${noteName}(→${trillNote})</span>`;
+          default:
+            return `<span style="color: ${EXPRESSION_COLORS.none};">${noteName}</span>`;
+        }
+      }
+      return `<span style="color: ${EXPRESSION_COLORS.none};">${noteName}</span>`;
+    });
+    
+    chordDisplay = noteStrings.join(' ');
+  } else if (activeProgram.chord && activeProgram.chord.frequencies && activeProgram.chord.frequencies.length > 0) {
+    // Fallback to old paradigm for compatibility
+    Logger.log(`Active program using old paradigm: ${activeProgram.chord.frequencies.length} frequencies`, 'ui');
+    
     const noteStrings = activeProgram.chord.frequencies.map(freq => {
       const noteName = AudioUtilities.frequencyToNoteName(freq);
       
-      // Check if this note has an expression
+      // Check for expressions in old format
       if (activeProgram.chord.expressions && activeProgram.chord.expressions[noteName]) {
         const expr = activeProgram.chord.expressions[noteName];
         switch (expr.type) {
@@ -588,6 +680,54 @@ function updateActiveProgramDisplay() {
 }
 
 /**
+ * Update expression group visibility based on current parts
+ */
+function updateExpressionGroupVisibility() {
+  const partManager = appState.get('partManager');
+  if (!partManager) {
+    Logger.log('updateExpressionGroupVisibility: No partManager found', 'ui');
+    return;
+  }
+  
+  // Track which expression types are active
+  const activeExpressions = new Set();
+  
+  // Check all parts for expressions
+  const parts = partManager.getParts();
+  Logger.log(`Checking ${parts.length} parts for active expressions`, 'ui');
+  
+  parts.forEach(part => {
+    if (part.hasExpression()) {
+      activeExpressions.add(part.expression.type);
+      Logger.log(`  Found ${part.expression.type} on part ${part.id}`, 'ui');
+    }
+  });
+  
+  // Update visibility of expression groups
+  const expressionTypes = ['vibrato', 'trill', 'tremolo'];
+  expressionTypes.forEach(type => {
+    const group = document.querySelector(`.expression-group.${type}`);
+    if (group) {
+      if (activeExpressions.has(type)) {
+        group.classList.add('active');
+        Logger.log(`  Showing ${type} group - classList: ${group.classList.toString()}`, 'ui');
+        // Force style recalculation
+        group.style.display = 'block';
+      } else {
+        group.classList.remove('active');
+        Logger.log(`  Hiding ${type} group - classList: ${group.classList.toString()}`, 'ui');
+        // Force style recalculation
+        group.style.display = 'none';
+      }
+    } else {
+      Logger.log(`  No element found for .expression-group.${type}`, 'ui');
+    }
+  });
+  
+  Logger.log(`Expression groups updated - active: ${Array.from(activeExpressions).join(', ') || 'none'}`, 'ui');
+}
+
+/**
  * Update bank selector display
  */
 function updateBankDisplay() {
@@ -608,8 +748,35 @@ function updateBankDisplay() {
         const program = bank.program;
         let chordDisplay = 'No chord';
         
-        if (program && program.chord && program.chord.frequencies && program.chord.frequencies.length > 0) {
-          // Convert frequencies to note names with expressions
+        // Check if program has parts (new paradigm)
+        if (program && program.parts && program.parts.length > 0) {
+          Logger.log(`Bank ${bank.id} has ${program.parts.length} parts`, 'ui');
+          // Convert parts to display strings
+          const noteStrings = program.parts.map(part => {
+            const noteName = AudioUtilities.frequencyToNoteName(part.frequency);
+            Logger.log(`  Part: ${noteName} expr=${part.expression?.type || 'undefined'}`, 'ui');
+            
+            // Check if this part has an expression
+            if (part.expression && part.expression.type !== 'none') {
+              const expr = part.expression;
+              switch (expr.type) {
+                case 'vibrato':
+                  return `${noteName}v${Math.round((expr.depth || 0.01) * 100)}`;
+                case 'tremolo':
+                  return `${noteName}t${Math.round((expr.articulation || 0.8) * 100)}`;
+                case 'trill':
+                  const trillNote = expr.targetNote || AudioUtilities.frequencyToNoteName(part.frequency * Math.pow(2, (expr.interval || 2) / 12));
+                  return `${noteName}(→${trillNote})`;
+                default:
+                  return noteName;
+              }
+            }
+            return noteName;
+          });
+          
+          chordDisplay = noteStrings.join(' ');
+        } else if (program && program.chord && program.chord.frequencies && program.chord.frequencies.length > 0) {
+          // Fallback to old paradigm for backwards compatibility
           const noteStrings = program.chord.frequencies.map(freq => {
             const noteName = AudioUtilities.frequencyToNoteName(freq);
             
@@ -659,6 +826,9 @@ function updateBankDisplay() {
           } else {
             // Normal click: Load and send to synths
             if (programState.loadFromBank(bankId)) {
+              
+              // Update expression group visibility after loading bank
+              updateExpressionGroupVisibility();
               
               // Get current transition parameters
               const transitionParams = parameterControls.getAllParameterValues();
@@ -898,6 +1068,10 @@ function setupGlobalEventListeners() {
         event.preventDefault();
         event.stopPropagation();
         
+        // Update active program with current state before saving
+        programState.captureFromUI();
+        programState.setActiveProgram();
+        
         // Save active program to bank using ProgramState
         const success = programState.saveToBank(bankId);
         
@@ -1115,6 +1289,15 @@ function setupQuickSaveButton() {
         return;
       }
       
+      // Update active program with current state before saving
+      programState.captureFromUI();
+      
+      // Ensure parts are properly distributed before capturing
+      partManager.redistributePartsNew();
+      
+      // Set active program which will capture current parts
+      programState.setActiveProgram();
+      
       // Save to the next available bank
       const success = programState.saveToBank(nextAvailableBank);
       
@@ -1142,9 +1325,11 @@ function setupQuickSaveButton() {
         }
         
         
-        // Update bank display
-        updateBankDisplay();
-        updateActiveProgramDisplay();
+        // Update bank display with a small delay to ensure state is saved
+        setTimeout(() => {
+          updateBankDisplay();
+          updateActiveProgramDisplay();
+        }, 50);
         
         // Visual feedback on button
         quickSaveButton.textContent = `✓ Bank ${nextAvailableBank}`;
@@ -1269,8 +1454,8 @@ window.sendCurrentProgram = async () => {
     // Capture current state from UI
     programState.captureFromUI();
     
-    // Update chord and expressions in program state
-    programState.updateChord(partManager.currentChord, Object.fromEntries(partManager.noteExpressions));
+    // Update chord in program state (expressions now live on parts)
+    programState.updateChord(partManager.currentChord);
     
     // Update harmonic selections
     const harmonicSelections = appState.getNested('performance.currentProgram.harmonicSelections');
@@ -1282,6 +1467,9 @@ window.sendCurrentProgram = async () => {
     
     // Update selected expression
     programState.currentProgram.selectedExpression = appState.getNested('ui.expressions.selected') || 'none';
+    
+    // Ensure parts are properly distributed before sending
+    partManager.redistributePartsNew();
     
     // Send to synths
     const result = await partManager.sendCurrentPart();
@@ -1301,6 +1489,9 @@ window.sendCurrentProgram = async () => {
       
       // Update status badge to show synced
       updateSyncStatus();
+      
+      // Update active program display to show expressions
+      updateActiveProgramDisplay();
     }
 
     return result;
@@ -1330,6 +1521,18 @@ function updateSyncStatus() {
 
 // Make it globally available
 window.updateSyncStatus = updateSyncStatus;
+window.updateExpressionGroupVisibility = updateExpressionGroupVisibility;
+
+// Debug function to manually show expression groups
+window.showExpressionGroup = (type) => {
+  const group = document.querySelector(`.expression-group.${type}`);
+  if (group) {
+    group.classList.add('active');
+    Logger.log(`Manually showed ${type} group`, 'ui');
+  } else {
+    Logger.log(`No element found for .expression-group.${type}`, 'ui');
+  }
+};
 
 /**
  * Send current program to all connected synths

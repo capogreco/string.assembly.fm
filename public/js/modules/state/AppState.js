@@ -36,13 +36,11 @@ export class AppState {
           parameters: {}, // Will be populated by ProgramState
           chord: {
             frequencies: [],
-            noteNames: [],
-            expressions: {} // { noteName: { type, parameters } }
+            noteNames: []
           },
           harmonicSelections: this.#initializeHarmonicSelections(),
-          parts: {
-            assignments: new Map() // Map<synthId, { frequency, expression }>
-          }
+          parts: [], // Array of Part objects (new paradigm)
+          partsAssignments: new Map() // Map<synthId, { frequency, expression, partId }> (temporary for compatibility)
         },
         activeProgram: null, // What's running on synths
         transitions: {

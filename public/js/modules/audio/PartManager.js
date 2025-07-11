@@ -13,6 +13,7 @@ import { appState } from "../state/AppState.js";
 import { Logger } from "../core/Logger.js";
 import { programState } from "../state/ProgramState.js";
 import { ParameterResolver } from "./ParameterResolver.js";
+import { Part } from "./Part.js";
 
 export class PartManager {
   constructor() {
@@ -30,15 +31,177 @@ export class PartManager {
   get currentChord() {
     return this.appState.getNested('performance.currentProgram.chord.frequencies') || [];
   }
-
+  
   /**
-   * Get note expressions from AppState
+   * Get current parts (frequency + expression pairs)
    * @private
    */
-  get noteExpressions() {
-    const expressions = this.appState.getNested('performance.currentProgram.chord.expressions') || {};
-    return new Map(Object.entries(expressions));
+  get currentParts() {
+    return this.appState.getNested('performance.currentProgram.parts.current') || [];
   }
+  
+  // ========== NEW PARTS PARADIGM METHODS ==========
+  
+  /**
+   * Set the complete parts array (replaces the chord)
+   * @param {Part[]} parts - Array of Part objects
+   */
+  setParts(parts) {
+    // Validate parts
+    const validParts = parts.filter(p => p instanceof Part || (p && p.frequency));
+    
+    // Convert plain objects to Part instances if needed
+    const partInstances = validParts.map(p => {
+      if (p instanceof Part) {
+        return p;
+      } else {
+        return Part.fromObject(p);
+      }
+    });
+    
+    // Store in app state as plain objects (to avoid serialization issues)
+    const plainParts = partInstances.map(p => p.toObject());
+    this.appState.setNested('performance.currentProgram.parts', plainParts);
+    
+    // Update legacy frequency array for compatibility (temporary)
+    const frequencies = partInstances.map(p => p.frequency);
+    this.appState.setNested('performance.currentProgram.chord.frequencies', frequencies);
+    
+    // Mark as changed for sync tracking
+    this.appState.markParameterChanged("parts");
+    
+    // Update sync status
+    if (window.updateSyncStatus) {
+      window.updateSyncStatus();
+    }
+    
+    // Redistribute parts to synths
+    this.redistributePartsNew();
+    
+    Logger.log(`Set ${partInstances.length} parts`, 'parts');
+  }
+  
+  /**
+   * Add a part to the chord
+   * @param {Part} part - Part object to add
+   */
+  addPartNew(part) {
+    try {
+      const currentParts = [...this.getParts()];
+      currentParts.push(part);
+      this.setParts(currentParts);
+      
+      Logger.log(`Added part ${part.id}: ${part.frequency}Hz with ${part.expression.type}`, 'parts');
+    } catch (error) {
+      Logger.log(`Error in addPartNew: ${error.message}`, 'error');
+      Logger.log(`Part data: ${JSON.stringify(part)}`, 'error');
+      throw error;
+    }
+  }
+  
+  /**
+   * Remove a part by ID
+   * @param {string} partId - ID of part to remove
+   */
+  removePart(partId) {
+    try {
+      const currentParts = this.getParts().filter(p => p.id !== partId);
+      this.setParts(currentParts);
+      
+      Logger.log(`Removed part ${partId}`, 'parts');
+    } catch (error) {
+      Logger.log(`Error in removePart: ${error.message}`, 'error');
+      Logger.log(`PartId: ${partId}`, 'error');
+      throw error;
+    }
+  }
+  
+  /**
+   * Update a part's properties
+   * @param {string} partId - ID of part to update
+   * @param {Object} updates - Properties to update {frequency?, expression?}
+   */
+  updatePart(partId, updates) {
+    const currentParts = this.getParts();
+    const index = currentParts.findIndex(p => p.id === partId);
+    
+    if (index === -1) {
+      Logger.log(`Part ${partId} not found for update`, 'warn');
+      return;
+    }
+    
+    // Create new part with updates (immutable)
+    const updatedPart = currentParts[index].update(updates);
+    
+    // Replace in array
+    const newParts = [...currentParts];
+    newParts[index] = updatedPart;
+    
+    this.setParts(newParts);
+    
+    Logger.log(`Updated part ${partId}`, 'parts');
+  }
+  
+  /**
+   * Get current parts array
+   * @returns {Part[]} Array of Part objects
+   */
+  getParts() {
+    const stored = this.appState.getNested('performance.currentProgram.parts');
+    
+    // Ensure we have an array
+    if (!stored || !Array.isArray(stored)) {
+      return [];
+    }
+    
+    // Ensure they're Part instances
+    return stored.map(p => p instanceof Part ? p : Part.fromObject(p));
+  }
+  
+  /**
+   * Redistribute parts to connected synths using the new paradigm
+   */
+  redistributePartsNew() {
+    const connectedSynths = this.appState.getNested('connections.synths');
+    if (!connectedSynths || connectedSynths.size === 0) {
+      this.setSynthAssignments(new Map());
+      return;
+    }
+    
+    const synthIds = Array.from(connectedSynths.keys());
+    const parts = this.getParts();
+    const assignments = new Map();
+    
+    if (parts.length === 0) {
+      // No parts - clear assignments
+      this.setSynthAssignments(assignments);
+      return;
+    }
+    
+    // Distribute parts to synths
+    synthIds.forEach((synthId, index) => {
+      // For note allocation: when there are fewer parts than synths,
+      // multiple synths will play the same part (unison)
+      const partIndex = index % parts.length;
+      const part = parts[partIndex];
+      
+      // Store the complete part as the assignment
+      const assignment = {
+        frequency: part.frequency,
+        expression: part.expression,
+        partId: part.id
+      };
+      assignments.set(synthId, assignment);
+      
+      const mode = parts.length < synthIds.length ? ' (unison)' : '';
+      Logger.log(`  Assigned to ${synthId}: ${this.frequencyToNoteName(part.frequency)} with ${part.expression?.type || 'none'}${mode}`, 'parts');
+    });
+    
+    this.setSynthAssignments(assignments);
+    
+    Logger.log(`Redistributed ${parts.length} parts to ${synthIds.length} synths`, 'parts');
+  }
+
 
   /**
    * Get harmonic selections from AppState
@@ -115,32 +278,26 @@ export class PartManager {
   }
 
   /**
-   * Set the current chord
+   * Set the current chord (LEGACY - should not be used with parts paradigm)
    * @param {number[]} frequencies - Array of frequencies
    */
   setChord(frequencies) {
-    // Update app state
+    Logger.log('WARNING: setChord called - this should not be used with parts paradigm', 'warn');
+    
+    // Clear existing parts first
+    this.setParts([]);
+    
+    // Create new parts from frequencies (without expressions)
+    const newParts = frequencies.map(freq => new Part(freq, { type: 'none' }));
+    this.setParts(newParts);
+    
+    // Update legacy state for compatibility
     this.appState.setNested('performance.currentProgram.chord.frequencies', [...frequencies]);
     
-    // Clean up expressions for notes no longer in chord
-    const currentNotes = new Set(
-      frequencies.map((f) => this.frequencyToNoteName(f)),
-    );
-    const expressions = this.appState.getNested('performance.currentProgram.chord.expressions') || {};
-    const newExpressions = {};
-    
-    // Keep only expressions for notes in the current chord
-    for (const [noteName, expression] of Object.entries(expressions)) {
-      if (currentNotes.has(noteName)) {
-        newExpressions[noteName] = expression;
-      }
-    }
-    
-    // Update expressions in AppState
-    this.appState.setNested('performance.currentProgram.chord.expressions', newExpressions);
-
     // Update ProgramState
-    programState.updateChord(frequencies, newExpressions);
+    if (programState) {
+      programState.updateChord(frequencies);
+    }
     
     // Mark as changed for sync tracking
     this.appState.markParameterChanged("chord");
@@ -149,10 +306,32 @@ export class PartManager {
     if (window.updateSyncStatus) {
       window.updateSyncStatus();
     }
+  }
 
-    // Redistribute if we have synths
-    this.redistributeToSynths();
-
+  /**
+   * Add a part (frequency + expression) to the chord
+   * @param {number} frequency - Frequency in Hz
+   * @param {Object} expression - Expression object {type, ...params}
+   */
+  addPart(frequency, expression) {
+    // Get current chord
+    const currentChord = [...this.currentChord];
+    
+    // Store expression for this frequency temporarily so redistribution can pick it up
+    if (!this.pendingExpressions) {
+      this.pendingExpressions = new Map();
+    }
+    this.pendingExpressions.set(frequency, expression);
+    
+    // Add frequency if not already present
+    if (!currentChord.includes(frequency)) {
+      currentChord.push(frequency);
+      this.setChord(currentChord);
+    } else {
+      // Frequency already in chord, but we have a new expression
+      // Need to redistribute to apply the expression
+      this.redistributeToSynths();
+    }
   }
 
   /**
@@ -161,21 +340,58 @@ export class PartManager {
    * @param {Object} expression - Expression object {type, ...params}
    */
   setNoteExpression(noteName, expression) {
-    // Get current expressions from AppState
-    const expressions = this.appState.getNested('performance.currentProgram.chord.expressions') || {};
-    const newExpressions = { ...expressions };
+    Logger.log(`setNoteExpression called: note=${noteName}, expression=${JSON.stringify(expression)}`, 'expressions');
     
-    if (expression && expression.type && expression.type !== "none") {
-      newExpressions[noteName] = expression;
-    } else {
-      delete newExpressions[noteName];
+    // Validate input
+    if (!noteName) {
+      Logger.log('setNoteExpression: noteName is null or undefined', 'warn');
+      return;
     }
-
-    // Update AppState
-    this.appState.setNested('performance.currentProgram.chord.expressions', newExpressions);
-
-    // Update ProgramState
-    programState.updateNoteExpression(noteName, expression);
+    
+    // Convert note name to frequency to find which synth has this note
+    const frequency = this.noteNameToFrequency(noteName);
+    Logger.log(`  Converted ${noteName} to frequency ${frequency}`, 'expressions');
+    Logger.log(`  Current chord: ${JSON.stringify(this.currentChord)}`, 'expressions');
+    Logger.log(`  Current assignments: ${this.synthAssignments?.size || 0}`, 'expressions');
+    
+    // Find which synth has this frequency
+    let synthIdWithNote = null;
+    for (const [synthId, assignment] of this.synthAssignments) {
+      // Compare frequencies with small tolerance for floating point
+      if (Math.abs(assignment.frequency - frequency) < 0.01) {
+        synthIdWithNote = synthId;
+        break;
+      }
+    }
+    
+    if (synthIdWithNote) {
+      // Update the expression on the assignment
+      const assignment = this.synthAssignments.get(synthIdWithNote);
+      if (expression && expression.type && expression.type !== "none") {
+        assignment.expression = expression;
+      } else {
+        assignment.expression = { type: "none" };
+      }
+      
+      // Update in AppState
+      this.setSynthAssignments(this.synthAssignments);
+      
+      Logger.log(
+        `Expression set on ${synthIdWithNote}: ${noteName} -> ${expression?.type || "none"}`,
+        "expressions",
+      );
+      Logger.log(`  Updated assignment: ${JSON.stringify(assignment)}`, 'expressions');
+    } else {
+      Logger.log(
+        `Cannot set expression: note ${noteName} not found in current assignments`,
+        "warn",
+      );
+      Logger.log(`  Current assignments:`, 'expressions');
+      for (const [synthId, assignment] of this.synthAssignments) {
+        const assignedNote = this.frequencyToNoteName(assignment.frequency);
+        Logger.log(`    ${synthId}: ${assignedNote} (${assignment.frequency}Hz)`, 'expressions');
+      }
+    }
     
     // Mark as changed for sync tracking
     this.appState.markParameterChanged(`expression_${noteName}`);
@@ -184,11 +400,30 @@ export class PartManager {
     if (window.updateSyncStatus) {
       window.updateSyncStatus();
     }
-
-    Logger.log(
-      `Expression set: ${noteName} -> ${expression?.type || "none"}`,
-      "expressions",
-    );
+  }
+  
+  /**
+   * Convert note name to frequency
+   * @param {string} noteName - Note name (e.g., "C4")
+   * @returns {number} Frequency in Hz
+   */
+  noteNameToFrequency(noteName) {
+    const A4 = 440;
+    const noteRegex = /^([A-G])(#|b)?(\d)$/;
+    const match = noteName.match(noteRegex);
+    
+    if (!match) return 0;
+    
+    const [, note, accidental, octave] = match;
+    const noteOffsets = { C: -9, D: -7, E: -5, F: -4, G: -2, A: 0, B: 2 };
+    
+    let semitones = noteOffsets[note];
+    if (accidental === '#') semitones += 1;
+    if (accidental === 'b') semitones -= 1;
+    
+    semitones += (parseInt(octave) - 4) * 12;
+    
+    return A4 * Math.pow(2, semitones / 12);
   }
 
   /**
@@ -217,7 +452,7 @@ export class PartManager {
    * @private
    */
   get synthAssignments() {
-    return this.appState.getNested('performance.currentProgram.parts.assignments') || new Map();
+    return this.appState.getNested('performance.currentProgram.partsAssignments') || new Map();
   }
 
   /**
@@ -225,7 +460,7 @@ export class PartManager {
    * @private
    */
   setSynthAssignments(assignments) {
-    this.appState.setNested('performance.currentProgram.parts.assignments', assignments);
+    this.appState.setNested('performance.currentProgram.partsAssignments', assignments);
   }
 
   /**
@@ -251,14 +486,29 @@ export class PartManager {
     synthIds.forEach((synthId, index) => {
       const noteIndex = index % this.currentChord.length;
       const frequency = this.currentChord[noteIndex];
-      const noteName = this.frequencyToNoteName(frequency);
-      const expression = this.noteExpressions.get(noteName) || { type: "none" };
+      
+      // Check for pending expression for this frequency
+      let expression = { type: "none" };
+      if (this.pendingExpressions && this.pendingExpressions.has(frequency)) {
+        expression = this.pendingExpressions.get(frequency);
+      } else {
+        // Check if this synth previously had an expression for this frequency
+        const oldAssignment = this.synthAssignments.get(synthId);
+        if (oldAssignment && Math.abs(oldAssignment.frequency - frequency) < 0.01) {
+          expression = oldAssignment.expression || { type: "none" };
+        }
+      }
       
       assignments.set(synthId, {
         frequency,
         expression,
       });
     });
+    
+    // Clear pending expressions after use
+    if (this.pendingExpressions) {
+      this.pendingExpressions.clear();
+    }
 
     this.setSynthAssignments(assignments);
   }
@@ -309,11 +559,20 @@ export class PartManager {
       ? this.parameterResolver.resolveForSynth(synthId, assignment, baseProgram, transitionConfig)
       : baseProgram; // Send base program without assignment to silence
     
+    // Build expressions from current assignments
+    const expressions = {};
+    for (const [id, assign] of this.synthAssignments) {
+      const noteName = this.frequencyToNoteName(assign.frequency);
+      if (assign.expression && assign.expression.type !== "none") {
+        expressions[noteName] = assign.expression;
+      }
+    }
+    
     // Build complete message
     const programMessage = this.parameterResolver.buildProgramMessage(resolvedProgram, {
       chord: {
         frequencies: [...this.currentChord],
-        expressions: Object.fromEntries(this.noteExpressions)
+        expressions: expressions
       },
       parts: Object.fromEntries(this.synthAssignments),
       power: powerState
@@ -391,12 +650,21 @@ export class PartManager {
     // Get current power state (powerCheckbox already declared above)
     const powerState = powerCheckbox ? powerCheckbox.checked : true;
     
+    // Build expressions from current assignments
+    const expressions = {};
+    for (const [id, assign] of this.synthAssignments) {
+      const noteName = this.frequencyToNoteName(assign.frequency);
+      if (assign.expression && assign.expression.type !== "none") {
+        expressions[noteName] = assign.expression;
+      }
+    }
+    
     // Create the program message with current assignments (may be empty!)
     const programMessage = {
       ...baseProgram,
       chord: {
         frequencies: [...this.currentChord],
-        expressions: Object.fromEntries(this.noteExpressions)
+        expressions: expressions
       },
       parts: Object.fromEntries(this.synthAssignments),
       transition: transitionConfig,
@@ -420,7 +688,7 @@ export class PartManager {
         const synthProgramMessage = this.parameterResolver.buildProgramMessage(resolvedProgram, {
           chord: {
             frequencies: [...this.currentChord],
-            expressions: Object.fromEntries(this.noteExpressions)
+            expressions: expressions  // Use the expressions we built above
           },
           parts: Object.fromEntries(this.synthAssignments),
           power: powerState
@@ -504,11 +772,20 @@ export class PartManager {
           { duration: 0, stagger: 0, durationSpread: 0 } // No transition for request
         );
         
+        // Build expressions from current assignments
+        const expressions = {};
+        for (const [id, assign] of this.synthAssignments) {
+          const noteName = this.frequencyToNoteName(assign.frequency);
+          if (assign.expression && assign.expression.type !== "none") {
+            expressions[noteName] = assign.expression;
+          }
+        }
+        
         // Build complete message
         const programMessage = this.parameterResolver.buildProgramMessage(resolvedProgram, {
           chord: {
             frequencies: [...this.currentChord],
-            expressions: Object.fromEntries(this.noteExpressions)
+            expressions: expressions
           },
           parts: Object.fromEntries(this.synthAssignments),
           power: this.lastSentProgram.baseProgram.powerOn || false
@@ -566,10 +843,19 @@ export class PartManager {
    * @returns {Object} Chord info
    */
   getChordInfo() {
+    // Build expressions from synthAssignments
+    const expressions = {};
+    for (const [synthId, assignment] of this.synthAssignments) {
+      const noteName = this.frequencyToNoteName(assignment.frequency);
+      if (assignment.expression && assignment.expression.type !== "none") {
+        expressions[noteName] = assignment.expression;
+      }
+    }
+    
     return {
       frequencies: [...this.currentChord],
       notes: this.currentChord.map((f) => this.frequencyToNoteName(f)),
-      expressions: Object.fromEntries(this.noteExpressions),
+      expressions: expressions,
       synthAssignments: Object.fromEntries(this.synthAssignments),
     };
   }
@@ -578,10 +864,14 @@ export class PartManager {
    * Clear current chord and expressions
    */
   clearPart() {
+    // Clear the parts array (new paradigm)
+    this.setParts([]);
+    
+    // Clear legacy state
     this.appState.setNested('performance.currentProgram.chord.frequencies', []);
-    this.appState.setNested('performance.currentProgram.chord.expressions', {});
     this.setSynthAssignments(new Map());
-    Logger.log("Part cleared", "parts");
+    
+    Logger.log("Parts cleared", "parts");
   }
 
   /**
@@ -591,11 +881,18 @@ export class PartManager {
   getStatistics() {
     const connectedSynths = this.appState.getNested('connections.synths') || new Map();
     const chord = this.currentChord;
-    const expressions = this.noteExpressions;
+    
+    // Count expressions from assignments
+    let expressionsCount = 0;
+    for (const [id, assignment] of this.synthAssignments) {
+      if (assignment.expression && assignment.expression.type !== "none") {
+        expressionsCount++;
+      }
+    }
 
     return {
       chordSize: chord.length,
-      expressionsCount: expressions.size,
+      expressionsCount: expressionsCount,
       connectedSynths: connectedSynths.size,
       assignedSynths: this.synthAssignments.size,
       lastSent: this.lastSentProgram?.timestamp || null,

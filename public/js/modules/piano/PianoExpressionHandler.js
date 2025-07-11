@@ -4,6 +4,8 @@
  * Adapted from SVGInteractiveExpression
  */
 
+import { Part } from '../audio/Part.js';
+
 export class PianoExpressionHandler {
   constructor(pianoKeyboard) {
     this.pianoKeyboard = pianoKeyboard;
@@ -659,13 +661,11 @@ export class PianoExpressionHandler {
     if (distance < this.DRAG_THRESHOLD) {
       // Simple click - toggle note in chord
       if (this.chordNotes.has(this.dragStartNote)) {
-        this.removeFromChord(this.dragStartNote);
+        this.removePartFromChord(this.dragStartNote);
       } else {
-        expression = { type: "none" };
-        // Set expression BEFORE adding to chord
-        this.setExpression(this.dragStartNote, expression);
-        this.addToChord(this.dragStartNote, this.dragStartFrequency);
-        expression = null; // Don't set it again later
+        // Create a part with no expression
+        const part = new Part(this.dragStartFrequency, { type: "none" });
+        this.createPartWithExpression(this.dragStartNote, part);
       }
     } else if (Math.abs(dx) > this.HORIZONTAL_THRESHOLD) {
       // Horizontal drag - trill
@@ -679,10 +679,9 @@ export class PianoExpressionHandler {
           speed: 8, // Base speed, modified later by harmonic ratios
           articulation: 0.7, // Default articulation for trill
         };
-        // Set expression BEFORE adding to chord to ensure it's available during redistribution
-        this.setExpression(this.dragStartNote, expression);
-        this.addToChord(this.dragStartNote, this.dragStartFrequency);
-        expression = null; // Don't set it again later
+        // Create a complete part and emit it
+        const part = new Part(this.dragStartFrequency, expression);
+        this.createPartWithExpression(this.dragStartNote, part);
       }
     } else if (dy < this.VIBRATO_THRESHOLD) {
       // Upward drag - vibrato
@@ -691,10 +690,9 @@ export class PianoExpressionHandler {
         depth: this.calculateExpressionDepth(dy, this.VIBRATO_THRESHOLD),
         rate: 4, // Base rate, modified later by harmonic ratios
       };
-      // Set expression BEFORE adding to chord
-      this.setExpression(this.dragStartNote, expression);
-      this.addToChord(this.dragStartNote, this.dragStartFrequency);
-      expression = null; // Don't set it again later
+      // Create a complete part and emit it
+      const part = new Part(this.dragStartFrequency, expression);
+      this.createPartWithExpression(this.dragStartNote, part);
     } else if (dy > this.TREMOLO_THRESHOLD) {
       // Downward drag - tremolo
       const tremoloArticulation = document.getElementById('tremoloArticulation');
@@ -704,10 +702,9 @@ export class PianoExpressionHandler {
         speed: 10, // Base speed, modified later by harmonic ratios
         articulation: tremoloArticulation ? parseFloat(tremoloArticulation.value) : 0.8,
       };
-      // Set expression BEFORE adding to chord
-      this.setExpression(this.dragStartNote, expression);
-      this.addToChord(this.dragStartNote, this.dragStartFrequency);
-      expression = null; // Don't set it again later
+      // Create a complete part and emit it
+      const part = new Part(this.dragStartFrequency, expression);
+      this.createPartWithExpression(this.dragStartNote, part);
     }
 
     // Set expression if determined
@@ -837,6 +834,80 @@ export class PianoExpressionHandler {
   }
 
   /**
+   * Create a part with expression and add to chord
+   * @param {string} note - Note name for UI tracking
+   * @param {Part} part - Complete part object
+   */
+  createPartWithExpression(note, part) {
+    if (!this.chordNotes.has(note)) {
+      this.chordNotes.add(note);
+      
+      // Store expression locally for UI
+      this.expressions.set(note, part.expression);
+      
+      // Store part ID for tracking
+      if (!this.partIdsByNote) {
+        this.partIdsByNote = new Map();
+      }
+      this.partIdsByNote.set(note, part.id);
+      
+      // Emit part creation event
+      this.pianoKeyboard.eventBus.emit("part:added", {
+        part: part,
+        note: note, // For UI reference
+        timestamp: Date.now(),
+      });
+    }
+
+    // Update chord display and visuals
+    this.updateChordDisplay();
+    this.updateKeyVisual(this.findKeyElement(note), note);
+  }
+  
+  /**
+   * Remove a part from the chord
+   * @param {string} note - Note name
+   */
+  removePartFromChord(note) {
+    if (!this.chordNotes.has(note)) return;
+    
+    this.chordNotes.delete(note);
+    
+    // Get part ID
+    const partId = this.partIdsByNote?.get(note);
+    if (partId) {
+      this.partIdsByNote.delete(note);
+      
+      // Emit part removal event
+      this.pianoKeyboard.eventBus.emit("part:removed", {
+        partId: partId,
+        note: note, // For UI reference
+        timestamp: Date.now(),
+      });
+    }
+    
+    // Clean up expression for this note
+    const oldExpression = this.expressions.get(note);
+    if (oldExpression) {
+      if (oldExpression.type === "trill" && oldExpression.targetNote) {
+        // Remove trill target from chord and related notes
+        this.chordNotes.delete(oldExpression.targetNote);
+        this.relatedNotes.delete(oldExpression.targetNote);
+        // Update target note visual
+        this.updateKeyVisual(
+          this.findKeyElement(oldExpression.targetNote),
+          oldExpression.targetNote,
+        );
+      }
+      this.expressions.delete(note);
+    }
+    
+    // Update visuals
+    this.updateChordDisplay();
+    this.updateKeyVisual(this.findKeyElement(note), note);
+  }
+
+  /**
    * Remove note from chord
    */
   removeFromChord(note) {
@@ -903,10 +974,7 @@ export class PianoExpressionHandler {
         `DEBUG setExpression: note=${note}, expression=${JSON.stringify(expression)}`,
         "expressions",
       );
-      window.Logger.log(
-        `DEBUG: Current expressions before update: ${JSON.stringify(this.pianoKeyboard.appState.get("expressions") || {})}`,
-        "expressions",
-      );
+      // In parts paradigm, expressions live on part assignments, not in appState
     }
 
     const oldExpression = this.expressions.get(note);
@@ -942,38 +1010,9 @@ export class PianoExpressionHandler {
       });
     }
 
-    // Update app state
-    const currentExpressions =
-      this.pianoKeyboard.appState.get("expressions") || {};
-
-    // Create a new object to ensure AppState detects the change
-    const newExpressions = { ...currentExpressions };
-
-    if (
-      !expression ||
-      expression.type === "removed" ||
-      expression.type === "none"
-    ) {
-      delete newExpressions[note];
-    } else {
-      newExpressions[note] = expression;
-    }
-
-    if (window.Logger) {
-      window.Logger.log(
-        `DEBUG: Setting expressions to appState: ${JSON.stringify(newExpressions)}`,
-        "expressions",
-      );
-    }
-
-    this.pianoKeyboard.appState.set("expressions", newExpressions);
-
-    if (window.Logger) {
-      window.Logger.log(
-        `DEBUG: After update, appState expressions: ${JSON.stringify(this.pianoKeyboard.appState.get("expressions"))}`,
-        "expressions",
-      );
-    }
+    // In the parts paradigm, we don't store expressions separately in appState
+    // They live on the part assignments in PartManager
+    // We just emit the event and let PartManager handle it
 
     // Update visuals for the affected note and any related notes
     this.updateKeyVisual(this.findKeyElement(note), note);
@@ -1002,7 +1041,7 @@ export class PianoExpressionHandler {
     // Emit expression change event
     if (window.Logger) {
       window.Logger.log(
-        `DEBUG: Emitting expression:changed event for note=${note}`,
+        `DEBUG: Emitting expression:changed event for note=${note}, expression=${expression?.type || 'null'}`,
         "expressions",
       );
     }
@@ -1137,9 +1176,23 @@ export class PianoExpressionHandler {
       return;
     }
 
+    // In parts paradigm, get expressions from part assignments
+    const partManager = this.pianoKeyboard.appState.get("partManager");
+    const expressionsFromParts = {};
+    
+    if (partManager && partManager.synthAssignments) {
+      for (const [synthId, assignment] of partManager.synthAssignments) {
+        const noteName = this.pianoKeyboard.frequencyToNoteName(assignment.frequency);
+        if (assignment.expression && assignment.expression.type !== "none") {
+          expressionsFromParts[noteName] = assignment.expression;
+        }
+      }
+    }
+
     const chordParts = [];
     for (const note of this.chordNotes) {
-      const expression = this.expressions.get(note);
+      // First check parts, then fall back to local expressions
+      const expression = expressionsFromParts[note] || this.expressions.get(note);
       const relation = this.relatedNotes.get(note);
 
       if (relation && relation.type === "trill-target") {
@@ -1207,9 +1260,19 @@ export class PianoExpressionHandler {
       this.pianoKeyboard.frequencyToNoteName(freq),
     );
 
-    // Load expressions from app state
-    const savedExpressions =
-      this.pianoKeyboard.appState.get("expressions") || {};
+    // In parts paradigm, load expressions from part assignments
+    const partManager = this.pianoKeyboard.appState.get("partManager");
+    const savedExpressions = {};
+    
+    if (partManager && partManager.synthAssignments) {
+      // Build expressions from part assignments
+      for (const [synthId, assignment] of partManager.synthAssignments) {
+        const noteName = this.pianoKeyboard.frequencyToNoteName(assignment.frequency);
+        if (assignment.expression && assignment.expression.type !== "none") {
+          savedExpressions[noteName] = assignment.expression;
+        }
+      }
+    }
 
     // Clear current expressions and load saved ones
     this.expressions.clear();

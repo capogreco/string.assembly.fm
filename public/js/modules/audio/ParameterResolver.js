@@ -31,7 +31,10 @@ export class ParameterResolver {
     
     // 3. Apply expression modifications with harmonic ratios
     if (assignment?.expression) {
+      Logger.log(`Applying expression ${assignment.expression.type} to ${synthId}`, 'parameters');
       program = this.applyExpression(program, assignment.expression);
+    } else {
+      Logger.log(`No expression for ${synthId}`, 'parameters');
     }
     
     // 4. Apply transition configuration
@@ -203,13 +206,20 @@ export class ParameterResolver {
    * @returns {Object} Complete message ready for network
    */
   buildProgramMessage(program, context) {
-    return {
+    const message = {
       ...program,
       chord: context.chord || { frequencies: [], expressions: {} },
       parts: context.parts || {},
       power: context.power !== undefined ? context.power : true,
       timestamp: Date.now()
     };
+    
+    // Debug log expression parameters being sent
+    if (program.vibratoEnabled || program.tremoloEnabled || program.trillEnabled) {
+      Logger.log(`Sending expression params: vibrato=${program.vibratoEnabled}, tremolo=${program.tremoloEnabled}, trill=${program.trillEnabled}`, 'parameters');
+    }
+    
+    return message;
   }
 }
 

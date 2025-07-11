@@ -18,8 +18,7 @@ class Program {
     
     // Musical state
     this.chord = {
-      frequencies: [],
-      expressions: {} // noteName -> expression data
+      frequencies: []
     };
     
     // Harmonic selections for expressions (default to [1])
@@ -52,8 +51,12 @@ class Program {
     copy.parameters = { ...this.parameters };
     copy.chord = {
       frequencies: [...this.chord.frequencies],
-      expressions: { ...this.chord.expressions }
+      expressions: this.chord.expressions ? { ...this.chord.expressions } : {}
     };
+    // Clone parts (new paradigm)
+    if (this.parts) {
+      copy.parts = this.parts.map(p => ({ ...p }));
+    }
     copy.harmonicSelections = {};
     for (const key in this.harmonicSelections) {
       copy.harmonicSelections[key] = [...this.harmonicSelections[key]];
@@ -232,29 +235,10 @@ export class ProgramState {
   /**
    * Update chord in current program
    */
-  updateChord(frequencies, expressions = null) {
+  updateChord(frequencies) {
     this.currentProgram.chord.frequencies = [...frequencies];
     
-    // Only update expressions if explicitly provided and not empty
-    // This prevents accidentally clearing expressions when only updating frequencies
-    if (expressions !== null) {
-      this.currentProgram.chord.expressions = { ...expressions };
-    }
-    
     // Mark as changed
-    this.markChanged();
-  }
-  
-  /**
-   * Update expression for a note
-   */
-  updateNoteExpression(noteName, expression) {
-    if (expression && expression.type !== 'none') {
-      this.currentProgram.chord.expressions[noteName] = expression;
-    } else {
-      delete this.currentProgram.chord.expressions[noteName];
-    }
-    
     this.markChanged();
   }
   
@@ -299,34 +283,6 @@ export class ProgramState {
       }
     }
     
-    // Compare expressions
-    const currentExpressions = Object.keys(this.currentProgram.chord.expressions);
-    const activeExpressions = Object.keys(this.activeProgram.chord.expressions);
-    
-    if (currentExpressions.length !== activeExpressions.length) {
-      return false;
-    }
-    
-    for (const noteName of currentExpressions) {
-      const currentExpr = this.currentProgram.chord.expressions[noteName];
-      const activeExpr = this.activeProgram.chord.expressions[noteName];
-      
-      if (!activeExpr || currentExpr.type !== activeExpr.type) {
-        return false;
-      }
-      
-      // Compare expression parameters based on type
-      if (currentExpr.type === 'vibrato' && currentExpr.depth !== activeExpr.depth) {
-        return false;
-      }
-      if (currentExpr.type === 'tremolo' && currentExpr.articulation !== activeExpr.articulation) {
-        return false;
-      }
-      if (currentExpr.type === 'trill' && currentExpr.interval !== activeExpr.interval) {
-        return false;
-      }
-    }
-    
     // Compare other properties
     if (this.currentProgram.powerOn !== this.activeProgram.powerOn) {
       return false;
@@ -357,6 +313,47 @@ export class ProgramState {
   setActiveProgram(program = null) {
     this.activeProgram = program ? program.clone() : this.currentProgram.clone();
     this.activeProgram.metadata.timestamp = Date.now();
+    
+    // Get parts from partManager for saving (NEW PARADIGM)
+    const partManager = appState.get('partManager');
+    Logger.log(`setActiveProgram: partManager exists: ${!!partManager}`, 'lifecycle');
+    
+    if (partManager) {
+      // Get the complete parts array
+      const parts = partManager.getParts();
+      Logger.log(`Capturing ${parts.length} parts for active program`, 'lifecycle');
+      
+      // Store parts in activeProgram (new paradigm)
+      this.activeProgram.parts = parts.map(p => p.toObject ? p.toObject() : p);
+      Logger.log(`Stored ${this.activeProgram.parts.length} parts in activeProgram:`, 'lifecycle');
+      this.activeProgram.parts.forEach(p => {
+        Logger.log(`  Part: freq=${p.frequency}, expr=${p.expression?.type || 'none'}`, 'lifecycle');
+      });
+      
+      // Also build expressions for backward compatibility
+      if (partManager.synthAssignments.size > 0) {
+        const expressions = {};
+        for (const [synthId, assignment] of partManager.synthAssignments) {
+          const noteName = partManager.frequencyToNoteName(assignment.frequency);
+          Logger.log(`  Assignment ${synthId}: note=${noteName}, expr=${assignment.expression?.type || 'none'}`, 'lifecycle');
+          if (assignment.expression && assignment.expression.type !== "none") {
+            expressions[noteName] = assignment.expression;
+          }
+        }
+        // Store in activeProgram for backward compatibility when saving
+        this.activeProgram.chord.expressions = expressions;
+        Logger.log(`Captured ${Object.keys(expressions).length} expressions from assignments: ${JSON.stringify(expressions)}`, 'lifecycle');
+      }
+    } else {
+      // Initialize empty arrays/objects if not already present
+      if (!this.activeProgram.parts) {
+        this.activeProgram.parts = [];
+      }
+      if (!this.activeProgram.chord.expressions) {
+        this.activeProgram.chord.expressions = {};
+      }
+      Logger.log(`No partManager available`, 'lifecycle');
+    }
     
     // Debug log what we're setting as active
     if (this.activeProgram.parameters.trillEnabled) {
@@ -397,11 +394,16 @@ export class ProgramState {
     programToSave.metadata.name = `Bank ${bankId}`;
     
     // Debug log what we're saving
-    if (programToSave.parameters.trillEnabled) {
-      Logger.log(`Saving to bank ${bankId} with trill: speed=${programToSave.parameters.trillSpeed}`, 'lifecycle');
-    } else {
-      Logger.log(`Saving to bank ${bankId} (no trill enabled)`, 'lifecycle');
+    Logger.log(`Saving to bank ${bankId}:`, 'lifecycle');
+    Logger.log(`  - Parameters: trill=${programToSave.parameters.trillEnabled}`, 'lifecycle');
+    Logger.log(`  - Parts: ${programToSave.parts?.length || 0}`, 'lifecycle');
+    if (programToSave.parts) {
+      programToSave.parts.forEach((p, i) => {
+        Logger.log(`    Part ${i}: ${p.frequency}Hz, expr=${p.expression?.type || 'none'}`, 'lifecycle');
+      });
     }
+    Logger.log(`  - Chord: ${programToSave.chord?.frequencies?.length || 0} frequencies`, 'lifecycle');
+    Logger.log(`  - Expressions: ${JSON.stringify(programToSave.chord?.expressions || {})}`, 'lifecycle');
     
     // Get banks from AppState
     const banks = appState.getNested('banking.banks') || new Map();
@@ -448,27 +450,43 @@ export class ProgramState {
     });
     
     // Update PartManager's internal state (but don't send to synths)
-    const partManager = window.modular?.partManager;
+    const partManager = appState.get('partManager');
     if (partManager) {
-      // IMPORTANT: Update expressions in AppState BEFORE calling setChord
-      // This ensures setChord doesn't clear the expressions we're trying to load
-      this.appState.setNested('performance.currentProgram.chord.expressions', 
-        { ...this.currentProgram.chord.expressions });
+      // Always clear existing parts first
+      partManager.setParts([]);
       
-      // Clear and update PartManager's internal expression map
-      partManager.noteExpressions.clear();
-      Object.entries(this.currentProgram.chord.expressions).forEach(([noteName, expression]) => {
-        partManager.noteExpressions.set(noteName, expression);
-      });
-      
-      // Now update chord - it will preserve the expressions we just set
-      partManager.setChord([...this.currentProgram.chord.frequencies]);
-      
-      Logger.log(`Updated PartManager state: ${this.currentProgram.chord.frequencies.length} notes, ${Object.keys(this.currentProgram.chord.expressions).length} expressions`, 'lifecycle');
+      // Check if program has parts (new paradigm)
+      if (this.currentProgram.parts && this.currentProgram.parts.length > 0) {
+        // Load parts directly (new paradigm)
+        Logger.log(`Loading ${this.currentProgram.parts.length} parts from bank ${bankId}`, 'lifecycle');
+        partManager.setParts(this.currentProgram.parts);
+        
+        // Emit event to update the display
+        eventBus.emit('parts:updated', { source: 'bankLoad' });
+      } else if (this.currentProgram.chord.frequencies && this.currentProgram.chord.frequencies.length > 0) {
+        // Fallback to old format: chord.frequencies + chord.expressions
+        const bankExpressions = this.currentProgram.chord.expressions || {};
+        
+        // Update chord - this will create new part assignments
+        partManager.setChord([...this.currentProgram.chord.frequencies]);
+        
+        // Apply expressions to the newly created parts
+        if (Object.keys(bankExpressions).length > 0) {
+          // This is an old-format bank with chord.expressions
+          Object.entries(bankExpressions).forEach(([noteName, expression]) => {
+            partManager.setNoteExpression(noteName, expression);
+          });
+          Logger.log(`Migrated ${Object.keys(bankExpressions).length} expressions from old bank format`, 'lifecycle');
+        }
+        
+        Logger.log(`Updated PartManager state from old format: ${this.currentProgram.chord.frequencies.length} notes`, 'lifecycle');
+      } else {
+        Logger.log(`Bank ${bankId} has no parts or frequencies`, 'lifecycle');
+      }
     }
     
     // Update PianoKeyboard's chord state directly first
-    const pianoKeyboard = window.modular?.pianoKeyboard;
+    const pianoKeyboard = appState.get('pianoKeyboard');
     if (pianoKeyboard) {
       // Clear and set the chord
       pianoKeyboard.currentChord.clear();
@@ -484,11 +502,21 @@ export class ProgramState {
       fromBankLoad: true  // Flag to prevent automatic redistribution
     });
     
-    // Restore expressions to PianoKeyboard immediately
-    // Since we've already updated the chord, we can restore expressions synchronously
-    if (pianoKeyboard && pianoKeyboard.expressionHandler) {
-      Logger.log(`Restoring expressions to PianoKeyboard: ${JSON.stringify(this.currentProgram.chord.expressions)}`, 'lifecycle');
-      pianoKeyboard.expressionHandler.restoreExpressions(this.currentProgram.chord.expressions);
+    // Restore expressions to PianoKeyboard
+    if (pianoKeyboard && pianoKeyboard.expressionHandler && partManager) {
+      // Build expressions from part assignments
+      const expressions = {};
+      for (const [synthId, assignment] of partManager.synthAssignments) {
+        const noteName = partManager.frequencyToNoteName(assignment.frequency);
+        if (assignment.expression && assignment.expression.type !== "none") {
+          expressions[noteName] = assignment.expression;
+        }
+      }
+      
+      if (Object.keys(expressions).length > 0) {
+        Logger.log(`Restoring expressions to PianoKeyboard: ${JSON.stringify(expressions)}`, 'lifecycle');
+        pianoKeyboard.expressionHandler.restoreExpressions(expressions);
+      }
     }
     
     Logger.log(`Loaded program from bank ${bankId}`, 'lifecycle');

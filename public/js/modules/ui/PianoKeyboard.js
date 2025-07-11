@@ -618,6 +618,7 @@ export class PianoKeyboard {
    * Clear the current chord
    */
   clearChord() {
+    // Clear internal chord tracking
     this.setChord([]);
 
     // Clear all expression markings from the piano roll
@@ -625,8 +626,14 @@ export class PianoKeyboard {
       this.expressionHandler.clearAll();
     }
 
+    // IMPORTANT: Clear parts in PartManager (new paradigm)
+    const partManager = window.partManager || window.appState?.get('partManager');
+    if (partManager) {
+      partManager.clearPart();
+    }
+
     if (window.Logger) {
-      window.Logger.log("Chord cleared", "expressions");
+      window.Logger.log("Chord and parts cleared", "expressions");
     }
   }
 
