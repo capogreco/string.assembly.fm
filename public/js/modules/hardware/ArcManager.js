@@ -28,10 +28,7 @@ class ArcManager {
     // Text buffer for incoming messages
     this.textBuffer = '';
     
-    // Auto-connect on page load
-    if (this.autoConnectEnabled) {
-      setTimeout(() => this.autoConnect(), 1000);
-    }
+    // Auto-connect will be triggered after initialization
   }
 
   /**
@@ -47,6 +44,12 @@ class ArcManager {
     this.setupEventListeners();
     
     Logger.log("ArcManager initialized", "lifecycle");
+    
+    // Auto-connect after initialization if enabled
+    if (this.autoConnectEnabled) {
+      setTimeout(() => this.autoConnect(), 1000);
+    }
+    
     return true;
   }
 

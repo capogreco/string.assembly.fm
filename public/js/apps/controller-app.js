@@ -247,6 +247,10 @@ async function initializeUI() {
   
   // Initialize sync status
   updateSyncStatus();
+  
+  // Update bank display to show any saved banks
+  updateBankDisplay();
+  updateActiveProgramDisplay();
 
   Logger.log("UI layer initialized", "lifecycle");
 }
@@ -282,6 +286,18 @@ async function initializeHardware() {
 
   // Set up Arc event handlers
   setupArcEventHandlers();
+
+  // Check if Arc is already connected and update UI
+  if (arcManager.connected) {
+    const connectBtn = document.getElementById('connectArc');
+    if (connectBtn) {
+      connectBtn.textContent = 'Arc Connected';
+      connectBtn.style.background = '#22c55e';
+      connectBtn.disabled = true;
+      connectBtn.style.cursor = 'default';
+      connectBtn.style.opacity = '1';
+    }
+  }
 
   Logger.log("Hardware systems initialized", "lifecycle");
 }

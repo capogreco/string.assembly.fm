@@ -46,8 +46,7 @@ export class SynthClient {
     this.statusElement = null;
     this.isVisualizerRunning = false;
 
-    // Banking
-    this.synthBanks = new Map();
+    // Banking is handled by SynthCore now
 
     Logger.log(`SynthClient ${synthId} created`, "synth");
   }
@@ -533,8 +532,9 @@ export class SynthClient {
    */
   saveToBank(bankId, program = null) {
     const programToSave = program || this.storedProgram;
-    if (programToSave) {
-      this.synthBanks.set(bankId, { ...programToSave });
+    if (programToSave && this.synthCore) {
+      // Delegate to SynthCore which handles persistence
+      this.synthCore.saveToBank(bankId);
       Logger.log(
         `[${this.synthId}] Saved program to bank ${bankId}`,
         "banking",
@@ -547,14 +547,18 @@ export class SynthClient {
    * @param {number} bankId - Bank number
    */
   loadFromBank(bankId) {
-    const program = this.synthBanks.get(bankId);
-    if (program) {
-      this.handleProgram(program, true);
-      Logger.log(
-        `[${this.synthId}] Loaded program from bank ${bankId}`,
-        "banking",
-      );
-      return true;
+    if (this.synthCore) {
+      // Delegate to SynthCore which has persistent storage
+      const loaded = this.synthCore.loadFromBank(bankId);
+      if (loaded) {
+        // SynthCore applies the program directly, we need to update our stored state
+        this.storedProgram = this.synthCore.currentProgram;
+        Logger.log(
+          `[${this.synthId}] Loaded program from bank ${bankId}`,
+          "banking",
+        );
+        return true;
+      }
     }
     return false;
   }
@@ -706,7 +710,6 @@ export class SynthClient {
     // Clear references
     this.visualizerCanvas = null;
     this.controllers.clear();
-    this.synthBanks.clear();
     this.audioContext = null;
 
     Logger.log(`SynthClient ${this.synthId} disposed`, "synth");

@@ -78,7 +78,8 @@ export class SynthCore {
       // Create audio node chain
       await this.createAudioNodes(destination);
 
-      // Don't load from localStorage - keep banks in memory only
+      // Load banks from localStorage if available
+      this.loadBanksFromStorage();
 
       this.isInitialized = true;
       
@@ -517,7 +518,8 @@ export class SynthCore {
     
     this.synthBanks.set(bankId, savedProgram);
 
-    // Don't persist to localStorage - keep in memory only
+    // Persist to localStorage
+    this.saveBanksToStorage();
 
     this.log(`Saved program to bank ${bankId}`);
     return true;

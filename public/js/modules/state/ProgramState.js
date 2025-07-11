@@ -235,7 +235,9 @@ export class ProgramState {
   updateChord(frequencies, expressions = null) {
     this.currentProgram.chord.frequencies = [...frequencies];
     
-    if (expressions) {
+    // Only update expressions if explicitly provided and not empty
+    // This prevents accidentally clearing expressions when only updating frequencies
+    if (expressions !== null) {
       this.currentProgram.chord.expressions = { ...expressions };
     }
     
@@ -448,18 +450,21 @@ export class ProgramState {
     // Update PartManager's internal state (but don't send to synths)
     const partManager = window.modular?.partManager;
     if (partManager) {
-      // Clear expressions first
-      partManager.noteExpressions.clear();
+      // IMPORTANT: Update expressions in AppState BEFORE calling setChord
+      // This ensures setChord doesn't clear the expressions we're trying to load
+      this.appState.setNested('performance.currentProgram.chord.expressions', 
+        { ...this.currentProgram.chord.expressions });
       
-      // Update expressions
+      // Clear and update PartManager's internal expression map
+      partManager.noteExpressions.clear();
       Object.entries(this.currentProgram.chord.expressions).forEach(([noteName, expression]) => {
         partManager.noteExpressions.set(noteName, expression);
       });
       
-      // Use setChord to properly update chord and trigger redistribution
+      // Now update chord - it will preserve the expressions we just set
       partManager.setChord([...this.currentProgram.chord.frequencies]);
       
-      Logger.log(`Updated PartManager state: ${this.currentProgram.chord.frequencies.length} notes`, 'lifecycle');
+      Logger.log(`Updated PartManager state: ${this.currentProgram.chord.frequencies.length} notes, ${Object.keys(this.currentProgram.chord.expressions).length} expressions`, 'lifecycle');
     }
     
     // Update PianoKeyboard's chord state directly first
@@ -479,13 +484,12 @@ export class ProgramState {
       fromBankLoad: true  // Flag to prevent automatic redistribution
     });
     
-    // Restore expressions to PianoKeyboard - need slight delay to ensure chord is processed
-    setTimeout(() => {
-      if (pianoKeyboard && pianoKeyboard.expressionHandler) {
-        Logger.log(`Restoring expressions to PianoKeyboard: ${JSON.stringify(this.currentProgram.chord.expressions)}`, 'lifecycle');
-        pianoKeyboard.expressionHandler.restoreExpressions(this.currentProgram.chord.expressions);
-      }
-    }, 100); // Increased delay slightly
+    // Restore expressions to PianoKeyboard immediately
+    // Since we've already updated the chord, we can restore expressions synchronously
+    if (pianoKeyboard && pianoKeyboard.expressionHandler) {
+      Logger.log(`Restoring expressions to PianoKeyboard: ${JSON.stringify(this.currentProgram.chord.expressions)}`, 'lifecycle');
+      pianoKeyboard.expressionHandler.restoreExpressions(this.currentProgram.chord.expressions);
+    }
     
     Logger.log(`Loaded program from bank ${bankId}`, 'lifecycle');
     return true;
