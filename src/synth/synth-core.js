@@ -752,6 +752,130 @@ export class SynthCore {
     }
   }
 
+  /**
+   * Set parameter directly without ramping
+   * @param {string} paramName - Parameter name
+   * @param {number} value - Target value
+   */
+  setParameterDirect(paramName, value) {
+    if (!this.isInitialized) {
+      this.log(`Cannot set parameter ${paramName}: synth not initialized`, 'warn');
+      return;
+    }
+
+    // Handle special case for masterGain
+    if (paramName === 'masterGain') {
+      if (!this.gainNode) {
+        this.log('Cannot set masterGain: gain node not available', 'warn');
+        return;
+      }
+
+      const targetValue = this.isPoweredOn ? value : 0;
+      this.gainNode.gain.value = targetValue;
+
+      // Update stored program state
+      if (this.currentProgram) {
+        this.currentProgram.masterGain = value;
+      }
+
+      this.log(`Set masterGain directly to ${value}`);
+      return;
+    }
+
+    // Handle worklet parameters
+    if (!this.bowedStringNode || !this.bowedStringNode.parameters.has(paramName)) {
+      this.log(`Parameter ${paramName} not found in worklet`, 'warn');
+      return;
+    }
+
+    const audioParam = this.bowedStringNode.parameters.get(paramName);
+    audioParam.value = value;
+
+    // Update stored program state
+    if (this.currentProgram) {
+      this.currentProgram[paramName] = value;
+    }
+
+    this.log(`Set ${paramName} directly to ${value}`);
+  }
+
+  /**
+   * Set parameter with smooth ramping
+   * @param {string} paramName - Parameter name
+   * @param {number} value - Target value
+   * @param {number} rampTime - Ramp duration in seconds
+   */
+  setParameterWithRamp(paramName, value, rampTime = 0.2) {
+    if (!this.isInitialized) {
+      this.log(`Cannot set parameter ${paramName}: synth not initialized`, 'warn');
+      return;
+    }
+
+    // Handle special case for masterGain
+    if (paramName === 'masterGain') {
+      if (!this.gainNode) {
+        this.log('Cannot set masterGain: gain node not available', 'warn');
+        return;
+      }
+
+      const now = this.audioContext.currentTime;
+      const audioParam = this.gainNode.gain;
+
+      // Apply power scaling if needed
+      const targetValue = this.isPoweredOn ? value : 0;
+
+      // Cross-browser approach
+      // 1. Get current interpolated value
+      const currentValue = audioParam.value;
+      
+      // 2. Cancel all scheduled changes after now
+      audioParam.cancelScheduledValues(now);
+      
+      // 3. Explicitly set the current value at current time
+      audioParam.setValueAtTime(currentValue, now);
+      
+      // 4. Schedule the ramp immediately
+      audioParam.linearRampToValueAtTime(targetValue, now + rampTime);
+
+      // Update stored program state
+      if (this.currentProgram) {
+        this.currentProgram.masterGain = value;
+      }
+
+      this.log(`Set masterGain to ${value} with ${rampTime}s ramp`);
+      return;
+    }
+
+    // Handle worklet parameters
+    if (!this.bowedStringNode || !this.bowedStringNode.parameters.has(paramName)) {
+      this.log(`Parameter ${paramName} not found in worklet`, 'warn');
+      return;
+    }
+
+    const audioParam = this.bowedStringNode.parameters.get(paramName);
+    const now = this.audioContext.currentTime;
+
+    // Cross-browser approach
+    // 1. Get current interpolated value
+    const currentValue = audioParam.value;
+    
+    // 2. Cancel all scheduled changes after now
+    audioParam.cancelScheduledValues(now);
+    
+    // 3. Explicitly set the current value at current time
+    audioParam.setValueAtTime(currentValue, now);
+    
+    // 4. Schedule the ramp immediately
+    audioParam.linearRampToValueAtTime(value, now + rampTime);
+
+    // Update stored program state
+    if (this.currentProgram) {
+      this.currentProgram[paramName] = value;
+    }
+
+    this.log(`Set ${paramName} to ${value} with ${rampTime}s ramp`);
+  }
+
   // Cleanup
   destroy() {
     if (this.bowedStringNode) {

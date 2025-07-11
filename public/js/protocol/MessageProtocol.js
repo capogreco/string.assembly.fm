@@ -26,7 +26,11 @@ export const CommandNames = {
   POWER: 'power',
   SAVE: 'save',
   LOAD: 'load',
-  REQUEST_STATE: 'request-state' // Deprecated but kept for compatibility
+  // Arc parameter commands
+  VOLUME: 'volume',
+  BRIGHTNESS: 'brightness',
+  DETUNE: 'detune',
+  REVERB: 'reverb'
 };
 
 export const MessageSchemas = {

@@ -105,18 +105,24 @@ function initializeState() {
   // Subscribe to state changes for debugging
   if (Logger.categories.lifecycle) {
     appState.subscribeAll((key, newValue, oldValue) => {
-      // Format value for logging, handling Maps specially
-      let formattedValue;
-      if (newValue instanceof Map) {
-        formattedValue = `Map(${newValue.size}) {${Array.from(
-          newValue.entries(),
-        )
-          .map(([k, v]) => `${k}: ${JSON.stringify(v)}`)
-          .join(", ")}}`;
-      } else {
-        formattedValue = JSON.stringify(newValue);
+      // Only log high-level state changes, skip verbose synth data
+      if (key === "connections.synths") {
+        // Just log count changes instead of full synth data
+        const synthCount = newValue instanceof Map ? newValue.size : 0;
+        Logger.log(`State change: ${key} = ${synthCount} synths connected`, "lifecycle");
+      } else if (!key.includes(".synths.") && !key.includes("latency")) {
+        // Log other state changes but skip individual synth updates and latency spam
+        let formattedValue;
+        if (newValue instanceof Map) {
+          formattedValue = `Map(${newValue.size})`;
+        } else if (typeof newValue === "object" && newValue !== null) {
+          // For objects, just show keys instead of full content
+          formattedValue = `{${Object.keys(newValue).join(", ")}}`;
+        } else {
+          formattedValue = JSON.stringify(newValue);
+        }
+        Logger.log(`State change: ${key} = ${formattedValue}`, "lifecycle");
       }
-      Logger.log(`State change: ${key} = ${formattedValue}`, "lifecycle");
     });
   }
 
@@ -280,6 +286,20 @@ async function initializeHardware() {
   Logger.log("Hardware systems initialized", "lifecycle");
 }
 
+// Arc parameter throttling setup
+const arcParamLastSent = {};  // Track last send time for each parameter
+const arcParamPending = {};   // Track pending values during throttle period
+const arcParamTimers = {};    // Track scheduled sends
+const ARC_PARAM_THROTTLE = 100; // Default 100ms throttle
+
+// Parameter-specific throttle times (in ms)
+const paramThrottleTimes = {
+  volume: 100,      // Volume can update frequently
+  brightness: 100,  // Test with same throttle as volume
+  detune: 100,      // Detune can update frequently
+  reverb: 200       // Reverb might need slower updates
+};
+
 /**
  * Set up Arc event handlers
  */
@@ -298,7 +318,7 @@ function setupArcEventHandlers() {
     
     const paramId = parameterMap[data.parameter];
     if (paramId) {
-      // Update the UI control
+      // Update the UI control immediately for responsive feel
       const control = document.getElementById(paramId);
       if (control) {
         control.value = data.value;
@@ -309,12 +329,49 @@ function setupArcEventHandlers() {
         }
       }
       
-      // Send Arc parameter as command to synths
-      networkCoordinator.broadcastCommand({
-        name: data.parameter,
-        value: data.value,
-        timestamp: Date.now()
-      });
+      // Throttle network sends with parameter-specific timing
+      const now = Date.now();
+      const lastSent = arcParamLastSent[data.parameter] || 0;
+      const timeSinceLastSend = now - lastSent;
+      const throttleTime = paramThrottleTimes[data.parameter] || ARC_PARAM_THROTTLE;
+      
+      if (timeSinceLastSend >= throttleTime) {
+        // Enough time has passed, send immediately
+        networkCoordinator.broadcastCommand({
+          type: 'command',
+          name: data.parameter,
+          value: data.value,
+          timestamp: now
+        });
+        arcParamLastSent[data.parameter] = now;
+        Logger.log(`Sent ${data.parameter} command: ${data.value}`, "network");
+        
+        // Clear any pending value since we just sent
+        delete arcParamPending[data.parameter];
+      } else {
+        // Too soon, store as pending and schedule send
+        arcParamPending[data.parameter] = data.value;
+        
+        // Schedule send for when throttle period expires
+        if (!arcParamTimers[data.parameter]) {
+          const remainingTime = throttleTime - timeSinceLastSend;
+          arcParamTimers[data.parameter] = setTimeout(() => {
+            // Send the most recent pending value
+            if (arcParamPending[data.parameter] !== undefined) {
+              networkCoordinator.broadcastCommand({
+                type: 'command',
+                name: data.parameter,
+                value: arcParamPending[data.parameter],
+                timestamp: Date.now()
+              });
+              arcParamLastSent[data.parameter] = Date.now();
+              Logger.log(`Sent ${data.parameter} command: ${arcParamPending[data.parameter]}`, "network");
+              delete arcParamPending[data.parameter];
+            }
+            delete arcParamTimers[data.parameter];
+          }, remainingTime);
+        }
+      }
     }
   });
 

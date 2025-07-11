@@ -133,8 +133,15 @@ export class SynthClient {
             Logger.log(`[${this.synthId}] Power turned off`, 'synth');
             this.synthCore.setPower(false);
           }
+        } else if (message.name === 'volume') {
+          // Handle volume parameter from Arc
+          Logger.log(`[${this.synthId}] Setting volume to: ${message.value}`, 'parameters');
+          this.setVolume(message.value);
+        } else if (message.name === 'brightness') {
+          // Handle brightness parameter from Arc
+          Logger.log(`[${this.synthId}] Setting brightness to: ${message.value}`, 'parameters');
+          this.setBrightness(message.value);
         }
-        // Add other command handlers as needed
         break;
         
       case MessageTypes.SAVE_TO_BANK:
@@ -437,14 +444,6 @@ export class SynthClient {
     Logger.log(`[${this.synthId}] Visualizer stopped`, "ui");
   }
   
-  /**
-   * DEPRECATED: Program requests removed - controllers now push programs automatically
-   * This method is kept for compatibility but does nothing
-   */
-  requestCurrentProgram() {
-    Logger.log(`[${this.synthId}] Program request ignored - controllers push programs automatically`, "info");
-    // Do nothing - programs are pushed automatically by controllers
-  }
   
   /**
    * Save program to bank
@@ -471,6 +470,38 @@ export class SynthClient {
       return true;
     }
     return false;
+  }
+  
+  /**
+   * Set volume with ramping
+   * @param {number} value - Volume value (0-1)
+   */
+  setVolume(value) {
+    if (!this.audioInitialized || !this.synthCore) {
+      Logger.log(`[${this.synthId}] Cannot set volume - not initialized`, 'warn');
+      return;
+    }
+    
+    // Volume is controlled by masterGain parameter
+    this.synthCore.setParameterWithRamp('masterGain', value, 0.2);
+    Logger.log(`[${this.synthId}] Volume set to ${value}`, 'parameters');
+  }
+  
+  /**
+   * Set brightness with ramping
+   * @param {number} value - Brightness value (0-1)
+   */
+  setBrightness(value) {
+    if (!this.audioInitialized || !this.synthCore) {
+      Logger.log(`[${this.synthId}] Cannot set brightness - not initialized`, 'warn');
+      return;
+    }
+    
+    // Brightness controls a filter - set directly without ramping
+    // The worklet handles its own coefficient updates at k-rate (block boundaries)
+    // Ramping the parameter can cause more glitches than letting worklet handle it
+    this.synthCore.setParameterDirect('brightness', value);
+    Logger.log(`[${this.synthId}] Brightness set to ${value}`, 'parameters');
   }
   
   /**

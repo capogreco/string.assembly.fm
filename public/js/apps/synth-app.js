@@ -408,9 +408,14 @@ class SynthApp {
           const powerOn = message.value;
           Logger.log(`[DEBUG] Setting power to: ${powerOn}`, 'parameters');
           this.synthClient.setPower(powerOn);
-        } else if (message.data && message.data.type === "request-state") {
-          // DEPRECATED: State requests removed - use ping/pong for state updates
-          this.sendStateToController(controllerId);
+        } else if (message.name === "volume") {
+          // Handle volume parameter from Arc
+          Logger.log(`[DEBUG] Setting volume to: ${message.value}`, 'parameters');
+          this.synthClient.setVolume(message.value);
+        } else if (message.name === "brightness") {
+          // Handle brightness parameter from Arc
+          Logger.log(`[DEBUG] Setting brightness to: ${message.value}`, 'parameters');
+          this.synthClient.setBrightness(message.value);
         }
         break;
         
@@ -458,11 +463,6 @@ class SynthApp {
     }
   }
 
-  requestCurrentProgram() {
-    // DEPRECATED: Program requests removed - controllers now push programs automatically
-    Logger.log(`[${this.synthId}] Program request ignored - controllers push programs automatically`, "info");
-    // Do nothing - programs are pushed automatically by controllers
-  }
 
   getSynthState() {
     const clientState = this.synthClient.getState();
@@ -548,10 +548,7 @@ class SynthApp {
     // Set joined flag
     this.hasJoinedInstrument = true;
     
-    // Request program from controllers if none stored
-    if (!this.synthClient.storedProgram) {
-      this.synthClient.requestCurrentProgram();
-    }
+    // Controllers will push programs automatically
     
     // Hide calibration UI
     if (this.calibrationPhase) {
