@@ -536,29 +536,7 @@ function setupUIEventHandlers() {
     updateExpressionGroupVisibility();
   });
   
-  // Keep expression:changed handler for backwards compatibility
-  // This will be removed once all code is using the parts paradigm
-  eventBus.on("expression:changed", (data) => {
-    Logger.log(`expression:changed event received (legacy): note=${data.note}, type=${data.expression?.type || 'null'}`, "expressions");
-    
-    // Note: This handler will be removed in the final cleanup
-    // For now, log a warning that old paradigm is still in use
-    Logger.log("WARNING: expression:changed event is deprecated. Use part:added/part:removed instead", "warn");
-    
-    if (data.note && data.expression) {
-      Logger.log(
-        `Expression assigned (legacy): ${data.note} = ${data.expression.type}`,
-        "expressions",
-      );
-      partManager.setNoteExpression(data.note, data.expression);
-    } else if (data.note && !data.expression) {
-      Logger.log(`Expression removed (legacy): ${data.note}`, "expressions");
-      partManager.setNoteExpression(data.note, null);
-    }
-    
-    // Update expression group visibility
-    updateExpressionGroupVisibility();
-  });
+  // REMOVED: expression:changed handler - expressions are now part of Part objects
 
   // Handle program save/load UI feedback
   programManager.on &&
@@ -1454,8 +1432,7 @@ window.sendCurrentProgram = async () => {
     // Capture current state from UI
     programState.captureFromUI();
     
-    // Update chord in program state (expressions now live on parts)
-    programState.updateChord(partManager.currentChord);
+    // REMOVED: updateChord call - parts are now the source of truth
     
     // Update harmonic selections
     const harmonicSelections = appState.getNested('performance.currentProgram.harmonicSelections');

@@ -240,22 +240,8 @@ export class PartManager {
    * @private
    */
   setupEventListeners() {
-    // Listen for chord changes from piano
-    this.eventBus.on("chord:changed", (data) => {
-      // Don't automatically redistribute when loading from banks
-      // The synths will load their saved programs with correct values
-      if (!data.fromBankLoad) {
-        this.setChord(data.frequencies);
-      } else {
-        // Just update AppState without sending to synths
-        this.appState.setNested('performance.currentProgram.chord.frequencies', [...data.frequencies]);
-      }
-    });
-
-    // Listen for expression changes from piano
-    this.eventBus.on("expression:changed", (data) => {
-      this.setNoteExpression(data.note, data.expression);
-    });
+    // REMOVED: Old event listeners for chord:changed and expression:changed
+    // Parts are now managed through part:added and part:removed events
 
     // Listen for harmonic selection changes
     this.eventBus.on("harmonicRatio:changed", (data) => {
@@ -308,99 +294,11 @@ export class PartManager {
     }
   }
 
-  /**
-   * Add a part (frequency + expression) to the chord
-   * @param {number} frequency - Frequency in Hz
-   * @param {Object} expression - Expression object {type, ...params}
-   */
-  addPart(frequency, expression) {
-    // Get current chord
-    const currentChord = [...this.currentChord];
-    
-    // Store expression for this frequency temporarily so redistribution can pick it up
-    if (!this.pendingExpressions) {
-      this.pendingExpressions = new Map();
-    }
-    this.pendingExpressions.set(frequency, expression);
-    
-    // Add frequency if not already present
-    if (!currentChord.includes(frequency)) {
-      currentChord.push(frequency);
-      this.setChord(currentChord);
-    } else {
-      // Frequency already in chord, but we have a new expression
-      // Need to redistribute to apply the expression
-      this.redistributeToSynths();
-    }
-  }
+  // REMOVED: Old addPart method that used pendingExpressions
+  // Use addPartNew() instead which works with Part objects
 
-  /**
-   * Set expression for a note
-   * @param {string} noteName - Note name (e.g., "C4")
-   * @param {Object} expression - Expression object {type, ...params}
-   */
-  setNoteExpression(noteName, expression) {
-    Logger.log(`setNoteExpression called: note=${noteName}, expression=${JSON.stringify(expression)}`, 'expressions');
-    
-    // Validate input
-    if (!noteName) {
-      Logger.log('setNoteExpression: noteName is null or undefined', 'warn');
-      return;
-    }
-    
-    // Convert note name to frequency to find which synth has this note
-    const frequency = this.noteNameToFrequency(noteName);
-    Logger.log(`  Converted ${noteName} to frequency ${frequency}`, 'expressions');
-    Logger.log(`  Current chord: ${JSON.stringify(this.currentChord)}`, 'expressions');
-    Logger.log(`  Current assignments: ${this.synthAssignments?.size || 0}`, 'expressions');
-    
-    // Find which synth has this frequency
-    let synthIdWithNote = null;
-    for (const [synthId, assignment] of this.synthAssignments) {
-      // Compare frequencies with small tolerance for floating point
-      if (Math.abs(assignment.frequency - frequency) < 0.01) {
-        synthIdWithNote = synthId;
-        break;
-      }
-    }
-    
-    if (synthIdWithNote) {
-      // Update the expression on the assignment
-      const assignment = this.synthAssignments.get(synthIdWithNote);
-      if (expression && expression.type && expression.type !== "none") {
-        assignment.expression = expression;
-      } else {
-        assignment.expression = { type: "none" };
-      }
-      
-      // Update in AppState
-      this.setSynthAssignments(this.synthAssignments);
-      
-      Logger.log(
-        `Expression set on ${synthIdWithNote}: ${noteName} -> ${expression?.type || "none"}`,
-        "expressions",
-      );
-      Logger.log(`  Updated assignment: ${JSON.stringify(assignment)}`, 'expressions');
-    } else {
-      Logger.log(
-        `Cannot set expression: note ${noteName} not found in current assignments`,
-        "warn",
-      );
-      Logger.log(`  Current assignments:`, 'expressions');
-      for (const [synthId, assignment] of this.synthAssignments) {
-        const assignedNote = this.frequencyToNoteName(assignment.frequency);
-        Logger.log(`    ${synthId}: ${assignedNote} (${assignment.frequency}Hz)`, 'expressions');
-      }
-    }
-    
-    // Mark as changed for sync tracking
-    this.appState.markParameterChanged(`expression_${noteName}`);
-    
-    // Update sync status
-    if (window.updateSyncStatus) {
-      window.updateSyncStatus();
-    }
-  }
+  // REMOVED: Old setNoteExpression method
+  // Expressions are now part of Part objects and managed through setParts/addPartNew
   
   /**
    * Convert note name to frequency
@@ -463,55 +361,8 @@ export class PartManager {
     this.appState.setNested('performance.currentProgram.partsAssignments', assignments);
   }
 
-  /**
-   * Redistribute current chord to connected synths
-   */
-  redistributeToSynths() {
-    const connectedSynths = this.appState.getNested('connections.synths');
-    if (!connectedSynths || connectedSynths.size === 0) {
-      this.setSynthAssignments(new Map());
-      return;
-    }
-
-    const synthIds = Array.from(connectedSynths.keys());
-    const assignments = new Map();
-
-    if (this.currentChord.length === 0) {
-      // No chord - clear assignments
-      this.setSynthAssignments(assignments);
-      return;
-    }
-
-    // Simple round-robin distribution
-    synthIds.forEach((synthId, index) => {
-      const noteIndex = index % this.currentChord.length;
-      const frequency = this.currentChord[noteIndex];
-      
-      // Check for pending expression for this frequency
-      let expression = { type: "none" };
-      if (this.pendingExpressions && this.pendingExpressions.has(frequency)) {
-        expression = this.pendingExpressions.get(frequency);
-      } else {
-        // Check if this synth previously had an expression for this frequency
-        const oldAssignment = this.synthAssignments.get(synthId);
-        if (oldAssignment && Math.abs(oldAssignment.frequency - frequency) < 0.01) {
-          expression = oldAssignment.expression || { type: "none" };
-        }
-      }
-      
-      assignments.set(synthId, {
-        frequency,
-        expression,
-      });
-    });
-    
-    // Clear pending expressions after use
-    if (this.pendingExpressions) {
-      this.pendingExpressions.clear();
-    }
-
-    this.setSynthAssignments(assignments);
-  }
+  // REMOVED: Old redistributeToSynths method that used pendingExpressions
+  // Use redistributePartsNew() instead which works with Part objects
 
   /**
    * Send program to a specific synth with stochastic resolution
@@ -740,7 +591,7 @@ export class PartManager {
   handleSynthConnected(synthId) {
     // Just redistribute - don't send program yet
     // Synth will request program after SynthCore initialization
-    this.redistributeToSynths();
+    this.redistributePartsNew();
   }
 
   /**
@@ -749,8 +600,13 @@ export class PartManager {
    * @private
    */
   handleSynthDisconnected(synthId) {
-    this.synthAssignments.delete(synthId);
-    this.redistributeToSynths();
+    // Remove assignment for disconnected synth
+    const assignments = this.synthAssignments;
+    assignments.delete(synthId);
+    this.setSynthAssignments(assignments);
+    
+    // Redistribute parts to remaining synths
+    this.redistributePartsNew();
   }
 
   /**
