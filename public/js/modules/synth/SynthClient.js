@@ -141,6 +141,10 @@ export class SynthClient {
           // Handle brightness parameter from Arc
           Logger.log(`[${this.synthId}] Setting brightness to: ${message.value}`, 'parameters');
           this.setBrightness(message.value);
+        } else if (message.name === 'detune') {
+          // Handle detune parameter from Arc
+          Logger.log(`[${this.synthId}] Setting detune to: ${message.value}`, 'parameters');
+          this.setDetune(message.value);
         }
         break;
         
@@ -502,6 +506,21 @@ export class SynthClient {
     // Ramping the parameter can cause more glitches than letting worklet handle it
     this.synthCore.setParameterDirect('brightness', value);
     Logger.log(`[${this.synthId}] Brightness set to ${value}`, 'parameters');
+  }
+  
+  /**
+   * Set detune amount with ramping
+   * @param {number} value - Detune amount (0-1)
+   */
+  setDetune(value) {
+    if (!this.audioInitialized || !this.synthCore) {
+      Logger.log(`[${this.synthId}] Cannot set detune - not initialized`, 'warn');
+      return;
+    }
+    
+    // Detune uses ramping for smooth transitions
+    this.synthCore.setParameterWithRamp('detune', value, 0.2);
+    Logger.log(`[${this.synthId}] Detune set to ${value}`, 'parameters');
   }
   
   /**

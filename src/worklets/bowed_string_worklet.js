@@ -1,5 +1,91 @@
 // basic-processor.js - Modal String Synthesis with Continuous Bow Excitation
 
+// Simplex Noise implementation for organic detune
+class SimplexNoise {
+  constructor(seed = Math.random()) {
+    this.seed = seed;
+    this.perm = new Uint8Array(512);
+    this.gradP = new Array(512);
+    
+    // Gradient vectors for 2D
+    const grad2 = [
+      [1, 1], [-1, 1], [1, -1], [-1, -1],
+      [1, 0], [-1, 0], [0, 1], [0, -1]
+    ];
+    
+    // Initialize permutation table with seed
+    let n = seed * 16807 % 2147483647;
+    for (let i = 0; i < 256; i++) {
+      n = n * 16807 % 2147483647;
+      this.perm[i] = this.perm[i + 256] = n % 256;
+    }
+    
+    // Assign gradients
+    for (let i = 0; i < 512; i++) {
+      this.gradP[i] = grad2[this.perm[i] % 8];
+    }
+    
+    // Constants
+    this.F2 = 0.5 * (Math.sqrt(3) - 1);
+    this.G2 = (3 - Math.sqrt(3)) / 6;
+  }
+  
+  noise2D(x, y) {
+    // Skew the input space to determine which simplex cell we're in
+    const s = (x + y) * this.F2;
+    const i = Math.floor(x + s);
+    const j = Math.floor(y + s);
+    
+    const t = (i + j) * this.G2;
+    const X0 = i - t;
+    const Y0 = j - t;
+    const x0 = x - X0;
+    const y0 = y - Y0;
+    
+    // Determine which simplex we're in
+    let i1, j1;
+    if (x0 > y0) {
+      i1 = 1; j1 = 0;
+    } else {
+      i1 = 0; j1 = 1;
+    }
+    
+    const x1 = x0 - i1 + this.G2;
+    const y1 = y0 - j1 + this.G2;
+    const x2 = x0 - 1 + 2 * this.G2;
+    const y2 = y0 - 1 + 2 * this.G2;
+    
+    // Get gradient indices
+    const gi0 = this.perm[(i + this.perm[j & 255]) & 255];
+    const gi1 = this.perm[(i + i1 + this.perm[(j + j1) & 255]) & 255];
+    const gi2 = this.perm[(i + 1 + this.perm[(j + 1) & 255]) & 255];
+    
+    // Calculate contributions from three corners
+    let n0 = 0, n1 = 0, n2 = 0;
+    
+    const t0 = 0.5 - x0 * x0 - y0 * y0;
+    if (t0 >= 0) {
+      const g0 = this.gradP[gi0];
+      n0 = t0 * t0 * t0 * t0 * (g0[0] * x0 + g0[1] * y0);
+    }
+    
+    const t1 = 0.5 - x1 * x1 - y1 * y1;
+    if (t1 >= 0) {
+      const g1 = this.gradP[gi1];
+      n1 = t1 * t1 * t1 * t1 * (g1[0] * x1 + g1[1] * y1);
+    }
+    
+    const t2 = 0.5 - x2 * x2 - y2 * y2;
+    if (t2 >= 0) {
+      const g2 = this.gradP[gi2];
+      n2 = t2 * t2 * t2 * t2 * (g2[0] * x2 + g2[1] * y2);
+    }
+    
+    // Scale result to [-1, 1]
+    return 70 * (n0 + n1 + n2);
+  }
+}
+
 const NUM_STRING_MODES = 32; // Number of modes for the string resonator bank
 
 class ContinuousExcitationProcessor extends AudioWorkletProcessor {
@@ -153,6 +239,13 @@ class ContinuousExcitationProcessor extends AudioWorkletProcessor {
         maxValue: 1.0,
         automationRate: "k-rate",
       }, // Master volume control
+      {
+        name: "detune",
+        defaultValue: 0.0,
+        minValue: 0.0,
+        maxValue: 1.0,
+        automationRate: "k-rate",
+      }, // Detune amount (0 = no detune, 1 = max detune)
     ];
   }
 
@@ -181,6 +274,14 @@ class ContinuousExcitationProcessor extends AudioWorkletProcessor {
     // Initialize cached values for message-controlled discrete parameters
     this._cachedStringMaterial = 0; // Default to "Steel"
     this._cachedBodyType = 0; // Default to "Violin"
+    
+    // Detune noise initialization
+    const noiseSeed = Date.now() * Math.random(); // Unique seed for each instance
+    this.detuneNoise = new SimplexNoise(noiseSeed);
+    this.detuneNoiseTime = 0;
+    this.detuneNoiseRate = 0.005555555556; // Hz - exactly 1/180 (3 minute period)
+    this.currentDetuneMultiplier = 1.0;
+    this._cachedDetuneMultiplier = 1.0; // Track to detect changes
 
     // --- String Modal Resonator Parameters & State Arrays (Biquad-based) ---
     this.stringMode_b0 = new Float32Array(NUM_STRING_MODES);
@@ -888,13 +989,37 @@ class ContinuousExcitationProcessor extends AudioWorkletProcessor {
       needsRecalcStringModes = true; // Bow position affects harmonic gains
     }
 
-    // Check fundamentalFrequency
+    // Check fundamentalFrequency INCLUDING detune
     const fundamentalFreqVal = parameters.fundamentalFrequency[0];
+    const detuneAmount = parameters.detune[0];
+    
+    // Calculate detune multiplier for this block
+    let detuneMultiplier = 1.0;
+    if (this.detuneNoise && detuneAmount > 0) {
+      // Apply exponential curve for more resolution near zero
+      // detuneAmount^2 gives us quadratic response curve
+      const scaledDetuneAmount = detuneAmount * detuneAmount;
+      
+      // Sample noise for this block
+      const noiseValue = this.detuneNoise.noise2D(
+        this.detuneNoiseTime,
+        this.detuneNoise.seed * 0.0001
+      );
+      const semitones = noiseValue * scaledDetuneAmount * 12; // ±12 semitones max
+      detuneMultiplier = Math.pow(2, semitones / 12);
+    }
+    
+    // Calculate effective fundamental with detune
+    const effectiveFundamental = fundamentalFreqVal * detuneMultiplier;
+    
+    // Check if effective fundamental has changed significantly
     if (
-      Math.abs(fundamentalFreqVal - this._cachedFundamentalFrequency) >
-      tolerance
+      Math.abs(effectiveFundamental - this._cachedFundamentalFrequency) > tolerance ||
+      Math.abs(detuneMultiplier - this._cachedDetuneMultiplier) > 0.01 // 1% change threshold
     ) {
-      this._cachedFundamentalFrequency = fundamentalFreqVal;
+      this._cachedFundamentalFrequency = effectiveFundamental;
+      this._cachedDetuneMultiplier = detuneMultiplier;
+      this.currentDetuneMultiplier = detuneMultiplier; // Update for excitation signal
       needsRecalcStringModes = true;
     }
 
@@ -955,7 +1080,10 @@ class ContinuousExcitationProcessor extends AudioWorkletProcessor {
     // Track current frame for stagger timing
     this.currentFrame++;
 
-    // Check for parameter changes
+    // Always advance detune noise time (even when detune=0)
+    this.detuneNoiseTime += (this.detuneNoiseRate * 128) / this.sampleRate;
+
+    // Check for parameter changes (this now handles detune)
     this._recalculateAllCoefficientsIfNeeded(parameters);
 
     const outputChannel = outputs[0][0];
@@ -967,6 +1095,9 @@ class ContinuousExcitationProcessor extends AudioWorkletProcessor {
     const bowPosition = parameters.bowPosition[0];
     const bowSpeed = parameters.bowSpeed[0];
     const masterGain = parameters.masterGain[0];
+    
+    // Note: Detune is now handled in _recalculateAllCoefficientsIfNeeded
+    // This ensures both excitation and string modes are detuned together
 
     // Vibrato parameters
     const vibratoEnabled = parameters.vibratoEnabled[0] > 0.5;
@@ -1300,8 +1431,9 @@ class ContinuousExcitationProcessor extends AudioWorkletProcessor {
             : parameters.fundamentalFrequency[0];
         }
 
-        // Apply pitch vibrato only when not ramping frequency
-        const vibratoFundamental = this.isRampingFrequency ? fundamental : fundamental * pitchModulation;
+        // Apply detune and pitch vibrato only when not ramping frequency
+        const detunedFundamental = fundamental * this.currentDetuneMultiplier;
+        const vibratoFundamental = this.isRampingFrequency ? detunedFundamental : detunedFundamental * pitchModulation;
 
         // Sawtooth wave
         const sawIncrement = vibratoFundamental / this.sampleRate;

@@ -416,6 +416,10 @@ class SynthApp {
           // Handle brightness parameter from Arc
           Logger.log(`[DEBUG] Setting brightness to: ${message.value}`, 'parameters');
           this.synthClient.setBrightness(message.value);
+        } else if (message.name === "detune") {
+          // Handle detune parameter from Arc
+          Logger.log(`[DEBUG] Setting detune to: ${message.value}`, 'parameters');
+          this.synthClient.setDetune(message.value);
         }
         break;
         
