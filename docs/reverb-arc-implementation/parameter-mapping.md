@@ -63,9 +63,9 @@ This document provides the exact parameter values for each range of the Arc reve
 
 | Parameter | Start (50%) | End (75%) | Formula |
 |-----------|-------------|-----------|----------|
-| mix | 0.45 | 0.50 | 0.45 + local * 0.05 |
+| mix | 0.45 | 0.55 | 0.45 + local * 0.1 |
 | roomSize | 0.55 | 0.75 | 0.55 + local * 0.2 |
-| decay | 0.60 | 0.75 | 0.6 + local * 0.15 |
+| decay | 0.60 | 0.70 | 0.6 + local * 0.1 |
 | damping | 0.45 | 0.35 | 0.45 - local * 0.1 |
 | preDelay | 25ms | 35ms | 25 + local * 10 |
 | diffusion | 0.75 | 0.85 | 0.75 + local * 0.1 |
@@ -74,23 +74,41 @@ This document provides the exact parameter values for each range of the Arc reve
 
 *Note: `local = (position - 0.5) / 0.25`*
 
-### Zone 5: Cathedral (75-100%)
-**Arc Value**: 0.75 - 1.00  
+### Zone 5: Cathedral (75-90%)
+**Arc Value**: 0.75 - 0.90  
 **Description**: "Cathedral"  
 **Character**: Massive space with long, ethereal decay
 
-| Parameter | Start (75%) | End (100%) | Formula |
-|-----------|-------------|------------|----------|
-| mix | 0.50 | 0.50 | Fixed at 50% |
-| roomSize | 0.75 | 0.90 | 0.75 + local * 0.15 |
-| decay | 0.75 | 0.90 | 0.75 + local * 0.15 |
-| damping | 0.35 | 0.25 | 0.35 - local * 0.1 |
-| preDelay | 35ms | 50ms | 35 + local * 15 |
+| Parameter | Start (75%) | End (90%) | Formula |
+|-----------|-------------|-----------|----------|
+| mix | 0.55 | 0.70 | 0.55 + local * 0.15 |
+| roomSize | 0.75 | 0.85 | 0.75 + local * 0.1 |
+| decay | 0.70 | 0.80 | 0.7 + local * 0.1 |
+| damping | 0.35 | 0.30 | 0.35 - local * 0.05 |
+| preDelay | 35ms | 45ms | 35 + local * 10 |
 | diffusion | 0.85 | 0.90 | 0.85 + local * 0.05 |
-| modulation | 0.25 | 0.30 | 0.25 + local * 0.05 |
-| earlyLevel | 0.35 | 0.30 | 0.35 - local * 0.05 |
+| modulation | 0.25 | 0.35 | 0.25 + local * 0.1 |
+| earlyLevel | 0.35 | 0.25 | 0.35 - local * 0.1 |
 
-*Note: `local = (position - 0.75) / 0.25`*
+*Note: `local = (position - 0.75) / 0.15`*
+
+### Zone 6: Infinite Space (90-100%)
+**Arc Value**: 0.90 - 1.00  
+**Description**: "Infinite Space"  
+**Character**: Extreme wash, almost drowning the dry signal
+
+| Parameter | Start (90%) | End (100%) | Formula |
+|-----------|-------------|------------|----------|
+| mix | 0.70 | 0.85 | 0.7 + local * 0.15 |
+| roomSize | 0.85 | 0.90 | 0.85 + local * 0.05 |
+| decay | 0.80 | 0.85 | 0.8 + local * 0.05 |
+| damping | 0.30 | 0.15 | 0.3 - local * 0.15 |
+| preDelay | 45ms | 70ms | 45 + local * 25 |
+| diffusion | 0.90 | 0.90 | Fixed at 0.9 |
+| modulation | 0.35 | 0.50 | 0.35 + local * 0.15 |
+| earlyLevel | 0.25 | 0.10 | 0.25 - local * 0.15 |
+
+*Note: `local = (position - 0.9) / 0.1`*
 
 ## Key Design Decisions
 
@@ -100,18 +118,20 @@ The Arc value is transformed using `position = Math.pow(arcValue, 1.2)` to provi
 - Compressed range for extreme settings
 - Natural feeling progression
 
-### Mix Limiting
-- Mix never exceeds 50% to preserve dry signal clarity
-- Mix plateaus in the concert hall zone
-- Ensures the instrument remains audible even at maximum reverb
+### Mix Philosophy
+- Mix reaches up to 85% for extreme wash effects
+- Gradual increase through zones for natural progression
+- Final zone creates an almost overwhelming reverb wash
+- Decay is capped at 0.85 to prevent runaway feedback
 
 ### Correlated Parameters
 As the space gets larger:
-- **Decay** increases (longer reverb tails)
-- **Damping** decreases (brighter reverb)
+- **Decay** increases (longer reverb tails, capped at 0.85 to prevent feedback)
+- **Damping** decreases (brighter reverb, down to 0.15 for ethereal brightness)
 - **Pre-delay** increases (larger spaces have longer initial reflection times)
 - **Diffusion** increases (more complex reflections)
 - **Early reflections** decrease (less prominent in large spaces)
+- **Modulation** increases significantly in extreme zone (creates unstable, ethereal character)
 
 ### Tonal Color
 - Small spaces: Bright (damping 0.9 → 0.6)
@@ -133,6 +153,8 @@ For testing specific positions:
 | 37.5% | Studio space | 0.40 | 0.43 | 0.50 |
 | 50% | Chamber/hall boundary | 0.45 | 0.55 | 0.60 |
 | 62.5% | Medium hall | 0.48 | 0.65 | 0.68 |
-| 75% | Hall/cathedral boundary | 0.50 | 0.75 | 0.75 |
-| 87.5% | Large cathedral | 0.50 | 0.83 | 0.83 |
-| 100% | Maximum cathedral | 0.50 | 0.90 | 0.90 |
+| 75% | Hall/cathedral boundary | 0.55 | 0.75 | 0.70 |
+| 87.5% | Large cathedral | 0.66 | 0.82 | 0.77 |
+| 90% | Cathedral/infinite boundary | 0.70 | 0.85 | 0.80 |
+| 95% | Deep infinite space | 0.78 | 0.88 | 0.83 |
+| 100% | Maximum infinite wash | 0.85 | 0.90 | 0.85 |

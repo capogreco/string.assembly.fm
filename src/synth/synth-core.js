@@ -108,6 +108,23 @@ export class SynthCore {
     });
 
     await Promise.all(loadPromises);
+    
+    // Load reverb processor from public/worklets if not already loaded
+    try {
+      // Check if the processor is already registered by trying to create a test node
+      const testNode = new AudioWorkletNode(this.audioContext, "fdn-reverb-processor");
+      testNode.disconnect(); // Clean up test node
+    } catch (error) {
+      // Processor not registered, load it now
+      try {
+        await this.audioContext.audioWorklet.addModule('/worklets/reverb-processor.js');
+      } catch (loadError) {
+        this.log(
+          `Warning: Failed to load reverb processor: ${loadError.message}`,
+          "warn",
+        );
+      }
+    }
   }
 
   // Create the audio node chain
@@ -149,9 +166,15 @@ export class SynthCore {
         this.audioContext,
         "fdn-reverb-processor",
       );
-      this.reverbNode.parameters.get("roomSize").value = 0.3;
-      this.reverbNode.parameters.get("damping").value = 0.5;
-      this.reverbNode.parameters.get("mix").value = 0.2;
+      // Initialize to dry (0% reverb)
+      this.reverbNode.parameters.get("mix").value = 0.0;
+      this.reverbNode.parameters.get("roomSize").value = 0.1;
+      this.reverbNode.parameters.get("decay").value = 0.1;
+      this.reverbNode.parameters.get("damping").value = 0.9;
+      this.reverbNode.parameters.get("preDelay").value = 0;
+      this.reverbNode.parameters.get("diffusion").value = 0.3;
+      this.reverbNode.parameters.get("modulation").value = 0.05;
+      this.reverbNode.parameters.get("earlyLevel").value = 0.9;
     } catch (error) {
       this.log(`Reverb worklet not available: ${error.message}`, "warn");
       this.reverbNode = null;

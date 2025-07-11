@@ -420,6 +420,10 @@ class SynthApp {
           // Handle detune parameter from Arc
           Logger.log(`[DEBUG] Setting detune to: ${message.value}`, 'parameters');
           this.synthClient.setDetune(message.value);
+        } else if (message.name === "reverb") {
+          // Handle reverb parameter from Arc
+          Logger.log(`[DEBUG] Setting reverb to: ${message.value}`, 'parameters');
+          this.synthClient.setReverb(message.value);
         }
         break;
         
