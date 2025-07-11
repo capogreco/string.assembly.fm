@@ -14,6 +14,7 @@ export class Logger {
     errors: true, // Always on
     debug: false, // Debug messages
     parts: true, // Part manager operations - ENABLED FOR DEBUGGING
+    hardware: true, // Hardware devices (Arc, etc.) - ENABLED FOR DEBUGGING
   };
 
   /**

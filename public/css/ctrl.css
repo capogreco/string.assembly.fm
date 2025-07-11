@@ -232,7 +232,6 @@
             }
 
             #status {
-                text-align: center;
                 padding: 8px 12px;
                 border-radius: 6px;
                 margin-bottom: 10px;
@@ -240,6 +239,15 @@
                 background: #e74c3c;
                 color: white;
                 font-size: 0.9em;
+            }
+            
+            #status label {
+                color: white;
+                font-weight: normal;
+            }
+            
+            #status input[type="checkbox"] {
+                margin: 0;
             }
 
             #status.connected {

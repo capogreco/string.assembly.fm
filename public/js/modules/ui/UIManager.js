@@ -219,38 +219,41 @@ export class UIManager {
     
     this.elements.status.dataset.status = connectionStatus;
 
+    // The status element now contains a span for text, so find the first span child
+    const statusTextElement = this.elements.status.querySelector('span') || this.elements.status;
+
     // Update text and styling
     switch (connectionStatus) {
       case "connected":
-        this.elements.status.textContent = "Connected";
+        statusTextElement.textContent = "Connected";
         this.elements.status.className = "status connected";
         break;
       case "connecting":
-        this.elements.status.textContent = "Connecting...";
+        statusTextElement.textContent = "Connecting...";
         this.elements.status.className = "status connecting";
         break;
       case "disconnected":
-        this.elements.status.textContent = "Disconnected";
+        statusTextElement.textContent = "Disconnected";
         this.elements.status.className = "status disconnected";
         break;
       case "kicked":
-        this.elements.status.textContent = "Kicked";
+        statusTextElement.textContent = "Kicked";
         this.elements.status.className = "status kicked";
         break;
       case "error":
-        this.elements.status.textContent = "Connection Error";
+        statusTextElement.textContent = "Connection Error";
         this.elements.status.className = "status error";
         break;
       case "ready":
-        this.elements.status.textContent = "Ready";
+        statusTextElement.textContent = "Ready";
         this.elements.status.className = "status ready";
         break;
       case "initializing":
-        this.elements.status.textContent = "Initializing...";
+        statusTextElement.textContent = "Initializing...";
         this.elements.status.className = "status initializing";
         break;
       default:
-        this.elements.status.textContent = "Unknown";
+        statusTextElement.textContent = "Unknown";
         this.elements.status.className = "status unknown";
     }
 

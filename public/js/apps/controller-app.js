@@ -24,6 +24,9 @@ import { MessageBuilders, MessageTypes, CommandNames } from "../protocol/Message
 import "../modules/ui/HarmonicRatioSelector.js";
 import { AudioUtilities } from "../modules/utils/AudioUtilities.js";
 
+// Import hardware modules
+import { arcManager } from "../modules/hardware/ArcManager.js";
+
 /**
  * Initialize the modular application
  */
@@ -53,6 +56,9 @@ async function initializeApp() {
 
     // Initialize audio system
     await initializeAudio();
+
+    // Initialize hardware (Arc)
+    await initializeHardware();
 
     // Set up event listeners
     setupGlobalEventListeners();
@@ -257,6 +263,116 @@ async function initializeAudio() {
   setupAudioEventHandlers();
 
   Logger.log("Audio system initialized", "lifecycle");
+}
+
+/**
+ * Initialize hardware systems (Arc)
+ */
+async function initializeHardware() {
+  Logger.log("Initializing hardware systems...", "lifecycle");
+
+  // Initialize Arc manager
+  await arcManager.initialize();
+
+  // Set up Arc event handlers
+  setupArcEventHandlers();
+
+  Logger.log("Hardware systems initialized", "lifecycle");
+}
+
+/**
+ * Set up Arc event handlers
+ */
+function setupArcEventHandlers() {
+  // Handle Arc parameter changes
+  eventBus.on("arc:parameterChanged", (data) => {
+    Logger.log(`Arc parameter changed: ${data.parameter} = ${data.value.toFixed(2)}`, "hardware");
+    
+    // Update UI to reflect Arc changes
+    const parameterMap = {
+      'volume': 'masterGain',
+      'brightness': 'brightness',
+      'detune': 'detune',
+      'reverb': 'reverb'
+    };
+    
+    const paramId = parameterMap[data.parameter];
+    if (paramId) {
+      // Update the UI control
+      const control = document.getElementById(paramId);
+      if (control) {
+        control.value = data.value;
+        // Update value display
+        const valueDisplay = document.getElementById(`${paramId}Value`);
+        if (valueDisplay) {
+          valueDisplay.textContent = data.value.toFixed(2);
+        }
+      }
+      
+      // Send Arc parameter as command to synths
+      networkCoordinator.broadcastCommand({
+        name: data.parameter,
+        value: data.value,
+        timestamp: Date.now()
+      });
+    }
+  });
+
+  // Handle Arc connection events
+  eventBus.on("arc:connected", (data) => {
+    Logger.log("Arc connected", "hardware");
+    uiManager.showNotification("Monome Arc connected", "success", 2000);
+    
+    // Update connect button
+    const connectBtn = document.getElementById('connectArc');
+    if (connectBtn) {
+      connectBtn.textContent = 'Arc Connected';
+      connectBtn.style.background = '#22c55e';
+      connectBtn.disabled = true;
+      
+      // Force style update
+      connectBtn.style.cursor = 'default';
+      connectBtn.style.opacity = '1';
+    }
+    
+    // Sync Arc's internal state with current UI values
+    const params = ['masterGain', 'brightness', 'detune', 'reverb'];
+    const names = ['volume', 'brightness', 'detune', 'reverb'];
+    params.forEach((paramId, index) => {
+      const control = document.getElementById(paramId);
+      if (control) {
+        arcManager.setParameterValue(names[index], parseFloat(control.value));
+      }
+    });
+  });
+
+  eventBus.on("arc:disconnected", () => {
+    Logger.log("Arc disconnected", "hardware");
+    uiManager.showNotification("Monome Arc disconnected", "warning", 2000);
+    
+    // Update connect button
+    const connectBtn = document.getElementById('connectArc');
+    if (connectBtn) {
+      connectBtn.textContent = 'Connect Arc';
+      connectBtn.style.background = '#667eea';
+      connectBtn.disabled = false;
+    }
+  });
+
+  // Sync UI parameter changes to Arc's internal state
+  const arcParameters = ['masterGain', 'brightness', 'detune', 'reverb'];
+  const arcParamNames = ['volume', 'brightness', 'detune', 'reverb'];
+  
+  arcParameters.forEach((paramId, index) => {
+    const control = document.getElementById(paramId);
+    if (control) {
+      control.addEventListener('input', (e) => {
+        const value = parseFloat(e.target.value);
+        // Update Arc's internal state when UI changes
+        arcManager.setParameterValue(arcParamNames[index], value);
+      });
+    }
+  });
 }
 
 /**
@@ -814,6 +930,22 @@ function setupGlobalEventListeners() {
       }
     }
   });
+
+  // Set up Arc connect button
+  const connectArcBtn = document.getElementById('connectArc');
+  if (connectArcBtn) {
+    connectArcBtn.addEventListener('click', async () => {
+      Logger.log("Manual Arc connection requested", "hardware");
+      const connected = await arcManager.connect();
+      if (!connected) {
+        uiManager.showNotification("Failed to connect to Arc", "error", 3000);
+      }
+    });
+  }
+  
+  // Expose Arc test function for debugging
+  window.testArc = () => arcManager.testCommunication();
+  
 
   Logger.log("Global event listeners set up", "lifecycle");
 }

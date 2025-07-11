@@ -713,20 +713,6 @@
                         >
                     </div>
                     <div class="control-group">
-                        <label for="brightness">Brightness</label>
-                        <input
-                            type="range"
-                            id="brightness"
-                            value="0.5"
-                            min="0.0"
-                            max="1.0"
-                            step="0.01"
-                        />
-                        <span id="brightnessValue" class="value-display"
-                            >0.50</span
-                        >
-                    </div>
-                    <div class="control-group">
                         <label for="bodyResonance">Body Resonance</label>
                         <input
                             type="range"
@@ -794,7 +780,13 @@
         </div>
         
         <div class="transition-sidebar">
-            <div id="status">Disconnected</div>
+            <div id="status" style="display: flex; align-items: center; justify-content: space-between;">
+                <span>Disconnected</span>
+                <label style="display: flex; align-items: center; gap: 8px;">
+                    <input type="checkbox" id="power" checked />
+                    <span style="font-size: 0.9em;">Power</span>
+                </label>
+            </div>
             <div id="stats" style="margin-bottom: 15px;">
                 <div class="stat" style="display: flex; flex-direction: column; align-items: center;">
                     <strong id="connected_count" style="display: block; order: 1;">0</strong>
@@ -806,10 +798,13 @@
                 </div>
             </div>
             
-            <!-- Master Output -->
+            <!-- Arc Parameters -->
             <div class="section" style="background: #1a1a1a; border-left-color: #667eea;">
-                <div class="section-title" style="color: #a78bfa; border-bottom-color: #2d3748; font-size: 1em;">
-                    Master Output
+                <div class="section-title" style="color: #a78bfa; border-bottom-color: #2d3748; font-size: 1em; display: flex; justify-content: space-between; align-items: center;">
+                    <span>Arc Parameters</span>
+                    <button id="connectArc" style="padding: 4px 12px; font-size: 0.8em; background: #667eea; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                        Connect Arc
+                    </button>
                 </div>
                 <div class="controls">
                     <div class="control-group">
@@ -827,12 +822,46 @@
                         >
                     </div>
                     <div class="control-group">
-                        <label for="power">Power</label>
-                        <div style="display: flex; align-items: center;">
-                            <input type="checkbox" id="power" checked />
-                            <span style="margin-left: 8px;">On/Off</span>
-                        </div>
-                        <span></span>
+                        <label for="brightness">Brightness</label>
+                        <input
+                            type="range"
+                            id="brightness"
+                            value="0.5"
+                            min="0.0"
+                            max="1.0"
+                            step="0.01"
+                        />
+                        <span id="brightnessValue" class="value-display"
+                            >0.50</span
+                        >
+                    </div>
+                    <div class="control-group">
+                        <label for="detune">Detune</label>
+                        <input
+                            type="range"
+                            id="detune"
+                            value="0.0"
+                            min="0.0"
+                            max="1.0"
+                            step="0.01"
+                        />
+                        <span id="detuneValue" class="value-display"
+                            >0.00</span
+                        >
+                    </div>
+                    <div class="control-group">
+                        <label for="reverb">Reverb</label>
+                        <input
+                            type="range"
+                            id="reverb"
+                            value="0.0"
+                            min="0.0"
+                            max="1.0"
+                            step="0.01"
+                        />
+                        <span id="reverbValue" class="value-display"
+                            >0.00</span
+                        >
                     </div>
                 </div>
             </div>
