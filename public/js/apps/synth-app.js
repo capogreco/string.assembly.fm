@@ -30,7 +30,7 @@ class SynthApp {
     this.visualizer = null;
     
     // Initialize logging
-    Logger.log("SynthApp initializing", "lifecycle");
+    // SynthApp initializing
   }
 
   async init() {
@@ -98,7 +98,7 @@ class SynthApp {
 
     this.ws.addEventListener("open", () => {
       // console.log("[DEBUG] WebSocket connected");
-      Logger.log("Connected to server", "connections");
+      // Connected to server
       this.updateStatus(`Connected as ${this.synthId}`);
       
       // Register as a synth (not a controller)
@@ -144,7 +144,7 @@ class SynthApp {
       case "controllers-list":
         // Received list of active controllers
         // console.log("[DEBUG] Controllers list received:", message.controllers);
-        Logger.log(`Received controllers list: ${message.controllers.join(", ")}`, "connections");
+        // Received controllers list
         
         // Clear controllers that are no longer in the list
         for (const [controllerId, controller] of this.controllers) {
@@ -161,7 +161,7 @@ class SynthApp {
         for (const controllerId of message.controllers) {
           if (!this.controllers.has(controllerId)) {
             // console.log(`[DEBUG] Discovered new controller: ${controllerId}`);
-            Logger.log(`Discovered controller: ${controllerId}`, "connections");
+            // Discovered controller
             this.controllers.set(controllerId, {
               id: controllerId,
               connection: null,
@@ -181,7 +181,7 @@ class SynthApp {
 
       case "controller-joined":
         // New controller joined
-        Logger.log(`New controller joined: ${message.controller_id}`, "connections");
+        // New controller joined
         if (!this.controllers.has(message.controller_id)) {
           this.controllers.set(message.controller_id, {
             id: message.controller_id,
@@ -279,7 +279,7 @@ class SynthApp {
     }
     
     // console.log(`[DEBUG] Creating new RTCPeerConnection for ${controllerId}`);
-    Logger.log(`Initiating connection to controller ${controllerId}`, "connections");
+    // Initiating connection to controller
     
     try {
       const pc = new RTCPeerConnection(this.rtcConfig);
@@ -291,7 +291,7 @@ class SynthApp {
 
     dataChannel.addEventListener("open", () => {
       // console.log(`[DEBUG] Data channel OPENED to controller ${controllerId}`);
-      Logger.log(`Data channel open to controller ${controllerId}`, "connections");
+      // Data channel open to controller
       controller.connected = true;
       
       // Add to SynthClient's controllers with data channel reference
@@ -317,7 +317,7 @@ class SynthApp {
     });
 
     dataChannel.addEventListener("close", () => {
-      Logger.log(`Data channel closed to controller ${controllerId}`, "connections");
+      // Data channel closed to controller
       controller.connected = false;
       
       // Remove from SynthClient's controllers

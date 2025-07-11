@@ -48,7 +48,7 @@ export class SynthClient {
 
     // Banking is handled by SynthCore now
 
-    Logger.log(`SynthClient ${synthId} created`, "synth");
+    // SynthClient created
   }
 
   /**
@@ -88,10 +88,7 @@ export class SynthClient {
     this.analyser = this.synthCore.analyserNode || this.analyser;
 
     this.audioInitialized = true;
-    Logger.log(
-      `SynthClient ${this.synthId} audio initialized with panning: ${this.options.panPosition}`,
-      "synth",
-    );
+    // SynthClient audio initialized
 
     // Start visualizer if enabled and canvas is set
     if (this.options.enableVisualizer && this.visualizerCanvas) {
@@ -100,19 +97,13 @@ export class SynthClient {
 
     // Apply any pending program
     if (this.pendingProgram) {
-      Logger.log(
-        `[${this.synthId}] Applying pending program after initialization`,
-        "lifecycle",
-      );
+      // Applying pending program
       // Use applyStoredProgram to ensure assignment checks
       this.applyStoredProgram(this.pendingProgram.transition);
       this.pendingProgram = null;
     } else if (!this.hasReceivedProgram) {
       // No program received yet - ensure silence
-      Logger.log(
-        `[${this.synthId}] No program received yet - ensuring silence`,
-        "lifecycle",
-      );
+      // No program received yet - ensuring silence
       this.synthCore.setPower(false);
     }
   }
@@ -136,14 +127,11 @@ export class SynthClient {
 
           // If we have a program and are turning power on, apply it
           if (message.value && this.hasReceivedProgram && this.storedProgram) {
-            Logger.log(
-              `[${this.synthId}] Power turned on - applying stored program`,
-              "synth",
-            );
+            // Power turned on - applying stored program
             this.applyStoredProgram();
           } else if (!message.value) {
             // Power off - silence the synth
-            Logger.log(`[${this.synthId}] Power turned off`, "synth");
+            // Power turned off
             this.synthCore.setPower(false);
           }
         } else if (message.name === "volume") {
@@ -514,7 +502,7 @@ export class SynthClient {
     };
 
     draw();
-    Logger.log(`[${this.synthId}] Visualizer started`, "ui");
+    // Visualizer started
   }
 
   /**
@@ -522,7 +510,7 @@ export class SynthClient {
    */
   stopVisualizer() {
     this.isVisualizerRunning = false;
-    Logger.log(`[${this.synthId}] Visualizer stopped`, "ui");
+    // Visualizer stopped
   }
 
   /**

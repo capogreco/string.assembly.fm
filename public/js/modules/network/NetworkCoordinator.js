@@ -56,9 +56,7 @@ export class NetworkCoordinator {
 
     this.isInitialized = true;
 
-    if (window.Logger) {
-      window.Logger.log("NetworkCoordinator initialized", "lifecycle");
-    }
+    // NetworkCoordinator initialized
   }
 
   /**
@@ -87,9 +85,7 @@ export class NetworkCoordinator {
         // Initialize WebRTC manager after WebSocket is connected
         this.webRTC.initialize();
 
-        if (window.Logger) {
-          window.Logger.log("Network connection established", "connections");
-        }
+        // Network connection established
         return true;
       } else {
         if (window.Logger) {
@@ -199,7 +195,7 @@ export class NetworkCoordinator {
 
     // WebRTC data channel events
     this.webRTC.on("dataChannelOpen", (data) => {
-      console.log(`[NetworkCoordinator] Data channel open event received for ${data.peerId}`);
+      // Data channel open event received
       if (window.Logger) {
         window.Logger.log(
           `Data channel open: ${data.peerId}`,
@@ -215,7 +211,7 @@ export class NetworkCoordinator {
         state: null,
       });
 
-      console.log(`[NetworkCoordinator] Emitting network:synthConnected for ${data.peerId}`);
+      // Emitting network:synthConnected
       // Auto-send program on connection
       this.eventBus.emit("network:synthConnected", {
         synthId: data.peerId,
@@ -528,7 +524,7 @@ export class NetworkCoordinator {
    * @param {RTCDataChannel} channel - The data channel (optional)
    */
   onSynthConnected(synthId, channel = null) {
-    console.log(`[NetworkCoordinator] onSynthConnected called for ${synthId}`);
+    // onSynthConnected called
     if (window.Logger) {
       window.Logger.log(`Synth ${synthId} connected - sending current program`, 'network');
     }
@@ -537,13 +533,13 @@ export class NetworkCoordinator {
     const partManager = window.partManager || this.appState.get('partManager');
     const systemState = this.appState.getSystemState();
     
-    console.log(`[NetworkCoordinator] PartManager available:`, !!partManager);
-    console.log(`[NetworkCoordinator] PartManager lastSentProgram:`, !!partManager?.lastSentProgram);
+    // Check PartManager availability
+    // Check lastSentProgram
     
     if (partManager && partManager.lastSentProgram) {
       // Use the last successfully sent program (the active program)
       const baseProgram = partManager.lastSentProgram.baseProgram;
-      console.log(`[NetworkCoordinator] Got active program with ${Object.keys(baseProgram).length} parameters`);
+      // Got active program
       
       // Send the base program to the synth
       // PartManager will handle assigning specific frequency/expression via sendProgramToSpecificSynth
@@ -552,7 +548,7 @@ export class NetworkCoordinator {
         power: systemState.audio.power
       };
       
-      console.log(`[NetworkCoordinator] Triggering program send for ${synthId}`);
+      // Triggering program send
       
       // Use PartManager to send program with proper frequency/expression assignment
       partManager.sendProgramToSpecificSynth(synthId);
@@ -571,7 +567,7 @@ export class NetworkCoordinator {
         window.Logger.log(`Triggered program send to synth ${synthId}`, 'network');
       }
     } else {
-      console.log(`[NetworkCoordinator] No active program available`);
+      // No active program available
       if (window.Logger) {
         window.Logger.log(`No active program to send to synth ${synthId} - user hasn't sent a program yet`, 'network');
       }

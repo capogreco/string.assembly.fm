@@ -37,17 +37,10 @@ export class WebRTCManager {
         );
     }
 
-    if (window.Logger) {
-      window.Logger.log("WebRTCManager.initialize() called", "lifecycle");
-    }
+    // WebRTCManager.initialize() called
 
     // Listen for WebSocket messages that trigger WebRTC operations
-    if (window.Logger) {
-      window.Logger.log(
-        "WebRTCManager setting up websocket:message listener",
-        "lifecycle",
-      );
-    }
+    // Setting up websocket:message listener
     this.eventBus.on("websocket:message", (data) => {
       if (window.Logger) {
         window.Logger.log(
@@ -1165,7 +1158,7 @@ export class WebRTCManager {
       }
 
       // Emit both new and legacy events for compatibility
-      console.log(`[WebRTCManager] Emitting dataChannelOpen for ${peerId}`);
+      // Emitting dataChannelOpen
       this.eventBus.emit("webrtc:dataChannelOpen", {
         peerId,
         channel,

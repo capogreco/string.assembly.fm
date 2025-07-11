@@ -120,9 +120,7 @@ export class PianoExpressionHandler {
 
     this.isInitialized = true;
 
-    if (window.Logger) {
-      window.Logger.log("PianoExpressionHandler initialized", "lifecycle");
-    }
+    // PianoExpressionHandler initialized
   }
 
   /**

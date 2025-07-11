@@ -92,7 +92,7 @@ export class ProgramState {
    * Initialize the program state
    */
   initialize() {
-    Logger.log('Initializing ProgramState...', 'lifecycle');
+    // Initializing ProgramState...
     
     // Load banks from storage
     this.loadBanksFromStorage();
@@ -103,7 +103,7 @@ export class ProgramState {
     // Capture initial UI state
     this.captureFromUI();
     
-    Logger.log('ProgramState initialized', 'lifecycle');
+    // ProgramState initialized
   }
   
   /**
@@ -117,7 +117,7 @@ export class ProgramState {
     });
     
     // Log what defaults are being set
-    Logger.log(`Initialized defaults for parameters: ${Object.keys(this.currentProgram.parameters).join(', ')}`, 'lifecycle');
+    // Initialized default parameters
   }
   
   /**
@@ -154,7 +154,7 @@ export class ProgramState {
       
       // Note: Chord and expressions are managed separately through events
       
-      Logger.log('Captured program state from UI', 'lifecycle');
+      // Captured program state from UI
     } finally {
       this.isUpdating = false;
     }
@@ -193,7 +193,7 @@ export class ProgramState {
         expressions: program.chord.expressions
       });
       
-      Logger.log('Applied program state to UI', 'lifecycle');
+      // Applied program state to UI
     } finally {
       this.isUpdating = false;
     }
@@ -203,7 +203,7 @@ export class ProgramState {
    * Apply harmonic selections to UI
    */
   applyHarmonicSelectionsToUI(selections) {
-    Logger.log(`Applying harmonic selections to UI: ${JSON.stringify(selections)}`, 'lifecycle');
+    // Applying harmonic selections to UI
     
     // Emit event for HarmonicRatioSelector components to sync
     eventBus.emit('programState:harmonicSelectionsChanged', {
@@ -219,7 +219,7 @@ export class ProgramState {
         `.harmonic-selector[data-expression="${expression}"] .harmonic-row[data-type="${type}"] .harmonic-button`
       );
       
-      Logger.log(`Found ${buttons.length} buttons for ${expression}-${type}`, 'lifecycle');
+      // Found buttons for harmonic selection
       
       buttons.forEach(button => {
         const value = parseInt(button.dataset.value);
@@ -321,28 +321,21 @@ export class ProgramState {
     if (partManager) {
       // Get the complete parts array
       const parts = partManager.getParts();
-      Logger.log(`Capturing ${parts.length} parts for active program`, 'lifecycle');
-      
       // Store parts in activeProgram (new paradigm)
       this.activeProgram.parts = parts.map(p => p.toObject ? p.toObject() : p);
-      Logger.log(`Stored ${this.activeProgram.parts.length} parts in activeProgram:`, 'lifecycle');
-      this.activeProgram.parts.forEach(p => {
-        Logger.log(`  Part: freq=${p.frequency}, expr=${p.expression?.type || 'none'}`, 'lifecycle');
-      });
+      Logger.log(`Captured ${parts.length} parts for active program`, 'lifecycle');
       
       // Also build expressions for backward compatibility
       if (partManager.synthAssignments.size > 0) {
         const expressions = {};
         for (const [synthId, assignment] of partManager.synthAssignments) {
           const noteName = partManager.frequencyToNoteName(assignment.frequency);
-          Logger.log(`  Assignment ${synthId}: note=${noteName}, expr=${assignment.expression?.type || 'none'}`, 'lifecycle');
           if (assignment.expression && assignment.expression.type !== "none") {
             expressions[noteName] = assignment.expression;
           }
         }
         // Store in activeProgram for backward compatibility when saving
         this.activeProgram.chord.expressions = expressions;
-        Logger.log(`Captured ${Object.keys(expressions).length} expressions from assignments: ${JSON.stringify(expressions)}`, 'lifecycle');
       }
     } else {
       // Initialize empty arrays/objects if not already present
@@ -393,17 +386,10 @@ export class ProgramState {
     programToSave.metadata.timestamp = Date.now();
     programToSave.metadata.name = `Bank ${bankId}`;
     
-    // Debug log what we're saving
-    Logger.log(`Saving to bank ${bankId}:`, 'lifecycle');
-    Logger.log(`  - Parameters: trill=${programToSave.parameters.trillEnabled}`, 'lifecycle');
-    Logger.log(`  - Parts: ${programToSave.parts?.length || 0}`, 'lifecycle');
-    if (programToSave.parts) {
-      programToSave.parts.forEach((p, i) => {
-        Logger.log(`    Part ${i}: ${p.frequency}Hz, expr=${p.expression?.type || 'none'}`, 'lifecycle');
-      });
-    }
-    Logger.log(`  - Chord: ${programToSave.chord?.frequencies?.length || 0} frequencies`, 'lifecycle');
-    Logger.log(`  - Expressions: ${JSON.stringify(programToSave.chord?.expressions || {})}`, 'lifecycle');
+    // Log save summary
+    const partsCount = programToSave.parts?.length || 0;
+    const freqCount = programToSave.chord?.frequencies?.length || 0;
+    Logger.log(`Saving to bank ${bankId}: ${partsCount} parts, ${freqCount} frequencies`, 'lifecycle');
     
     // Get banks from AppState
     const banks = appState.getNested('banking.banks') || new Map();
@@ -438,7 +424,7 @@ export class ProgramState {
     // Set as current program
     this.currentProgram = program.clone();
     
-    Logger.log(`Loading program from bank ${bankId} with harmonic selections: ${JSON.stringify(this.currentProgram.harmonicSelections)}`, 'lifecycle');
+    // Loading program from bank
     
     // Apply to UI (transition parameters will be skipped)
     this.applyToUI();
@@ -613,7 +599,7 @@ export class ProgramState {
         appState.setNested('banking.banks', banks);
         appState.setNested('banking.metadata.lastModified', Date.now());
         
-        Logger.log(`Loaded ${banks.size} banks from storage`, 'lifecycle');
+        // Banks loaded from storage
       } else {
         // Initialize empty banks
         appState.setNested('banking.banks', banks);
@@ -637,7 +623,7 @@ export class ProgramState {
       });
       
       localStorage.setItem(this.storageKey, JSON.stringify(data));
-      Logger.log('Banks saved to storage', 'lifecycle');
+      // Banks saved to storage
     } catch (error) {
       Logger.log(`Failed to save banks: ${error}`, 'error');
     }

@@ -33,7 +33,7 @@
 
   // Load modular system
   function loadModularSystem() {
-    console.log("[MODULE-LOADER] Loading modular system...");
+    // Loading modular system...
     
     // Determine which app to load based on the page
     let appModule;
@@ -41,14 +41,14 @@
     
     if (pathname.includes('/ctrl') || pathname.endsWith('/ctrl.html')) {
       appModule = './js/apps/controller-app.js';
-      console.log("[MODULE-LOADER] Detected controller page");
+      // Detected controller page
     } else if (pathname.includes('/ensemble') || pathname.endsWith('/ensemble.html')) {
       appModule = './js/apps/ensemble-app.js';
-      console.log("[MODULE-LOADER] Detected ensemble page");
+      // Detected ensemble page
     } else {
       // Default to synth for index.html
       appModule = './js/apps/synth-app.js';
-      console.log("[MODULE-LOADER] Detected synth page");
+      // Detected synth page
     }
 
     // Create module script
@@ -57,7 +57,7 @@
     script.src = appModule;
 
     script.onload = function () {
-      console.log("[MODULE-LOADER] Modular system loaded successfully");
+      // Modular system loaded successfully
       document.body.classList.add("modular-loaded");
       hideLoadingIndicator();
     };
@@ -159,14 +159,14 @@
 
   // Main initialization
   function initialize() {
-    console.log("[MODULE-LOADER] Initializing...");
+    // Initializing...
 
     // Show loading indicator
     showLoadingIndicator();
 
     // Check browser capabilities
     if (supportsES6Modules() && supportsRequiredFeatures()) {
-      console.log("[MODULE-LOADER] Browser supports ES6 modules");
+      // Browser supports ES6 modules
       loadModularSystem();
     } else {
       console.error("[MODULE-LOADER] Browser does not support required features");

@@ -32,10 +32,7 @@ import { arcManager } from "../modules/hardware/ArcManager.js";
  */
 async function initializeApp() {
   try {
-    Logger.log(
-      "Initializing String Assembly FM Controller (Modular)",
-      "lifecycle",
-    );
+    // Initializing String Assembly FM Controller
 
     // Initialize core systems
     await initializeCore();
@@ -46,7 +43,7 @@ async function initializeApp() {
     // Initialize program management
     initializeProgramManager();
     programState.initialize();
-    Logger.log("Program state system initialized", "lifecycle");
+    // Program state system initialized
 
     // Initialize UI components BEFORE network so status updates are visible
     await initializeUI();
@@ -63,12 +60,12 @@ async function initializeApp() {
     // Set up event listeners
     setupGlobalEventListeners();
 
-    Logger.log("Application initialized successfully", "lifecycle");
+    // Application initialized successfully
     
     // Mark as ready only after all systems are up
     // Mark as ready - compatibility layer handles this
     
-    Logger.log("Application ready (modular-v1.0)", "lifecycle");
+    console.log("String Assembly FM Controller ready");
 
     // Set global flag to indicate modular system is fully loaded
     window.__modularSystemLoaded = true;
@@ -82,7 +79,7 @@ async function initializeApp() {
  * Initialize core systems
  */
 async function initializeCore() {
-  Logger.log("Initializing core systems...", "lifecycle");
+  // Initializing core systems...
 
   // Fetch ICE servers
   await fetchIceServers();
@@ -90,14 +87,14 @@ async function initializeCore() {
   // Set up debug configuration persistence
   Logger.loadConfig();
 
-  Logger.log("Core systems initialized", "lifecycle");
+  // Core systems initialized
 }
 
 /**
  * Initialize state management
  */
 function initializeState() {
-  Logger.log("Initializing state management...", "lifecycle");
+  // Initializing state management...
 
   // Set initial connection status
   // Set initializing state (compatibility layer will handle the mapping)
@@ -109,9 +106,23 @@ function initializeState() {
       const skipKeys = [
         'connections.synths',
         'connections.metrics.averageLatency',
+        'connections.metrics.connectedCount',
+        'connections.websocket.connected',
+        'connections.websocket.reconnecting',
+        'connections.controllerId',
         'ui.parameters.changed',
         'performance.currentProgram.chord.frequencies',
-        'performance.currentProgram.parts.assignments'
+        'performance.currentProgram.parts.assignments',
+        'performance.currentProgram.harmonicSelections',
+        'harmonicSelections',
+        'performance.currentProgram.partsAssignments',
+        'banking.metadata.lastModified',
+        'banking.banks',
+        'bodyType',
+        'pianoKeyboard',
+        'partManager',
+        'parameterControls',
+        'networkCoordinator'
       ];
       
       // Skip if it's a key we want to filter or if it contains synth-specific data
@@ -130,14 +141,14 @@ function initializeState() {
     });
   }
 
-  Logger.log("State management initialized", "lifecycle");
+  // State management initialized
 }
 
 /**
  * Initialize program management
  */
 function initializeProgramManager() {
-  Logger.log("Initializing program management...", "lifecycle");
+  // Initializing program management...
 
   // Load saved banks from storage
   programManager.loadBanksFromStorage();
@@ -147,7 +158,7 @@ function initializeProgramManager() {
     Logger.log(`Bank ${data.bankId} cleared`, "lifecycle");
   });
 
-  Logger.log("Program management initialized", "lifecycle");
+  // Program management initialized
 }
 
 /**
@@ -206,7 +217,7 @@ function setupProgramNetworkHandlers() {
  * Initialize network layer
  */
 async function initializeNetwork() {
-  Logger.log("Initializing network layer...", "lifecycle");
+  // Initializing network layer...
 
   // Initialize network coordinator
   await networkCoordinator.initialize();
@@ -225,14 +236,14 @@ async function initializeNetwork() {
     Logger.log(`Failed to connect to network: ${error}`, "error");
   }
 
-  Logger.log("Network layer initialized", "lifecycle");
+  // Network layer initialized
 }
 
 /**
  * Initialize UI layer
  */
 async function initializeUI() {
-  Logger.log("Initializing UI layer...", "lifecycle");
+  // Initializing UI layer...
 
   // Initialize UI manager
   uiManager.initialize();
@@ -261,14 +272,14 @@ async function initializeUI() {
     updateExpressionGroupVisibility();
   }, 100);
 
-  Logger.log("UI layer initialized", "lifecycle");
+  // UI layer initialized
 }
 
 /**
  * Initialize audio system
  */
 async function initializeAudio() {
-  Logger.log("Initializing audio system...", "lifecycle");
+  // Initializing audio system...
 
   // Initialize part manager (replaces expression and chord managers)
   await partManager.initialize();
@@ -281,14 +292,14 @@ async function initializeAudio() {
   // Set up audio event handlers
   setupAudioEventHandlers();
 
-  Logger.log("Audio system initialized", "lifecycle");
+  // Audio system initialized
 }
 
 /**
  * Initialize hardware systems (Arc)
  */
 async function initializeHardware() {
-  Logger.log("Initializing hardware systems...", "lifecycle");
+  // Initializing hardware systems...
 
   // Initialize Arc manager
   await arcManager.initialize();
@@ -308,7 +319,7 @@ async function initializeHardware() {
     }
   }
 
-  Logger.log("Hardware systems initialized", "lifecycle");
+  // Hardware systems initialized
 }
 
 // Arc parameter throttling setup
@@ -331,7 +342,7 @@ const paramThrottleTimes = {
 function setupArcEventHandlers() {
   // Handle Arc parameter changes
   eventBus.on("arc:parameterChanged", (data) => {
-    Logger.log(`Arc parameter changed: ${data.parameter} = ${data.value.toFixed(2)}`, "hardware");
+    // Arc parameter changed
     
     // Update UI to reflect Arc changes
     const parameterMap = {
@@ -369,7 +380,7 @@ function setupArcEventHandlers() {
           timestamp: now
         });
         arcParamLastSent[data.parameter] = now;
-        Logger.log(`Sent ${data.parameter} command: ${data.value}`, "network");
+        // Sent parameter command
         
         // Clear any pending value since we just sent
         delete arcParamPending[data.parameter];
@@ -390,7 +401,7 @@ function setupArcEventHandlers() {
                 timestamp: Date.now()
               });
               arcParamLastSent[data.parameter] = Date.now();
-              Logger.log(`Sent ${data.parameter} command: ${arcParamPending[data.parameter]}`, "network");
+              // Sent pending parameter command
               delete arcParamPending[data.parameter];
             }
             delete arcParamTimers[data.parameter];
@@ -402,7 +413,7 @@ function setupArcEventHandlers() {
 
   // Handle Arc connection events
   eventBus.on("arc:connected", (data) => {
-    Logger.log("Arc connected", "hardware");
+    // Arc connected
     uiManager.showNotification("Monome Arc connected", "success", 2000);
     
     // Update connect button
@@ -429,7 +440,7 @@ function setupArcEventHandlers() {
   });
 
   eventBus.on("arc:disconnected", () => {
-    Logger.log("Arc disconnected", "hardware");
+    // Arc disconnected
     uiManager.showNotification("Monome Arc disconnected", "warning", 2000);
     
     // Update connect button
@@ -463,10 +474,7 @@ function setupArcEventHandlers() {
 function setupAudioEventHandlers() {
   // PartManager handles all chord and expression events internally
   // No additional event handlers needed
-  Logger.log(
-    "Audio event handlers set up (PartManager handles internally)",
-    "lifecycle",
-  );
+  // Audio event handlers set up
 }
 
 /**
@@ -963,7 +971,7 @@ function setupNetworkEventHandlers() {
  * Set up global event listeners
  */
 function setupGlobalEventListeners() {
-  Logger.log("Setting up global event listeners...", "lifecycle");
+  // Setting up global event listeners...
 
   // Listen for app events
   eventBus.on("app:initialized", (data) => {
@@ -1172,7 +1180,7 @@ function setupGlobalEventListeners() {
   window.testArc = () => arcManager.testCommunication();
   
 
-  Logger.log("Global event listeners set up", "lifecycle");
+  // Global event listeners set up
 }
 
 /**
@@ -1217,7 +1225,7 @@ function setupProgramSendButton() {
     }
   });
 
-  Logger.log("Send Current Program button handler registered", "lifecycle");
+  // Send Current Program button handler registered
 }
 
 /**
@@ -1335,7 +1343,7 @@ function setupQuickSaveButton() {
     }
   });
   
-  Logger.log("Quick Save button handler registered", "lifecycle");
+  // Quick Save button handler registered
 }
 
 /**
@@ -1351,7 +1359,7 @@ function setupPowerControl() {
   
   powerCheckbox.addEventListener("change", (event) => {
     const isOn = event.target.checked;
-    Logger.log(`Power ${isOn ? 'ON' : 'OFF'}`, "messages");
+    // Power state changed
     
     // Send power command to all synths
     const command = MessageBuilders.power(isOn);
@@ -1373,7 +1381,7 @@ function setupPowerControl() {
     }
   });
   
-  Logger.log("Power control handler registered", "lifecycle");
+  // Power control handler registered
 }
 
 /**
@@ -1420,7 +1428,7 @@ function setupVolumeControl() {
     }
   });
   
-  Logger.log("Volume control handler registered", "lifecycle");
+  // Volume control handler registered
 }
 
 
@@ -1523,7 +1531,7 @@ async function sendCurrentProgram() {
  * Compatibility layer for legacy code
  */
 function setupCompatibilityLayer() {
-  Logger.log("Setting up compatibility layer...", "lifecycle");
+  // Setting up compatibility layer...
 
   // Expose modular components globally for gradual migration
   window.modular = {
@@ -1573,7 +1581,7 @@ function setupCompatibilityLayer() {
     window.currentChord = newValue;
   });
 
-  Logger.log("Compatibility layer ready", "lifecycle");
+  // Compatibility layer ready
 }
 
 /**

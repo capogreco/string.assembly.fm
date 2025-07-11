@@ -10,11 +10,11 @@ export class Logger {
     parameters: false, // Parameter changes
     expressions: false, // Chord and expression changes
     performance: false, // Latency, pings
-    lifecycle: true, // Important state changes - ENABLED FOR DEBUGGING
+    lifecycle: false, // Important state changes
     errors: true, // Always on
     debug: false, // Debug messages
-    parts: true, // Part manager operations - ENABLED FOR DEBUGGING
-    hardware: true, // Hardware devices (Arc, etc.) - ENABLED FOR DEBUGGING
+    parts: false, // Part manager operations
+    hardware: false, // Hardware devices (Arc, etc.)
   };
 
   /**
@@ -97,7 +97,7 @@ export class Logger {
       if (savedConfig) {
         const config = JSON.parse(savedConfig);
         Logger.setConfig(config);
-        Logger.log("Loaded debug configuration from storage", "lifecycle");
+        // Loaded debug configuration from storage
       }
     } catch (e) {
       Logger.log(`Failed to load debug config: ${e}`, "error");

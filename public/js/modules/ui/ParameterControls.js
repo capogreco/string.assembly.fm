@@ -29,9 +29,7 @@ export class ParameterControls {
       return;
     }
 
-    if (window.Logger) {
-      window.Logger.log("Initializing ParameterControls...", "lifecycle");
-    }
+    // Initializing ParameterControls...
 
     // Cache parameter elements
     this.cacheParameterElements();
@@ -64,9 +62,7 @@ export class ParameterControls {
 
     this.isInitialized = true;
 
-    if (window.Logger) {
-      window.Logger.log("ParameterControls initialized", "lifecycle");
-    }
+    // ParameterControls initialized
   }
 
   /**

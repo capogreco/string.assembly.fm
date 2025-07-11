@@ -348,13 +348,9 @@ export class SynthCore {
       const targetGain = this.isCalibrating ? 0 : (program.masterGain * (this.isPoweredOn ? 1 : 0));
       const glissandoEnabled = !transitionData || transitionData.glissando !== false;
       
-      this.log(`Gain transition: glissando=${transitionData?.glissando}, glissandoEnabled=${glissandoEnabled}, crossfade=${!glissandoEnabled}`);
+      // Gain transition
       
-      // Debug: trace where this is being called from
-      if (this.synthId && this.synthId.startsWith('synth-') && this.synthId !== 'synth-pyn8w48s6') {
-        console.log(`[${this.synthId}] applyProgram called from:`);
-        console.trace();
-      }
+      // Debug trace removed
 
       if (transitionData && transitionData.duration && !glissandoEnabled) {
         // Crossfade envelope for non-glissando transitions
@@ -398,7 +394,7 @@ export class SynthCore {
     if (this.isCalibrating) {
     } else if (shouldBow && !this.isBowing) {
       // Start bowing
-      this.log(`Starting bowing (freq=${program.fundamentalFrequency}, delay=${transitionData?.delay || 0})`);
+      // Starting bowing
       this.bowedStringNode.port.postMessage({
         type: "setBowing",
         value: true,
@@ -407,7 +403,7 @@ export class SynthCore {
       this.isBowing = true;
     } else if (!shouldBow && this.isBowing) {
       // Stop bowing
-      this.log(`Stopping bowing (freq=${program.fundamentalFrequency})`);
+      // Stopping bowing
       this.bowedStringNode.port.postMessage({
         type: "setBowing",
         value: false,
@@ -654,7 +650,10 @@ export class SynthCore {
         break;
       case "info":
       default:
-        console.log(`${prefix} ${message}`);
+        if (level === "error" || level === "warn") {
+          console.log(`${prefix} ${message}`);
+        }
+        // Suppress info logs
         break;
     }
   }

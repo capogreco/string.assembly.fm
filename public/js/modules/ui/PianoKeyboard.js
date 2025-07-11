@@ -129,15 +129,11 @@ export class PianoKeyboard {
    */
   initialize() {
     if (this.isInitialized) {
-      if (window.Logger) {
-        window.Logger.log("PianoKeyboard already initialized", "lifecycle");
-      }
+      // PianoKeyboard already initialized
       return;
     }
 
-    if (window.Logger) {
-      window.Logger.log("Initializing PianoKeyboard...", "lifecycle");
-    }
+    // Initializing PianoKeyboard...
 
     // Find piano element
     this.pianoElement = document.getElementById("piano");
@@ -176,9 +172,7 @@ export class PianoKeyboard {
 
     this.isInitialized = true;
 
-    if (window.Logger) {
-      window.Logger.log("PianoKeyboard initialized", "lifecycle");
-    }
+    // PianoKeyboard initialized
   }
 
   /**
@@ -211,10 +205,7 @@ export class PianoKeyboard {
     this.createBlackKeys();
 
     if (window.Logger) {
-      window.Logger.log(
-        `Created piano keyboard with ${this.keys.size} keys`,
-        "lifecycle",
-      );
+      // Created piano keyboard
     }
   }
 

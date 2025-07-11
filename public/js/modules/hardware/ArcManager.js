@@ -43,7 +43,7 @@ class ArcManager {
     // Set up event listeners
     this.setupEventListeners();
     
-    Logger.log("ArcManager initialized", "lifecycle");
+    // ArcManager initialized
     
     // Auto-connect after initialization if enabled
     if (this.autoConnectEnabled) {
@@ -67,7 +67,7 @@ class ArcManager {
     if (!this.checkSerialSupport()) return;
     
     if (this.isConnected || this.port) {
-      Logger.log("Arc already connected or connecting", "hardware");
+      // Arc already connected or connecting
       return;
     }
     
@@ -75,7 +75,7 @@ class ArcManager {
       const ports = await navigator.serial.getPorts();
       
       if (ports.length > 0) {
-        Logger.log("Found previously authorized serial port, connecting...", "hardware");
+        // Found previously authorized serial port
         
         const port = ports[0];
         if (port.readable || port.writable) {
@@ -153,7 +153,7 @@ class ArcManager {
       this.reader = this.port.readable.getReader();
       
       this.isConnected = true;
-      Logger.log("Arc connected successfully", "hardware");
+      // Arc connected successfully
       
       // Start reading data
       this.readLoop();
@@ -180,7 +180,7 @@ class ArcManager {
    * Take control of the Arc using Lua commands
    */
   async takeControl() {
-    Logger.log('Taking control of Arc...', 'hardware');
+    // Taking control of Arc...
     
     const commands = [
       // Stop any running metros and functions
@@ -223,7 +223,7 @@ class ArcManager {
       await new Promise(r => setTimeout(r, 100));
     }
     
-    Logger.log('Arc control active', 'hardware');
+    // Arc control active
     
     // Initialize LEDs after control is established
     setTimeout(() => {
@@ -235,14 +235,14 @@ class ArcManager {
    * Initialize LED rings with current parameter values
    */
   async initializeLEDs() {
-    Logger.log("Initializing Arc LEDs...", "hardware");
+    // Initializing Arc LEDs...
     
     for (let ring = 0; ring < 4; ring++) {
       await this.updateLEDRing(ring, this.parameterValues[ring]);
       await new Promise(r => setTimeout(r, 50));
     }
     
-    Logger.log("Arc LEDs initialized", "hardware");
+    // Arc LEDs initialized
   }
 
   /**
@@ -356,7 +356,7 @@ class ArcManager {
         }
       } else {
         // Log other messages
-        Logger.log(`Arc: ${trimmed}`, "hardware");
+        // Arc message: trimmed
       }
     }
   }

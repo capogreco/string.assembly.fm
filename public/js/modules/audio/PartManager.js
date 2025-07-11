@@ -91,7 +91,7 @@ export class PartManager {
       currentParts.push(part);
       this.setParts(currentParts);
       
-      Logger.log(`Added part ${part.id}: ${part.frequency}Hz with ${part.expression.type}`, 'parts');
+      Logger.log(`Added part: ${part.frequency}Hz with ${part.expression.type}`, 'parts');
     } catch (error) {
       Logger.log(`Error in addPartNew: ${error.message}`, 'error');
       Logger.log(`Part data: ${JSON.stringify(part)}`, 'error');
@@ -108,7 +108,7 @@ export class PartManager {
       const currentParts = this.getParts().filter(p => p.id !== partId);
       this.setParts(currentParts);
       
-      Logger.log(`Removed part ${partId}`, 'parts');
+      Logger.log(`Removed part`, 'parts');
     } catch (error) {
       Logger.log(`Error in removePart: ${error.message}`, 'error');
       Logger.log(`PartId: ${partId}`, 'error');
@@ -193,13 +193,19 @@ export class PartManager {
       };
       assignments.set(synthId, assignment);
       
-      const mode = parts.length < synthIds.length ? ' (unison)' : '';
-      Logger.log(`  Assigned to ${synthId}: ${this.frequencyToNoteName(part.frequency)} with ${part.expression?.type || 'none'}${mode}`, 'parts');
+      // Only log details if there are few synths
+      if (synthIds.length <= 4) {
+        const mode = parts.length < synthIds.length ? ' (unison)' : '';
+        Logger.log(`  Assigned to ${synthId}: ${this.frequencyToNoteName(part.frequency)} with ${part.expression?.type || 'none'}${mode}`, 'parts');
+      }
     });
     
     this.setSynthAssignments(assignments);
     
-    Logger.log(`Redistributed ${parts.length} parts to ${synthIds.length} synths`, 'parts');
+    // Only log summary for large synth counts
+    if (synthIds.length > 4) {
+      Logger.log(`Redistributed ${parts.length} parts to ${synthIds.length} synths`, 'parts');
+    }
   }
 
 
@@ -223,16 +229,16 @@ export class PartManager {
    */
   async initialize() {
     if (this.isInitialized) {
-      Logger.log("PartManager already initialized", "lifecycle");
+      // PartManager already initialized
       return;
     }
 
-    Logger.log("Initializing PartManager...", "lifecycle");
+    // Initializing PartManager...
 
     this.setupEventListeners();
     this.isInitialized = true;
 
-    Logger.log("PartManager initialized", "lifecycle");
+    // PartManager initialized
   }
 
   /**

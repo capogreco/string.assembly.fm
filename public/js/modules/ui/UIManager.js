@@ -34,9 +34,7 @@ export class UIManager {
       return;
     }
 
-    if (window.Logger) {
-      window.Logger.log("Initializing UIManager...", "lifecycle");
-    }
+    // Initializing UIManager...
 
     // Cache DOM elements
     this.cacheElements();
@@ -52,9 +50,7 @@ export class UIManager {
 
     this.isInitialized = true;
 
-    if (window.Logger) {
-      window.Logger.log("UIManager initialized", "lifecycle");
-    }
+    // UIManager initialized
   }
 
   /**
@@ -540,9 +536,7 @@ export class UIManager {
       }, duration);
     }
 
-    if (window.Logger) {
-      window.Logger.log(`Notification: ${message}`, "lifecycle");
-    }
+    // Notification shown
   }
 
   /**
