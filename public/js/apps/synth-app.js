@@ -287,10 +287,12 @@ class SynthApp {
       case "answer":
         // Handle WebRTC answer from controller
         // console.log(`[DEBUG] Received answer from ${message.source}`);
+        this.updateDebugInfo('error', `Received answer from ${message.source.substr(-6)}`);
         const controller = this.controllers.get(message.source);
         if (controller && controller.connection) {
           // console.log(`[DEBUG] Setting remote description for ${message.source}`);
           await controller.connection.setRemoteDescription(message.data);
+          this.updateDebugInfo('error', `Answer set for ${message.source.substr(-6)}`);
           
           // Process any queued ICE candidates
           if (controller.iceQueue && controller.iceQueue.length > 0) {
@@ -309,6 +311,7 @@ class SynthApp {
       case "ice":  // Server sends "ice" not "ice-candidate"
         // Handle ICE candidate from controller
         // console.log(`[DEBUG] Received ICE candidate from ${message.source}`);
+        this.updateDebugInfo('error', `Got ICE from ${message.source.substr(-6)}`);
         const targetController = this.controllers.get(message.source);
         if (targetController && targetController.connection) {
           try {
@@ -416,6 +419,19 @@ class SynthApp {
         });
       }
     });
+    
+    // Track ICE gathering state
+    pc.addEventListener("icegatheringstatechange", () => {
+      this.updateDebugInfo('error', `ICE gathering: ${pc.iceGatheringState}`);
+    });
+    
+    // Track ICE connection state
+    pc.addEventListener("iceconnectionstatechange", () => {
+      this.updateDebugInfo('error', `ICE connection to ${controllerId.substr(-6)}: ${pc.iceConnectionState}`);
+      if (pc.iceConnectionState === "failed") {
+        this.updateDebugInfo('error', `ICE failed - check firewall/NAT`);
+      }
+    });
 
     // Handle connection state changes
     pc.addEventListener("connectionstatechange", () => {
@@ -434,6 +450,7 @@ class SynthApp {
     // console.log(`[DEBUG] Creating WebRTC offer for ${controllerId}`);
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
+    this.updateDebugInfo('error', `Created offer for ${controllerId.substr(-6)}`);
 
     const offerMessage = {
       type: "offer",
@@ -443,6 +460,7 @@ class SynthApp {
     };
     // console.log(`[DEBUG] Sending offer to ${controllerId}:`, offerMessage);
     this.sendMessage(offerMessage);
+    this.updateDebugInfo('error', `Sent offer to ${controllerId.substr(-6)}`);
     
     } catch (error) {
       Logger.log(`Failed to connect to controller ${controllerId}: ${error.message}`, "error");
