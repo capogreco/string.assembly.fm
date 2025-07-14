@@ -26,7 +26,8 @@ class SynthApp {
       connectionsAttempted: [],
       iceStates: new Map(),
       errors: [],
-      connectionPhases: new Map() // Track phases per controller
+      connectionPhases: new Map(), // Track phases per controller
+      iceDiagnostics: new Map() // Track ICE details per controller
     };
     
     // UI elements
@@ -342,6 +343,16 @@ class SynthApp {
     this.debugInfo.connectionsAttempted.push(controllerId);
     this.updateDebugInfo('connectionsAttempted', this.debugInfo.connectionsAttempted);
     
+    // Initialize ICE diagnostics for this controller
+    this.debugInfo.iceDiagnostics.set(controllerId, {
+      iceServers: '',
+      candidateTypes: [],
+      hasRelay: false,
+      totalCandidates: 0,
+      iceState: 'new',
+      connectionState: 'new'
+    });
+    
     const controller = this.controllers.get(controllerId);
     if (!controller) {
       // console.log(`[DEBUG] Controller ${controllerId} not found in map`);
@@ -380,6 +391,13 @@ class SynthApp {
       
       this.updateDebugInfo('error', `Using ICE: ${iceServersInfo}`);
       this.updateConnectionPhase(controllerId, 'ice_servers_loaded', iceServersInfo.includes('TURN') ? 'success' : 'failed');
+      
+      // Update ICE diagnostics
+      const iceDiag = this.debugInfo.iceDiagnostics.get(controllerId);
+      if (iceDiag) {
+        iceDiag.iceServers = iceServersInfo;
+        this.updateIceDiagnosticsDisplay();
+      }
       
       const pc = new RTCPeerConnection(this.rtcConfig);
       controller.connection = pc;
@@ -443,6 +461,17 @@ class SynthApp {
           hasRelay = true;
         }
         
+        // Update ICE diagnostics
+        const iceDiag = this.debugInfo.iceDiagnostics.get(controllerId);
+        if (iceDiag) {
+          if (!iceDiag.candidateTypes.includes(candidateType)) {
+            iceDiag.candidateTypes.push(candidateType);
+          }
+          iceDiag.totalCandidates = candidateCount;
+          iceDiag.hasRelay = hasRelay;
+          this.updateIceDiagnosticsDisplay();
+        }
+        
         this.updateDebugInfo('error', `Generated ${candidateType} candidate (#${candidateCount})`);
         
         this.sendMessage({
@@ -467,6 +496,13 @@ class SynthApp {
     // Track ICE connection state
     pc.addEventListener("iceconnectionstatechange", () => {
       this.updateDebugInfo('error', `ICE connection to ${controllerId.substr(-6)}: ${pc.iceConnectionState}`);
+      
+      // Update ICE diagnostics
+      const iceDiag = this.debugInfo.iceDiagnostics.get(controllerId);
+      if (iceDiag) {
+        iceDiag.iceState = pc.iceConnectionState;
+        this.updateIceDiagnosticsDisplay();
+      }
       
       if (pc.iceConnectionState === "checking") {
         this.updateDebugInfo('error', `Checking connectivity...`);
@@ -853,6 +889,25 @@ class SynthApp {
     if (debugEl && debugEl.style.display !== 'none') {
       this.updateDebugDisplay();
     }
+  }
+  
+  updateIceDiagnosticsDisplay() {
+    const iceInfo = document.getElementById('ice-info');
+    if (!iceInfo) return;
+    
+    let html = '';
+    for (const [controllerId, diag] of this.debugInfo.iceDiagnostics) {
+      html += `<div style="margin-bottom: 8px;">`;
+      html += `<div style="font-weight: bold;">Controller ${controllerId.substr(-6)}:</div>`;
+      html += `<div>ICE Servers: ${diag.iceServers}</div>`;
+      html += `<div>Candidates: ${diag.totalCandidates} total</div>`;
+      html += `<div>Types: ${diag.candidateTypes.join(', ') || 'none'}</div>`;
+      html += `<div>Has RELAY: ${diag.hasRelay ? '✅ YES' : '❌ NO'}</div>`;
+      html += `<div>ICE State: ${diag.iceState}</div>`;
+      html += `</div>`;
+    }
+    
+    iceInfo.innerHTML = html || '<div>No ICE activity yet</div>';
   }
   
   updateDebugDisplay() {
