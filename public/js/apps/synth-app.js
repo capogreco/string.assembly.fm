@@ -322,6 +322,11 @@ class SynthApp {
           }
           this.controllers.delete(message.controller_id);
           this.synthClient.controllers.delete(message.controller_id);
+          // Clean up ICE diagnostics for this controller
+          this.debugInfo.iceDiagnostics.delete(message.controller_id);
+          this.debugInfo.connectionPhases.delete(message.controller_id);
+          // Update the RELAY status display
+          this.updateIceDiagnosticsDisplay();
         }
         this.updateControllerList();
         break;
@@ -542,6 +547,11 @@ class SynthApp {
         // Remove from SynthClient's controllers
         this.synthClient.controllers.delete(controllerId);
 
+        // Clean up ICE diagnostics when data channel closes
+        this.debugInfo.iceDiagnostics.delete(controllerId);
+        this.debugInfo.connectionPhases.delete(controllerId);
+        this.updateIceDiagnosticsDisplay();
+
         this.updateControllerList();
       });
 
@@ -723,6 +733,12 @@ class SynthApp {
             "connection_established",
             "failed",
           );
+          // Clean up ICE diagnostics for failed connection
+          if (pc.connectionState === "failed") {
+            this.debugInfo.iceDiagnostics.delete(controllerId);
+            this.debugInfo.connectionPhases.delete(controllerId);
+            this.updateIceDiagnosticsDisplay();
+          }
         }
       });
 

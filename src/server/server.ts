@@ -326,7 +326,19 @@ async function handle_websocket_message(
 
       for await (const entry of entries) {
         const controller_id = entry.key[1] as string;
-        controllers_list.push(controller_id);
+        const controller_data = entry.value as KVControllerEntry;
+
+        // Check if this controller is still connected
+        const is_connected =
+          connections.has(controller_id) &&
+          connections.get(controller_id)?.socket.readyState === WebSocket.OPEN;
+
+        if (is_connected) {
+          controllers_list.push(controller_id);
+        } else {
+          // Clean up stale KV entry
+          await kv.delete(["controllers", controller_id]);
+        }
       }
 
       const response: Message = {
