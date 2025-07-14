@@ -36,6 +36,7 @@ class SynthApp {
       errors: [],
       connectionPhases: new Map(), // Track phases per controller
       iceDiagnostics: new Map(), // Track ICE details per controller
+      dataChannelDiagnostics: new Map(), // Track data channel state
     };
 
     // UI elements
@@ -325,6 +326,8 @@ class SynthApp {
           // Clean up ICE diagnostics for this controller
           this.debugInfo.iceDiagnostics.delete(message.controller_id);
           this.debugInfo.connectionPhases.delete(message.controller_id);
+          this.debugInfo.dataChannelDiagnostics.delete(message.controller_id);
+          this.updateDataChannelDiagnosticsDisplay();
           // Update the RELAY status display
           this.updateIceDiagnosticsDisplay();
         }
@@ -506,7 +509,20 @@ class SynthApp {
       const dataChannel = pc.createDataChannel("data");
       controller.channel = dataChannel;
 
+      // Initialize and track data channel diagnostics
+      const channelDiag = {
+        readyState: dataChannel.readyState,
+        bufferedAmount: dataChannel.bufferedAmount,
+        lastError: null,
+      };
+      this.debugInfo.dataChannelDiagnostics.set(controllerId, channelDiag);
+      this.updateDataChannelDiagnosticsDisplay();
+
       dataChannel.addEventListener("open", () => {
+        // Update diagnostics
+        channelDiag.readyState = dataChannel.readyState;
+        this.updateDataChannelDiagnosticsDisplay();
+
         // console.log(`[DEBUG] Data channel OPENED to controller ${controllerId}`);
         // Data channel open to controller
         controller.connected = true;
@@ -540,7 +556,18 @@ class SynthApp {
         this.handleDataChannelMessage(controllerId, JSON.parse(event.data));
       });
 
+      dataChannel.addEventListener("error", (error) => {
+        Logger.log(`Data channel error for ${controllerId}: ${error}`, "error");
+        channelDiag.lastError = error.message || "Unknown error";
+        channelDiag.readyState = dataChannel.readyState;
+        this.updateDataChannelDiagnosticsDisplay();
+      });
+
       dataChannel.addEventListener("close", () => {
+        // Update diagnostics before removing
+        channelDiag.readyState = dataChannel.readyState;
+        this.updateDataChannelDiagnosticsDisplay();
+
         // Data channel closed to controller
         controller.connected = false;
 
@@ -550,6 +577,8 @@ class SynthApp {
         // Clean up ICE diagnostics when data channel closes
         this.debugInfo.iceDiagnostics.delete(controllerId);
         this.debugInfo.connectionPhases.delete(controllerId);
+        this.debugInfo.dataChannelDiagnostics.delete(controllerId);
+        this.updateDataChannelDiagnosticsDisplay();
         this.updateIceDiagnosticsDisplay();
 
         this.updateControllerList();
@@ -737,6 +766,8 @@ class SynthApp {
           if (pc.connectionState === "failed") {
             this.debugInfo.iceDiagnostics.delete(controllerId);
             this.debugInfo.connectionPhases.delete(controllerId);
+            this.debugInfo.dataChannelDiagnostics.delete(controllerId);
+            this.updateDataChannelDiagnosticsDisplay();
             this.updateIceDiagnosticsDisplay();
           }
         }
@@ -1233,6 +1264,38 @@ class SynthApp {
 
     // Also update the main error display with RELAY status
     this.updateRelayStatusDisplay();
+  }
+
+  updateDataChannelDiagnosticsDisplay() {
+    const dcInfo = document.getElementById("data-channel-info");
+    if (!dcInfo) return;
+
+    let html = "";
+    if (this.debugInfo.dataChannelDiagnostics.size === 0) {
+      html = "<div>No data channels to monitor</div>";
+    } else {
+      for (const [controllerId, diag] of this.debugInfo
+        .dataChannelDiagnostics) {
+        const stateColor =
+          diag.readyState === "open"
+            ? "#22c55e"
+            : diag.readyState === "connecting"
+              ? "#f59e0b"
+              : "#ef4444";
+
+        html += `<div style="margin-bottom: 8px;">`;
+        html += `<div style="font-weight: bold;">Controller ${controllerId.substr(
+          -6,
+        )}:</div>`;
+        html += `<div>State: <span style="color: ${stateColor}; font-weight: bold;">${diag.readyState.toUpperCase()}</span></div>`;
+        html += `<div>Buffered Amount: ${diag.bufferedAmount} bytes</div>`;
+        if (diag.lastError) {
+          html += `<div style="color: #ef4444;">Last Error: ${diag.lastError}</div>`;
+        }
+        html += `</div>`;
+      }
+    }
+    dcInfo.innerHTML = html;
   }
 
   updateDebugDisplay() {
