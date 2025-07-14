@@ -25,7 +25,8 @@ class SynthApp {
       controllersReceived: [],
       connectionsAttempted: [],
       iceStates: new Map(),
-      errors: []
+      errors: [],
+      connectionPhases: new Map() // Track phases per controller
     };
     
     // UI elements
@@ -237,6 +238,7 @@ class SynthApp {
           if (!this.controllers.has(controllerId)) {
             // console.log(`[DEBUG] Discovered new controller: ${controllerId}`);
             // Discovered controller
+            this.updateConnectionPhase(controllerId, 'discovered', 'success');
             this.controllers.set(controllerId, {
               id: controllerId,
               connection: null,
@@ -288,6 +290,7 @@ class SynthApp {
         // Handle WebRTC answer from controller
         // console.log(`[DEBUG] Received answer from ${message.source}`);
         this.updateDebugInfo('error', `Received answer from ${message.source.substr(-6)}`);
+        this.updateConnectionPhase(message.source, 'answer_received', 'success');
         const controller = this.controllers.get(message.source);
         if (controller && controller.connection) {
           // console.log(`[DEBUG] Setting remote description for ${message.source}`);
@@ -312,6 +315,7 @@ class SynthApp {
         // Handle ICE candidate from controller
         // console.log(`[DEBUG] Received ICE candidate from ${message.source}`);
         this.updateDebugInfo('error', `Got ICE from ${message.source.substr(-6)}`);
+        this.updateConnectionPhase(message.source, 'ice_candidates_received', 'success');
         const targetController = this.controllers.get(message.source);
         if (targetController && targetController.connection) {
           try {
@@ -375,6 +379,7 @@ class SynthApp {
       }).join(', ');
       
       this.updateDebugInfo('error', `Using ICE: ${iceServersInfo}`);
+      this.updateConnectionPhase(controllerId, 'ice_servers_loaded', iceServersInfo.includes('TURN') ? 'success' : 'failed');
       
       const pc = new RTCPeerConnection(this.rtcConfig);
       controller.connection = pc;
@@ -387,6 +392,7 @@ class SynthApp {
       // console.log(`[DEBUG] Data channel OPENED to controller ${controllerId}`);
       // Data channel open to controller
       controller.connected = true;
+      this.updateConnectionPhase(controllerId, 'connection_established', 'success');
       
       // Add to SynthClient's controllers with data channel reference
       this.synthClient.controllers.set(controllerId, {
@@ -435,8 +441,11 @@ class SynthApp {
           target: controllerId,
           data: event.candidate
         });
+        
+        this.updateConnectionPhase(controllerId, 'ice_candidates_sent', 'success');
       } else {
         this.updateDebugInfo('error', `ICE gathering complete`);
+        this.updateConnectionPhase(controllerId, 'ice_gathering', 'success');
       }
     });
     
@@ -463,6 +472,7 @@ class SynthApp {
         controller.connected = false;
         this.updateControllerList();
         this.updateDebugInfo('error', `Connection to ${controllerId} ${pc.connectionState}`);
+        this.updateConnectionPhase(controllerId, 'connection_established', 'failed');
       }
     });
 
@@ -471,6 +481,7 @@ class SynthApp {
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
     this.updateDebugInfo('error', `Created offer for ${controllerId.substr(-6)}`);
+    this.updateConnectionPhase(controllerId, 'offer_created', 'success');
 
     const offerMessage = {
       type: "offer",
@@ -481,6 +492,7 @@ class SynthApp {
     // console.log(`[DEBUG] Sending offer to ${controllerId}:`, offerMessage);
     this.sendMessage(offerMessage);
     this.updateDebugInfo('error', `Sent offer to ${controllerId.substr(-6)}`);
+    this.updateConnectionPhase(controllerId, 'offer_sent', 'success');
     
     } catch (error) {
       Logger.log(`Failed to connect to controller ${controllerId}: ${error.message}`, "error");
@@ -794,8 +806,24 @@ class SynthApp {
     }
   }
   
+  updateConnectionPhase(controllerId, phase, status = 'pending') {
+    if (!this.debugInfo.connectionPhases.has(controllerId)) {
+      this.debugInfo.connectionPhases.set(controllerId, new Map());
+    }
+    
+    const phases = this.debugInfo.connectionPhases.get(controllerId);
+    phases.set(phase, status);
+    
+    // Update display if visible
+    const debugEl = document.getElementById('debug-info');
+    if (debugEl && debugEl.style.display !== 'none') {
+      this.updateDebugDisplay();
+    }
+  }
+  
   updateDebugDisplay() {
     const debugContent = document.getElementById('debug-content');
+    const phaseList = document.getElementById('phase-list');
     if (!debugContent) return;
     
     const html = `
@@ -805,19 +833,45 @@ class SynthApp {
       <div>Controllers Received: ${this.debugInfo.controllersReceived.length > 0 ? this.debugInfo.controllersReceived.join(', ') : 'none'}</div>
       <div>Connections Attempted: ${this.debugInfo.connectionsAttempted.length}</div>
       <div>Active Controllers: ${Array.from(this.controllers.values()).filter(c => c.connected).length}</div>
-      <div style="margin-top: 5px"><b>Connection States:</b></div>
-      ${Array.from(this.debugInfo.iceStates.entries()).map(([id, state]) => 
-        `<div style="font-size: 10px">${id.substr(-6)}: ${state}</div>`
-      ).join('')}
-      ${this.debugInfo.errors.length > 0 ? `
-        <div style="margin-top: 5px"><b>Recent Errors:</b></div>
-        ${this.debugInfo.errors.map(err => 
-          `<div style="font-size: 10px; color: #ff6666">${err}</div>`
-        ).join('')}
-      ` : ''}
     `;
     
     debugContent.innerHTML = html;
+    
+    // Update connection phases
+    if (phaseList) {
+      let phasesHtml = '';
+      
+      for (const [controllerId, phases] of this.debugInfo.connectionPhases) {
+        phasesHtml += `<div style="margin-bottom: 10px;">`;
+        phasesHtml += `<div style="font-weight: bold; margin-bottom: 5px;">Controller ${controllerId.substr(-6)}:</div>`;
+        
+        const phaseOrder = [
+          'discovered',
+          'ice_servers_loaded',
+          'offer_created',
+          'offer_sent', 
+          'answer_received',
+          'ice_gathering',
+          'ice_candidates_sent',
+          'ice_candidates_received',
+          'connection_established'
+        ];
+        
+        for (const phaseName of phaseOrder) {
+          const status = phases.get(phaseName) || 'pending';
+          const icon = status === 'success' ? '✅' : status === 'failed' ? '❌' : '⏳';
+          const color = status === 'success' ? '#4ade80' : status === 'failed' ? '#ef4444' : '#94a3b8';
+          
+          phasesHtml += `<div style="font-size: 11px; margin-left: 10px; color: ${color};">`;
+          phasesHtml += `${icon} ${phaseName.replace(/_/g, ' ')}`;
+          phasesHtml += `</div>`;
+        }
+        
+        phasesHtml += `</div>`;
+      }
+      
+      phaseList.innerHTML = phasesHtml || '<div style="color: #94a3b8;">No connection attempts yet</div>';
+    }
   }
 }
 
