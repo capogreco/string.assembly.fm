@@ -68,6 +68,11 @@ class SynthApp {
     const turnTextEl = document.getElementById("turn-text");
     const turnIconEl = document.getElementById("turn-icon");
     
+    // Debug log for mobile
+    console.log("[TURN] Status element found:", !!turnStatusEl);
+    console.log("[TURN] Text element found:", !!turnTextEl);
+    console.log("[TURN] Icon element found:", !!turnIconEl);
+    
     try {
       const response = await fetch("/ice-servers");
       const data = await response.json();
