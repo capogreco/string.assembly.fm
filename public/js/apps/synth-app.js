@@ -426,14 +426,24 @@ class SynthApp {
       this.updateControllerList();
     });
 
+    // Track candidate types
+    let hasRelay = false;
+    let candidateCount = 0;
+    
     // Handle ICE candidates
     pc.addEventListener("icecandidate", (event) => {
       if (event.candidate) {
+        candidateCount++;
         // Log candidate type
         const candidateType = event.candidate.candidate.includes('relay') ? 'RELAY' : 
                             event.candidate.candidate.includes('srflx') ? 'SRFLX' : 
                             event.candidate.candidate.includes('host') ? 'HOST' : 'OTHER';
-        this.updateDebugInfo('error', `Generated ${candidateType} candidate`);
+        
+        if (candidateType === 'RELAY') {
+          hasRelay = true;
+        }
+        
+        this.updateDebugInfo('error', `Generated ${candidateType} candidate (#${candidateCount})`);
         
         this.sendMessage({
           type: "ice-candidate",
@@ -444,8 +454,8 @@ class SynthApp {
         
         this.updateConnectionPhase(controllerId, 'ice_candidates_sent', 'success');
       } else {
-        this.updateDebugInfo('error', `ICE gathering complete`);
-        this.updateConnectionPhase(controllerId, 'ice_gathering', 'success');
+        this.updateDebugInfo('error', `ICE gathering complete - ${candidateCount} candidates, RELAY: ${hasRelay ? 'YES' : 'NO'}`);
+        this.updateConnectionPhase(controllerId, 'ice_gathering', hasRelay ? 'success' : 'failed');
       }
     });
     
@@ -457,8 +467,29 @@ class SynthApp {
     // Track ICE connection state
     pc.addEventListener("iceconnectionstatechange", () => {
       this.updateDebugInfo('error', `ICE connection to ${controllerId.substr(-6)}: ${pc.iceConnectionState}`);
-      if (pc.iceConnectionState === "failed") {
-        this.updateDebugInfo('error', `ICE failed - check firewall/NAT`);
+      
+      if (pc.iceConnectionState === "checking") {
+        this.updateDebugInfo('error', `Checking connectivity...`);
+      } else if (pc.iceConnectionState === "connected") {
+        this.updateDebugInfo('error', `ICE connected! Waiting for data channel...`);
+      } else if (pc.iceConnectionState === "failed") {
+        this.updateDebugInfo('error', `ICE failed - likely firewall or invalid TURN credentials`);
+        
+        // Get connection stats for debugging
+        pc.getStats().then(stats => {
+          let hasRelayCandidatePair = false;
+          stats.forEach(report => {
+            if (report.type === 'candidate-pair' && report.state === 'succeeded') {
+              this.updateDebugInfo('error', `Successful pair: ${report.localCandidateId} <-> ${report.remoteCandidateId}`);
+            }
+            if (report.type === 'local-candidate' && report.candidateType === 'relay') {
+              hasRelayCandidatePair = true;
+            }
+          });
+          if (!hasRelayCandidatePair) {
+            this.updateDebugInfo('error', `No RELAY candidate pairs found - TURN not working`);
+          }
+        });
       }
     });
 
@@ -476,6 +507,9 @@ class SynthApp {
       }
     });
 
+    // Small delay to ensure controller is ready
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
     // Create and send offer
     // console.log(`[DEBUG] Creating WebRTC offer for ${controllerId}`);
     const offer = await pc.createOffer();
