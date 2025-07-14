@@ -116,31 +116,31 @@ export class UIManager {
     this.eventBus.on("program:loaded", (data) => {
       this.showProgramLoadedFeedback(data.bankId);
     });
-    
+
     // New ProgramState events
-    this.eventBus.on('programState:changed', (data) => {
+    this.eventBus.on("programState:changed", (data) => {
       // Update sync status badge
-      const badge = document.getElementById('status_badge');
+      const badge = document.getElementById("status_badge");
       if (badge) {
         if (data.hasChanges) {
-          badge.textContent = '● Changes Pending';
-          badge.className = 'status-badge pending';
+          badge.textContent = "● Changes Pending";
+          badge.className = "status-badge pending";
         } else {
-          badge.textContent = '✓ Synced';
-          badge.className = 'status-badge synced';
+          badge.textContent = "✓ Synced";
+          badge.className = "status-badge synced";
         }
       }
     });
 
-    this.eventBus.on('programState:synced', () => {
+    this.eventBus.on("programState:synced", () => {
       // Clear all parameter changed indicators
       this.clearAllParameterChanges();
-      
+
       // Update sync status badge
-      const badge = document.getElementById('status_badge');
+      const badge = document.getElementById("status_badge");
       if (badge) {
-        badge.textContent = '✓ Synced';
-        badge.className = 'status-badge synced';
+        badge.textContent = "✓ Synced";
+        badge.className = "status-badge synced";
       }
     });
   }
@@ -152,11 +152,14 @@ export class UIManager {
   setupStateSubscriptions() {
     // Connection status changes - NEW nested path
     this.appState.subscribe("connections.websocket", (websocket) => {
-      const status = websocket.connected ? "connected" : 
-                     websocket.reconnecting ? "connecting" : "disconnected";
+      const status = websocket.connected
+        ? "connected"
+        : websocket.reconnecting
+          ? "connecting"
+          : "disconnected";
       this.updateConnectionStatus(status);
     });
-    
+
     // Legacy subscription for backward compatibility
     this.appState.subscribe("connectionStatus", (newStatus) => {
       this.updateConnectionStatus(newStatus);
@@ -167,7 +170,7 @@ export class UIManager {
       this.updateSynthList();
       this.updateConnectionCount();
     });
-    
+
     // Legacy subscription for backward compatibility
     this.appState.subscribe("connectedSynths", () => {
       this.updateSynthList();
@@ -175,10 +178,13 @@ export class UIManager {
     });
 
     // Average latency changes - NEW nested path
-    this.appState.subscribe("connections.metrics.averageLatency", (newLatency) => {
-      this.updateLatencyDisplay(newLatency);
-    });
-    
+    this.appState.subscribe(
+      "connections.metrics.averageLatency",
+      (newLatency) => {
+        this.updateLatencyDisplay(newLatency);
+      },
+    );
+
     // Legacy subscription for backward compatibility
     this.appState.subscribe("averageLatency", (newLatency) => {
       this.updateLatencyDisplay(newLatency);
@@ -200,28 +206,38 @@ export class UIManager {
   updateConnectionStatus(status = null) {
     // Try new structure first, fall back to legacy
     const websocket = this.appState.getNested("connections.websocket");
-    const connectionStatus = status || 
-      (websocket ? (websocket.connected ? "connected" : 
-                    websocket.reconnecting ? "connecting" : "disconnected") 
-                 : this.appState.get("connectionStatus"));
-    
+    const connectionStatus =
+      status ||
+      (websocket
+        ? websocket.connected
+          ? "connected"
+          : websocket.reconnecting
+            ? "connecting"
+            : "disconnected"
+        : this.appState.get("connectionStatus"));
+
     if (!this.elements.status) return;
 
     // Track the actual status value, not the display text
     const previousStatus = this.elements.status.dataset.status;
-    
+
     // Only log and update if status actually changed
     if (previousStatus === connectionStatus) return;
-    
+
     this.elements.status.dataset.status = connectionStatus;
 
     // The status element now contains a span for text, so find the first span child
-    const statusTextElement = this.elements.status.querySelector('span') || this.elements.status;
+    const statusTextElement =
+      this.elements.status.querySelector("span") || this.elements.status;
 
     // Update text and styling
     switch (connectionStatus) {
       case "connected":
-        statusTextElement.textContent = "Connected";
+        const clientId =
+          this.appState.get("controllerId") ||
+          this.appState.getNested("connections.controllerId") ||
+          "";
+        statusTextElement.textContent = `Connected (${clientId.replace("ctrl-", "")})`;
         this.elements.status.className = "status connected";
         break;
       case "connecting":
@@ -268,11 +284,13 @@ export class UIManager {
     if (!this.elements.synthList) return;
 
     // Try new structure first, fall back to legacy
-    const connectedSynths = this.appState.getNested("connections.synths") || 
-                           this.appState.get("connectedSynths");
+    const connectedSynths =
+      this.appState.getNested("connections.synths") ||
+      this.appState.get("connectedSynths");
 
     if (connectedSynths.size === 0) {
-      this.elements.synthList.innerHTML = '<span style="color: #64748b;">None connected</span>';
+      this.elements.synthList.innerHTML =
+        '<span style="color: #64748b;">None connected</span>';
       return;
     }
 
@@ -291,34 +309,33 @@ export class UIManager {
     const synthEntries = [];
     synthArray.forEach((synthData) => {
       const synthId = synthData.synthId;
-      const latencyText = synthData.latency !== null
-        ? `${synthData.latency}ms`
-        : "...";
+      const latencyText =
+        synthData.latency !== null ? `${synthData.latency}ms` : "...";
 
       // Connection health indicator
       const healthColors = {
-        excellent: '#4ade80',
-        good: '#22c55e',
-        fair: '#f59e0b',
-        poor: '#ef4444'
+        excellent: "#4ade80",
+        good: "#22c55e",
+        fair: "#f59e0b",
+        poor: "#ef4444",
       };
-      const healthColor = healthColors[synthData.connectionHealth] || '#64748b';
+      const healthColor = healthColors[synthData.connectionHealth] || "#64748b";
 
       // Status indicators
-      const audioIcon = synthData.audioEnabled ? '🔊' : '🔇';
-      const instrumentIcon = synthData.instrumentJoined ? '🎻' : '⏸️';
+      const audioIcon = synthData.audioEnabled ? "🔊" : "🔇";
+      const instrumentIcon = synthData.instrumentJoined ? "🎻" : "⏸️";
 
       synthEntries.push(`
         <div class="synth" style="background: #262626; padding: 8px; margin: 4px 0; border-radius: 4px; border-left: 3px solid ${healthColor};">
           <div style="display: flex; justify-content: space-between; align-items: center;">
             <span style="font-weight: 500; color: #e2e8f0; font-size: 0.85em;">${synthId}</span>
             <div style="display: flex; gap: 8px; align-items: center;">
-              <span title="Audio ${synthData.audioEnabled ? 'enabled' : 'disabled'}" style="font-size: 0.9em;">${audioIcon}</span>
-              <span title="Instrument ${synthData.instrumentJoined ? 'joined' : 'not joined'}" style="font-size: 0.9em;">${instrumentIcon}</span>
+              <span title="Audio ${synthData.audioEnabled ? "enabled" : "disabled"}" style="font-size: 0.9em;">${audioIcon}</span>
+              <span title="Instrument ${synthData.instrumentJoined ? "joined" : "not joined"}" style="font-size: 0.9em;">${instrumentIcon}</span>
               <span style="color: ${healthColor}; font-size: 0.8em; font-family: monospace;">${latencyText}</span>
             </div>
           </div>
-          ${synthData.state ? `<div style="color: #94a3b8; font-size: 0.75em; margin-top: 2px;">${synthData.state}</div>` : ''}
+          ${synthData.state ? `<div style="color: #94a3b8; font-size: 0.75em; margin-top: 2px;">${synthData.state}</div>` : ""}
         </div>
       `);
     });
@@ -333,8 +350,9 @@ export class UIManager {
     if (!this.elements.connectedCount) return;
 
     // Try new structure first, fall back to legacy
-    const connectedSynths = this.appState.getNested("connections.synths") || 
-                           this.appState.get("connectedSynths");
+    const connectedSynths =
+      this.appState.getNested("connections.synths") ||
+      this.appState.get("connectedSynths");
     this.elements.connectedCount.textContent = connectedSynths.size.toString();
   }
 
@@ -607,7 +625,7 @@ export class UIManager {
     // Clear the changed parameters set
     this.appState.clearParameterChanges();
   }
-  
+
   /**
    * Clear all parameter changed indicators
    */
