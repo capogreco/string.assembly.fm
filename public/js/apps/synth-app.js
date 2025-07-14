@@ -364,6 +364,18 @@ class SynthApp {
     // Initiating connection to controller
     
     try {
+      // Log the ICE servers being used
+      const iceServersInfo = this.rtcConfig.iceServers.map(s => {
+        if (typeof s.urls === 'string') {
+          return s.urls.startsWith('turn:') ? 'TURN' : 'STUN';
+        } else if (Array.isArray(s.urls)) {
+          return s.urls.some(u => u.startsWith('turn:')) ? 'TURN' : 'STUN';
+        }
+        return 'UNKNOWN';
+      }).join(', ');
+      
+      this.updateDebugInfo('error', `Using ICE: ${iceServersInfo}`);
+      
       const pc = new RTCPeerConnection(this.rtcConfig);
       controller.connection = pc;
 
@@ -411,12 +423,20 @@ class SynthApp {
     // Handle ICE candidates
     pc.addEventListener("icecandidate", (event) => {
       if (event.candidate) {
+        // Log candidate type
+        const candidateType = event.candidate.candidate.includes('relay') ? 'RELAY' : 
+                            event.candidate.candidate.includes('srflx') ? 'SRFLX' : 
+                            event.candidate.candidate.includes('host') ? 'HOST' : 'OTHER';
+        this.updateDebugInfo('error', `Generated ${candidateType} candidate`);
+        
         this.sendMessage({
           type: "ice-candidate",
           source: this.synthId,
           target: controllerId,
           data: event.candidate
         });
+      } else {
+        this.updateDebugInfo('error', `ICE gathering complete`);
       }
     });
     
