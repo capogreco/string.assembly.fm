@@ -509,21 +509,45 @@ class SynthApp {
       } else if (pc.iceConnectionState === "connected") {
         this.updateDebugInfo('error', `ICE connected! Waiting for data channel...`);
       } else if (pc.iceConnectionState === "failed") {
-        this.updateDebugInfo('error', `ICE failed - likely firewall or invalid TURN credentials`);
+        this.updateDebugInfo('error', `ICE failed - checking stats...`);
         
-        // Get connection stats for debugging
+        // Get detailed connection stats
         pc.getStats().then(stats => {
-          let hasRelayCandidatePair = false;
+          let candidatePairs = [];
+          let localCandidates = new Map();
+          let remoteCandidates = new Map();
+          
           stats.forEach(report => {
-            if (report.type === 'candidate-pair' && report.state === 'succeeded') {
-              this.updateDebugInfo('error', `Successful pair: ${report.localCandidateId} <-> ${report.remoteCandidateId}`);
-            }
-            if (report.type === 'local-candidate' && report.candidateType === 'relay') {
-              hasRelayCandidatePair = true;
+            if (report.type === 'local-candidate') {
+              localCandidates.set(report.id, report);
+            } else if (report.type === 'remote-candidate') {
+              remoteCandidates.set(report.id, report);
+            } else if (report.type === 'candidate-pair') {
+              candidatePairs.push(report);
             }
           });
-          if (!hasRelayCandidatePair) {
-            this.updateDebugInfo('error', `No RELAY candidate pairs found - TURN not working`);
+          
+          // Update ICE diagnostics with failure details
+          const iceDiag = this.debugInfo.iceDiagnostics.get(controllerId);
+          if (iceDiag) {
+            iceDiag.failureDetails = {
+              totalPairs: candidatePairs.length,
+              succeededPairs: candidatePairs.filter(p => p.state === 'succeeded').length,
+              failedPairs: candidatePairs.filter(p => p.state === 'failed').length
+            };
+            
+            // Check if any RELAY pairs were attempted
+            let relayPairsAttempted = 0;
+            candidatePairs.forEach(pair => {
+              const local = localCandidates.get(pair.localCandidateId);
+              const remote = remoteCandidates.get(pair.remoteCandidateId);
+              if (local && local.candidateType === 'relay') {
+                relayPairsAttempted++;
+              }
+            });
+            
+            iceDiag.failureDetails.relayPairsAttempted = relayPairsAttempted;
+            this.updateIceDiagnosticsDisplay();
           }
         });
       }
@@ -904,6 +928,17 @@ class SynthApp {
       html += `<div>Types: ${diag.candidateTypes.join(', ') || 'none'}</div>`;
       html += `<div>Has RELAY: ${diag.hasRelay ? '✅ YES' : '❌ NO'}</div>`;
       html += `<div>ICE State: ${diag.iceState}</div>`;
+      
+      if (diag.failureDetails) {
+        html += `<div style="margin-top: 4px; color: #ef4444;">`;
+        html += `<div>Failed Details:</div>`;
+        html += `<div>- Total pairs: ${diag.failureDetails.totalPairs}</div>`;
+        html += `<div>- Succeeded: ${diag.failureDetails.succeededPairs}</div>`;
+        html += `<div>- Failed: ${diag.failureDetails.failedPairs}</div>`;
+        html += `<div>- RELAY pairs tried: ${diag.failureDetails.relayPairsAttempted}</div>`;
+        html += `</div>`;
+      }
+      
       html += `</div>`;
     }
     
