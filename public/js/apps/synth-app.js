@@ -19,6 +19,15 @@ class SynthApp {
     this.rtcConfig = SystemConfig.network.webrtc;
     this.hasJoinedInstrument = false;
     
+    // Debug info
+    this.debugInfo = {
+      wsState: 'disconnected',
+      controllersReceived: [],
+      connectionsAttempted: [],
+      iceStates: new Map(),
+      errors: []
+    };
+    
     // UI elements
     this.statusEl = document.getElementById("status");
     this.calibrationButton = document.getElementById("start_calibration");
@@ -35,6 +44,9 @@ class SynthApp {
 
   async init() {
     // console.log("[DEBUG] init() called");
+    
+    // Enable debug mode with triple tap
+    this.setupDebugMode();
     
     // Fetch ICE servers
     await this.fetchIceServers();
@@ -141,6 +153,7 @@ class SynthApp {
       // console.log("[DEBUG] WebSocket connected");
       // Connected to server
       this.updateStatus(`Connected as ${this.synthId}`);
+      this.updateDebugInfo('wsState', 'connected');
       
       // Register as a synth (not a controller)
       const registerMsg = {
@@ -181,6 +194,7 @@ class SynthApp {
     this.ws.addEventListener("close", () => {
       Logger.log("Disconnected from server", "connections");
       this.updateStatus("Disconnected - Reconnecting...");
+      this.updateDebugInfo('wsState', 'disconnected');
       
       // Clear controller refresh interval
       if (this.controllerRefreshInterval) {
@@ -197,12 +211,14 @@ class SynthApp {
   }
 
   async handleMessage(message) {
-    // console.log("[DEBUG] Received WebSocket message:", message);
+    console.log("[DEBUG] Received WebSocket message:", message);
 
     switch (message.type) {
       case "controllers-list":
         // Received list of active controllers
-        // console.log("[DEBUG] Controllers list received:", message.controllers);
+        console.log("[DEBUG] Controllers list received:", message.controllers);
+        console.log("[DEBUG] Current controllers map:", Array.from(this.controllers.keys()));
+        this.updateDebugInfo('controllersReceived', message.controllers || []);
         // Received controllers list
         
         // Clear controllers that are no longer in the list
@@ -316,10 +332,14 @@ class SynthApp {
 
   async connectToController(controllerId) {
     // console.log(`[DEBUG] connectToController called for: ${controllerId}`);
+    this.debugInfo.connectionsAttempted.push(controllerId);
+    this.updateDebugInfo('connectionsAttempted', this.debugInfo.connectionsAttempted);
+    
     const controller = this.controllers.get(controllerId);
     if (!controller) {
       // console.log(`[DEBUG] Controller ${controllerId} not found in map`);
       Logger.log(`Controller ${controllerId} not found in map`, "error");
+      this.updateDebugInfo('error', `Controller ${controllerId} not found in map`);
       return;
     }
     
@@ -400,9 +420,13 @@ class SynthApp {
     // Handle connection state changes
     pc.addEventListener("connectionstatechange", () => {
       Logger.log(`Connection state to ${controllerId}: ${pc.connectionState}`, "connections");
+      this.debugInfo.iceStates.set(controllerId, pc.connectionState);
+      this.updateDebugInfo('iceStates', this.debugInfo.iceStates);
+      
       if (pc.connectionState === "failed" || pc.connectionState === "disconnected") {
         controller.connected = false;
         this.updateControllerList();
+        this.updateDebugInfo('error', `Connection to ${controllerId} ${pc.connectionState}`);
       }
     });
 
@@ -422,6 +446,7 @@ class SynthApp {
     
     } catch (error) {
       Logger.log(`Failed to connect to controller ${controllerId}: ${error.message}`, "error");
+      this.updateDebugInfo('error', `Failed to connect: ${error.message}`);
       controller.connected = false;
       this.updateControllerList();
     }
@@ -687,6 +712,75 @@ class SynthApp {
   }
 
   // Visualizer is now handled by WaveformVisualizer module
+  
+  setupDebugMode() {
+    let tapCount = 0;
+    let tapTimer;
+    
+    document.addEventListener('click', (e) => {
+      tapCount++;
+      clearTimeout(tapTimer);
+      
+      if (tapCount >= 3) {
+        // Toggle debug mode
+        const debugEl = document.getElementById('debug-info');
+        if (debugEl) {
+          debugEl.style.display = debugEl.style.display === 'none' ? 'block' : 'none';
+          if (debugEl.style.display === 'block') {
+            this.updateDebugDisplay();
+          }
+        }
+        tapCount = 0;
+      }
+      
+      tapTimer = setTimeout(() => {
+        tapCount = 0;
+      }, 500);
+    });
+  }
+  
+  updateDebugInfo(key, value) {
+    if (key === 'error') {
+      this.debugInfo.errors.push(`${new Date().toLocaleTimeString()}: ${value}`);
+      if (this.debugInfo.errors.length > 5) {
+        this.debugInfo.errors.shift();
+      }
+    } else {
+      this.debugInfo[key] = value;
+    }
+    
+    // Update display if visible
+    const debugEl = document.getElementById('debug-info');
+    if (debugEl && debugEl.style.display !== 'none') {
+      this.updateDebugDisplay();
+    }
+  }
+  
+  updateDebugDisplay() {
+    const debugContent = document.getElementById('debug-content');
+    if (!debugContent) return;
+    
+    const html = `
+      <div style="margin-bottom: 5px"><b>Debug Info</b></div>
+      <div>Synth ID: ${this.synthId.substr(-6)}</div>
+      <div>WS State: ${this.debugInfo.wsState}</div>
+      <div>Controllers Received: ${this.debugInfo.controllersReceived.length > 0 ? this.debugInfo.controllersReceived.join(', ') : 'none'}</div>
+      <div>Connections Attempted: ${this.debugInfo.connectionsAttempted.length}</div>
+      <div>Active Controllers: ${Array.from(this.controllers.values()).filter(c => c.connected).length}</div>
+      <div style="margin-top: 5px"><b>Connection States:</b></div>
+      ${Array.from(this.debugInfo.iceStates.entries()).map(([id, state]) => 
+        `<div style="font-size: 10px">${id.substr(-6)}: ${state}</div>`
+      ).join('')}
+      ${this.debugInfo.errors.length > 0 ? `
+        <div style="margin-top: 5px"><b>Recent Errors:</b></div>
+        ${this.debugInfo.errors.map(err => 
+          `<div style="font-size: 10px; color: #ff6666">${err}</div>`
+        ).join('')}
+      ` : ''}
+    `;
+    
+    debugContent.innerHTML = html;
+  }
 }
 
 // Initialize on load
