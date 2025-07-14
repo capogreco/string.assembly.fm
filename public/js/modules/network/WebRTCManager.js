@@ -140,6 +140,12 @@ export class WebRTCManager {
 
     const pc = new RTCPeerConnection(currentConfig);
 
+    // Use a negotiated data channel for reliability. This means we must create it on both sides.
+    const dataChannel = pc.createDataChannel("data", {
+      negotiated: true,
+      id: 0, // Must match the ID on the synth client
+    });
+
     // Set peerId for SDP logging
     if (pc.peerId !== undefined) {
       pc.peerId = peerId;
@@ -155,6 +161,7 @@ export class WebRTCManager {
       isInitiator,
       paramChannel: null,
       commandChannel: null,
+      dataChannel: null, // Will be set by setupDataChannel
       latency: null,
       lastPing: null,
       state: null,
@@ -174,6 +181,9 @@ export class WebRTCManager {
     };
 
     this.peers.set(peerId, peerData);
+
+    // Setup listeners for the negotiated data channel immediately
+    this.setupDataChannel(dataChannel, peerId, peerData);
 
     // Debug: Confirming setupPeerEventListeners is about to be called
     if (window.Logger) {
@@ -290,22 +300,8 @@ export class WebRTCManager {
         );
     });
 
-    // Data channel handling
-    // Store the handler reference so we can remove it later if needed
-    peerData._dataChannelHandler = (event) => {
-      if (window.Logger) {
-        window.Logger.log(
-          `[WEBRTC-DIAG] Peer ${peerId}: 'datachannel' event FIRED. Channel label: ${event.channel.label}`,
-          "connections",
-        );
-      }
-      if (this.enableDiagnosticLogs)
-        console.log(
-          `[WEBRTC-DIAG] Peer ${peerId}: 'datachannel' event FIRED. Channel label: ${event.channel.label}`,
-          event,
-        );
-      this.handleDataChannel(event.channel, peerId, peerData);
-    };
+    // Data channel handling for negotiated channels is now done directly in `createPeerConnection`.
+    // The `ondatachannel` event listener is intentionally omitted here.
 
     pc.addEventListener("datachannel", peerData._dataChannelHandler);
 
@@ -446,7 +442,8 @@ export class WebRTCManager {
         console.log(
           `[WEBRTC-DIAG] Peer ${peerId}: In handleOffer, pc.signalingState BEFORE setRemoteDescription: ${pc.signalingState}`,
         );
-      // Data channels will be created by the remote peer (synth) and handled by the 'datachannel' event listener.
+      // For negotiated data channels, the channel is created on both sides in createPeerConnection.
+      // The `ondatachannel` event will not fire for it.
 
       // Set remote description
       try {
