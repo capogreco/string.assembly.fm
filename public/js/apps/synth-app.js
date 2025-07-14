@@ -64,15 +64,51 @@ class SynthApp {
   }
 
   async fetchIceServers() {
+    const turnStatusEl = document.getElementById("turn-status");
+    const turnTextEl = document.getElementById("turn-text");
+    const turnIconEl = document.getElementById("turn-icon");
+    
     try {
       const response = await fetch("/ice-servers");
       const data = await response.json();
       if (data.ice_servers) {
         this.rtcConfig.iceServers = data.ice_servers;
+        
+        // Check if TURN servers are present
+        const hasTurn = data.ice_servers.some(server => 
+          server.urls && (
+            server.urls.startsWith('turn:') || 
+            (Array.isArray(server.urls) && server.urls.some(url => url.startsWith('turn:')))
+          )
+        );
+        
+        if (hasTurn) {
+          // TURN servers successfully configured
+          if (turnStatusEl) {
+            turnTextEl.textContent = "TURN servers active";
+            turnIconEl.textContent = "✅";
+            turnStatusEl.style.background = "rgba(34, 139, 34, 0.8)";
+          }
+          Logger.log("ICE servers loaded with TURN", "connections");
+        } else {
+          // Only STUN servers available
+          if (turnStatusEl) {
+            turnTextEl.textContent = "STUN only (no TURN)";
+            turnIconEl.textContent = "⚠️";
+            turnStatusEl.style.background = "rgba(255, 165, 0, 0.8)";
+          }
+          Logger.log("ICE servers loaded (STUN only)", "connections");
+        }
+        
         // console.log("[DEBUG] ICE servers loaded:", this.rtcConfig.iceServers);
-        Logger.log("ICE servers loaded", "connections");
       }
     } catch (error) {
+      // Failed to fetch ICE servers
+      if (turnStatusEl) {
+        turnTextEl.textContent = "Failed to fetch ICE servers";
+        turnIconEl.textContent = "❌";
+        turnStatusEl.style.background = "rgba(220, 20, 60, 0.8)";
+      }
       // console.log("[DEBUG] Failed to fetch ICE servers:", error);
       Logger.log("Failed to fetch ICE servers, using defaults", "error");
     }
@@ -118,7 +154,18 @@ class SynthApp {
         };
         // console.log("[DEBUG] Requesting controllers:", requestMsg);
         this.ws.send(JSON.stringify(requestMsg));
-      }, 100);
+      }, 1000); // Increased to 1 second to allow controllers to register
+      
+      // Periodically request controllers to catch any late-joining ones
+      this.controllerRefreshInterval = setInterval(() => {
+        if (this.ws.readyState === WebSocket.OPEN) {
+          const requestMsg = {
+            type: "request-controllers",
+            source: this.synthId
+          };
+          this.ws.send(JSON.stringify(requestMsg));
+        }
+      }, 10000); // Refresh every 10 seconds
     });
 
     this.ws.addEventListener("message", async (event) => {
@@ -129,6 +176,13 @@ class SynthApp {
     this.ws.addEventListener("close", () => {
       Logger.log("Disconnected from server", "connections");
       this.updateStatus("Disconnected - Reconnecting...");
+      
+      // Clear controller refresh interval
+      if (this.controllerRefreshInterval) {
+        clearInterval(this.controllerRefreshInterval);
+        this.controllerRefreshInterval = null;
+      }
+      
       setTimeout(() => this.connectWebSocket(), SystemConfig.network.websocket.reconnectDelay);
     });
 
