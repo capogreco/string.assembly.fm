@@ -106,26 +106,25 @@ async function get_turn_credentials(): Promise<IceServer[] | null> {
 
   try {
     const auth = btoa(`${TWILIO_ACCOUNT_SID}:${TWILIO_AUTH_TOKEN}`);
-    const response = await fetch(
-      `https://api.twilio.com/2010-04-01/Accounts/${TWILIO_ACCOUNT_SID}/Tokens.json`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Basic ${auth}`,
-          "Content-Type": "application/x-www-form-urlencoded",
-        },
+    const url = `https://api.twilio.com/2010-04-01/Accounts/${TWILIO_ACCOUNT_SID}/Tokens.json`;
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Basic ${auth}`,
+        "Content-Type": "application/x-www-form-urlencoded",
       },
-    );
+    });
 
     if (!response.ok) {
-      console.error(`Twilio error: ${response.status}`);
+      console.error(`[TURN] Twilio error ${response.status}`);
       return null;
     }
 
     const data = await response.json();
     return data.ice_servers;
   } catch (error) {
-    console.error(`Error fetching TURN credentials: ${error}`);
+    console.error(`[TURN] Error fetching TURN credentials:`, error);
     return null;
   }
 }
@@ -222,6 +221,8 @@ async function handle_request(request: Request): Promise<Response> {
   if (url.pathname === "/ice-servers") {
     const ice_servers = await get_turn_credentials();
 
+    // ICE servers fetched successfully
+
     const response: IceServersResponse = ice_servers
       ? { ice_servers }
       : { ice_servers: [{ urls: "stun:stun.l.google.com:19302" }] };
@@ -307,7 +308,6 @@ async function handle_websocket_message(
     message.sender_id = sender_id;
     message.timestamp = Date.now();
 
-
     // handle heartbeat from controller
     if (message.type === "heartbeat" && sender_id.startsWith("ctrl-")) {
       const key = ["controllers", sender_id];
@@ -363,7 +363,6 @@ async function handle_websocket_message(
       message.type === "kick-other-controllers" &&
       sender_id.startsWith("ctrl-")
     ) {
-
       // find and close all other controller connections
       const kicked_controllers = [];
       for (const [client_id, client_info] of connections) {

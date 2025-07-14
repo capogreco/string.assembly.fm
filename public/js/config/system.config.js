@@ -29,6 +29,8 @@ export const SystemConfig = {
         offerToReceiveAudio: false,
         offerToReceiveVideo: false,
       },
+      lastIceServerUpdate: null, // Track when ICE servers were last fetched
+      refreshIntervalId: null, // Store interval ID for cleanup
     },
   },
 
@@ -538,6 +540,8 @@ export async function fetchIceServers() {
       });
 
       SystemConfig.network.webrtc.iceServers = standardizedIceServers;
+      SystemConfig.network.webrtc.lastIceServerUpdate = Date.now();
+
       if (window.Logger) {
         window.Logger.log(
           `ICE servers updated: ${JSON.stringify(data.ice_servers)}`,
@@ -571,9 +575,65 @@ export async function fetchIceServers() {
   }
 }
 
+/**
+ * Start periodic ICE server refresh
+ * Twilio TURN tokens typically expire after 24 hours
+ * @param {number} intervalHours - Refresh interval in hours (default: 4)
+ */
+export function startIceServerRefresh(intervalHours = 4) {
+  const intervalMs = intervalHours * 60 * 60 * 1000;
+
+  // Clear any existing interval
+  if (SystemConfig.network.webrtc.refreshIntervalId) {
+    clearInterval(SystemConfig.network.webrtc.refreshIntervalId);
+  }
+
+  // Refresh immediately if never fetched or if data is stale
+  const lastUpdate = SystemConfig.network.webrtc.lastIceServerUpdate || 0;
+  const timeSinceUpdate = Date.now() - lastUpdate;
+
+  if (timeSinceUpdate > intervalMs) {
+    fetchIceServers();
+  }
+
+  // Set up periodic refresh
+  SystemConfig.network.webrtc.refreshIntervalId = setInterval(() => {
+    if (window.Logger) {
+      window.Logger.log(
+        `Refreshing ICE servers (periodic update every ${intervalHours} hours)`,
+        "connections",
+      );
+    }
+    fetchIceServers();
+  }, intervalMs);
+
+  if (window.Logger) {
+    window.Logger.log(
+      `ICE server refresh scheduled every ${intervalHours} hours`,
+      "connections",
+    );
+  }
+}
+
+/**
+ * Stop periodic ICE server refresh
+ */
+export function stopIceServerRefresh() {
+  if (SystemConfig.network.webrtc.refreshIntervalId) {
+    clearInterval(SystemConfig.network.webrtc.refreshIntervalId);
+    SystemConfig.network.webrtc.refreshIntervalId = null;
+
+    if (window.Logger) {
+      window.Logger.log("ICE server refresh stopped", "connections");
+    }
+  }
+}
+
 // Make available globally for backward compatibility during migration
 if (typeof window !== "undefined") {
   window.SystemConfig = SystemConfig;
   window.ConfigUtils = ConfigUtils;
   window.fetchIceServers = fetchIceServers;
+  window.startIceServerRefresh = startIceServerRefresh;
+  window.stopIceServerRefresh = stopIceServerRefresh;
 }

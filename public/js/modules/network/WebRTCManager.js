@@ -8,7 +8,10 @@ import { SystemConfig } from "../../config/system.config.js";
 import { MessageTypes } from "../../protocol/MessageProtocol.js";
 
 export class WebRTCManager {
-  constructor(rtcConfig = SystemConfig.network.webrtc, eventBusInstance = eventBus) {
+  constructor(
+    rtcConfig = SystemConfig.network.webrtc,
+    eventBusInstance = eventBus,
+  ) {
     // Don't store rtcConfig - use Config.RTC_CONFIG directly to get updates
     this.eventBus = eventBusInstance;
     this.peers = new Map();
@@ -32,7 +35,8 @@ export class WebRTCManager {
     // Get clientId from WebSocketManager
     if (window.webSocketManager && window.webSocketManager.clientId) {
       this.clientId = window.webSocketManager.clientId;
-      if (this.enableDiagnosticLogs) console.log(
+      if (this.enableDiagnosticLogs)
+        console.log(
           `[WEBRTC-DIAG] WebRTCManager initialized with clientId: ${this.clientId}`,
         );
     }
@@ -79,9 +83,10 @@ export class WebRTCManager {
         existingPc.iceConnectionState === "failed" ||
         existingPc.iceConnectionState === "closed"
       ) {
-        if (this.enableDiagnosticLogs) console.log(
-          `[WEBRTC-DIAG] Peer ${peerId}: Existing connection is in ${existingPc.connectionState}/${existingPc.iceConnectionState} state. Closing and creating new connection.`,
-        );
+        if (this.enableDiagnosticLogs)
+          console.log(
+            `[WEBRTC-DIAG] Peer ${peerId}: Existing connection is in ${existingPc.connectionState}/${existingPc.iceConnectionState} state. Closing and creating new connection.`,
+          );
 
         // Clean up the old connection
         existingPc.close();
@@ -89,9 +94,10 @@ export class WebRTCManager {
 
         // Fall through to create a new connection
       } else if (existingPc.signalingState !== "stable") {
-        if (this.enableDiagnosticLogs) console.warn(
-          `[WEBRTC-DIAG] Peer ${peerId}: Existing connection in unstable signaling state: ${existingPc.signalingState}. Creating new connection.`,
-        );
+        if (this.enableDiagnosticLogs)
+          console.warn(
+            `[WEBRTC-DIAG] Peer ${peerId}: Existing connection in unstable signaling state: ${existingPc.signalingState}. Creating new connection.`,
+          );
 
         // Close the existing connection in non-stable state
         existingPc.close();
@@ -100,9 +106,10 @@ export class WebRTCManager {
         // Fall through to create a new connection
       } else {
         // Connection exists and is in good state, return it
-          if (this.enableDiagnosticLogs) console.log(
-          `[WEBRTC-DIAG] Peer ${peerId}: Returning existing RTCPeerConnection. SignalingState: ${existingPc.signalingState}`,
-        );
+        if (this.enableDiagnosticLogs)
+          console.log(
+            `[WEBRTC-DIAG] Peer ${peerId}: Returning existing RTCPeerConnection. SignalingState: ${existingPc.signalingState}`,
+          );
 
         if (window.Logger) {
           window.Logger.log(
@@ -116,16 +123,18 @@ export class WebRTCManager {
     }
     // Always use the latest RTC configuration
     const currentConfig = { ...SystemConfig.network.webrtc };
-        if (this.enableDiagnosticLogs) console.log(
-      `[WEBRTC-DIAG] Peer ${peerId}: Creating new RTCPeerConnection at ${new Date().toISOString()}. Config:`,
-      JSON.stringify(currentConfig, null, 2),
-    );
+    if (this.enableDiagnosticLogs)
+      console.log(
+        `[WEBRTC-DIAG] Peer ${peerId}: Creating new RTCPeerConnection at ${new Date().toISOString()}. Config:`,
+        JSON.stringify(currentConfig, null, 2),
+      );
 
     // Validate ICE servers before creating connection
     if (!currentConfig.iceServers || currentConfig.iceServers.length === 0) {
-      if (this.enableDiagnosticLogs) console.error(
-        `[WEBRTC-DIAG] Peer ${peerId}: WARNING - No ICE servers configured! Using fallback STUN server.`,
-      );
+      if (this.enableDiagnosticLogs)
+        console.error(
+          `[WEBRTC-DIAG] Peer ${peerId}: WARNING - No ICE servers configured! Using fallback STUN server.`,
+        );
       currentConfig.iceServers = [{ urls: "stun:stun.l.google.com:19302" }];
     }
 
@@ -135,9 +144,10 @@ export class WebRTCManager {
     if (pc.peerId !== undefined) {
       pc.peerId = peerId;
     }
-        if (this.enableDiagnosticLogs) console.log(
-      `[WEBRTC-DIAG] Peer ${peerId}: New RTCPeerConnection created. Initial SignalingState: ${pc.signalingState}`,
-    );
+    if (this.enableDiagnosticLogs)
+      console.log(
+        `[WEBRTC-DIAG] Peer ${peerId}: New RTCPeerConnection created. Initial SignalingState: ${pc.signalingState}`,
+      );
 
     const peerData = {
       connection: pc,
@@ -152,6 +162,15 @@ export class WebRTCManager {
       iceCandidateQueue: [], // Initialize ICE candidate queue
       connectionTimeout: null, // Add timeout tracking
       offerCreatedAt: null, // Track when offer was created
+      iceCandidateStats: {
+        // Track ICE candidate statistics
+        localCandidates: { host: 0, srflx: 0, relay: 0, other: 0 },
+        remoteCandidates: { host: 0, srflx: 0, relay: 0, other: 0 },
+        hasLocalRelay: false,
+        hasRemoteRelay: false,
+        totalLocalCandidates: 0,
+        totalRemoteCandidates: 0,
+      },
     };
 
     this.peers.set(peerId, peerData);
@@ -163,9 +182,10 @@ export class WebRTCManager {
         "connections",
       );
     }
-    if (this.enableDiagnosticLogs) console.log(
-      `[WEBRTC-DEBUG] About to call setupPeerEventListeners for ${peerId}`,
-    );
+    if (this.enableDiagnosticLogs)
+      console.log(
+        `[WEBRTC-DEBUG] About to call setupPeerEventListeners for ${peerId}`,
+      );
 
     // Set up connection event listeners
     this.setupPeerEventListeners(pc, peerId, peerData);
@@ -183,9 +203,10 @@ export class WebRTCManager {
         pc.connectionState !== "connected" &&
         pc.connectionState !== "completed"
       ) {
-        if (this.enableDiagnosticLogs) console.error(
-          `[WEBRTC-DIAG] Peer ${peerId}: Connection timeout after 30s. State: ${pc.connectionState}, ICE: ${pc.iceConnectionState}`,
-        );
+        if (this.enableDiagnosticLogs)
+          console.error(
+            `[WEBRTC-DIAG] Peer ${peerId}: Connection timeout after 30s. State: ${pc.connectionState}, ICE: ${pc.iceConnectionState}`,
+          );
         this.handlePeerDisconnection(peerId);
       }
     }, 30000);
@@ -211,55 +232,62 @@ export class WebRTCManager {
         "connections",
       );
     }
-    if (this.enableDiagnosticLogs) console.log(
-      `[WEBRTC-DEBUG] Inside setupPeerEventListeners for ${peerId}. Attaching listeners...`,
-    );
+    if (this.enableDiagnosticLogs)
+      console.log(
+        `[WEBRTC-DEBUG] Inside setupPeerEventListeners for ${peerId}. Attaching listeners...`,
+      );
 
     // ICE candidate handling
     pc.addEventListener("icecandidate", (event) => {
       if (event.candidate) {
-        if (this.enableDiagnosticLogs) console.log(
-          `[WEBRTC-DIAG] Peer ${peerId}: Local ICE candidate gathered:`,
-          event.candidate,
-        );
+        if (this.enableDiagnosticLogs)
+          console.log(
+            `[WEBRTC-DIAG] Peer ${peerId}: Local ICE candidate gathered:`,
+            event.candidate,
+          );
         this.handleLocalIceCandidate(event.candidate, peerId);
       } else {
-        if (this.enableDiagnosticLogs) console.log(
-          `[WEBRTC-DIAG] Peer ${peerId}: All local ICE candidates gathered (event.candidate is null).`,
-        );
+        if (this.enableDiagnosticLogs)
+          console.log(
+            `[WEBRTC-DIAG] Peer ${peerId}: All local ICE candidates gathered (event.candidate is null).`,
+          );
       }
     });
 
     // Signaling state changes
     pc.addEventListener("signalingstatechange", () => {
-      if (this.enableDiagnosticLogs) console.log(
-        `[WEBRTC-DIAG] Peer ${peerId}: SignalingState CHANGED to ${pc.signalingState}`,
-      );
+      if (this.enableDiagnosticLogs)
+        console.log(
+          `[WEBRTC-DIAG] Peer ${peerId}: SignalingState CHANGED to ${pc.signalingState}`,
+        );
     });
 
     // Connection state changes
     pc.addEventListener("connectionstatechange", () => {
       // Defer to handler, but log here for immediacy
-        if (this.enableDiagnosticLogs) console.log(
-        `[WEBRTC-DIAG] Peer ${peerId}: connectionState CHANGED to ${pc.connectionState}`,
-      );
+      if (this.enableDiagnosticLogs)
+        console.log(
+          `[WEBRTC-DIAG] Peer ${peerId}: connectionState CHANGED to ${pc.connectionState}`,
+        );
       this.handleConnectionStateChange(pc, peerId);
     });
 
     // ICE connection state changes
     pc.addEventListener("iceconnectionstatechange", () => {
       // Defer to handler, but log here for immediacy
-        if (this.enableDiagnosticLogs) console.log(
-        `[WEBRTC-DIAG] Peer ${peerId}: iceConnectionState CHANGED to ${pc.iceConnectionState}`,
-      );
+      if (this.enableDiagnosticLogs)
+        console.log(
+          `[WEBRTC-DIAG] Peer ${peerId}: iceConnectionState CHANGED to ${pc.iceConnectionState}`,
+        );
       this.handleIceConnectionStateChange(pc, peerId);
     });
 
     // ICE gathering state changes
     pc.addEventListener("icegatheringstatechange", () => {
-      if (this.enableDiagnosticLogs) console.log(
-        `[WEBRTC-DIAG] Peer ${peerId}: iceGatheringState CHANGED to ${pc.iceGatheringState}`,
-      );
+      if (this.enableDiagnosticLogs)
+        console.log(
+          `[WEBRTC-DIAG] Peer ${peerId}: iceGatheringState CHANGED to ${pc.iceGatheringState}`,
+        );
     });
 
     // Data channel handling
@@ -271,10 +299,11 @@ export class WebRTCManager {
           "connections",
         );
       }
-        if (this.enableDiagnosticLogs) console.log(
-        `[WEBRTC-DIAG] Peer ${peerId}: 'datachannel' event FIRED. Channel label: ${event.channel.label}`,
-        event,
-      );
+      if (this.enableDiagnosticLogs)
+        console.log(
+          `[WEBRTC-DIAG] Peer ${peerId}: 'datachannel' event FIRED. Channel label: ${event.channel.label}`,
+          event,
+        );
       this.handleDataChannel(event.channel, peerId, peerData);
     };
 
@@ -286,7 +315,8 @@ export class WebRTCManager {
         "connections",
       );
     }
-    if (this.enableDiagnosticLogs) console.log(`[WEBRTC-DEBUG] All event listeners attached for ${peerId}.`);
+    if (this.enableDiagnosticLogs)
+      console.log(`[WEBRTC-DEBUG] All event listeners attached for ${peerId}.`);
   }
 
   /**
@@ -326,10 +356,11 @@ export class WebRTCManager {
             "messages",
           );
         }
-          if (this.enableDiagnosticLogs) console.log(
-          `[WEBRTC-DIAG] Peer ${message.source}: Received remote ICE candidate via signaling:`,
-          message.data,
-        );
+        if (this.enableDiagnosticLogs)
+          console.log(
+            `[WEBRTC-DIAG] Peer ${message.source}: Received remote ICE candidate via signaling:`,
+            message.data,
+          );
         this.handleRemoteIceCandidate(message);
         break;
       default:
@@ -351,11 +382,13 @@ export class WebRTCManager {
     const { source: peerId, data: offer } = message;
 
     // Debug logging
-    if (this.enableDiagnosticLogs) console.log("[WEBRTC-DEBUG] handleOffer called with message:", message);
-        if (this.enableDiagnosticLogs) console.log(
-      `[WEBRTC-DIAG] Peer ${peerId}: handleOffer started at ${new Date().toISOString()}. Offer SDP:`,
-      offer.sdp,
-    );
+    if (this.enableDiagnosticLogs)
+      console.log("[WEBRTC-DEBUG] handleOffer called with message:", message);
+    if (this.enableDiagnosticLogs)
+      console.log(
+        `[WEBRTC-DIAG] Peer ${peerId}: handleOffer started at ${new Date().toISOString()}. Offer SDP:`,
+        offer.sdp,
+      );
 
     if (window.Logger) {
       window.Logger.log(`Received offer from ${peerId}`, "connections");
@@ -365,13 +398,14 @@ export class WebRTCManager {
     if (this.peers.has(peerId)) {
       const existingPeerData = this.peers.get(peerId);
       const existingPc = existingPeerData.connection;
-      
+
       // If we're receiving a new offer, it likely means the peer restarted
       // Close the old connection to ensure we create a fresh one
-        if (this.enableDiagnosticLogs) console.log(
-        `[WEBRTC-DIAG] Peer ${peerId}: Received new offer while existing connection in state: ${existingPc.connectionState}. Closing old connection.`,
-      );
-      
+      if (this.enableDiagnosticLogs)
+        console.log(
+          `[WEBRTC-DIAG] Peer ${peerId}: Received new offer while existing connection in state: ${existingPc.connectionState}. Closing old connection.`,
+        );
+
       this.handlePeerDisconnection(peerId);
     }
 
@@ -381,9 +415,10 @@ export class WebRTCManager {
         !SystemConfig.network.webrtc.iceServers ||
         SystemConfig.network.webrtc.iceServers.length === 0
       ) {
-        if (this.enableDiagnosticLogs) console.warn(
-          `[WEBRTC-DIAG] Peer ${peerId}: No ICE servers configured when handling offer. Attempting to fetch...`,
-        );
+        if (this.enableDiagnosticLogs)
+          console.warn(
+            `[WEBRTC-DIAG] Peer ${peerId}: No ICE servers configured when handling offer. Attempting to fetch...`,
+          );
         if (SystemConfig.fetchIceServers) {
           await SystemConfig.fetchIceServers();
         }
@@ -401,22 +436,25 @@ export class WebRTCManager {
         pc.iceConnectionState === "failed" ||
         pc.iceConnectionState === "disconnected"
       ) {
-        if (this.enableDiagnosticLogs) console.log(
-          `[WEBRTC-DIAG] Peer ${peerId}: ICE in ${pc.iceConnectionState} state, will restart ICE with new offer`,
-        );
+        if (this.enableDiagnosticLogs)
+          console.log(
+            `[WEBRTC-DIAG] Peer ${peerId}: ICE in ${pc.iceConnectionState} state, will restart ICE with new offer`,
+          );
       }
 
-        if (this.enableDiagnosticLogs) console.log(
-        `[WEBRTC-DIAG] Peer ${peerId}: In handleOffer, pc.signalingState BEFORE setRemoteDescription: ${pc.signalingState}`,
-      );
+      if (this.enableDiagnosticLogs)
+        console.log(
+          `[WEBRTC-DIAG] Peer ${peerId}: In handleOffer, pc.signalingState BEFORE setRemoteDescription: ${pc.signalingState}`,
+        );
       // Data channels will be created by the remote peer (synth) and handled by the 'datachannel' event listener.
 
       // Set remote description
       try {
         await pc.setRemoteDescription(offer); // Listener for 'datachannel' should be active before this
-          if (this.enableDiagnosticLogs) console.log(
-          `[WEBRTC-DIAG] Peer ${peerId}: setRemoteDescription(offer) successful. pc.signalingState AFTER setRemoteDescription: ${pc.signalingState}`,
-        );
+        if (this.enableDiagnosticLogs)
+          console.log(
+            `[WEBRTC-DIAG] Peer ${peerId}: setRemoteDescription(offer) successful. pc.signalingState AFTER setRemoteDescription: ${pc.signalingState}`,
+          );
         // Process any queued ICE candidates now that remote description is set
         await this.processIceCandidateQueue(peerId);
         if (window.Logger) {
@@ -425,9 +463,10 @@ export class WebRTCManager {
             "connections",
           );
         }
-        if (this.enableDiagnosticLogs) console.log(
-          `[WEBRTC-DEBUG] Remote description set successfully for ${peerId}`,
-        );
+        if (this.enableDiagnosticLogs)
+          console.log(
+            `[WEBRTC-DEBUG] Remote description set successfully for ${peerId}`,
+          );
       } catch (e) {
         if (window.Logger) {
           window.Logger.log(
@@ -446,21 +485,26 @@ export class WebRTCManager {
       // Create answer
       let answer;
       try {
-        if (this.enableDiagnosticLogs) console.log(
-          `[WEBRTC-DIAG] Peer ${peerId}: pc.signalingState BEFORE createAnswer: ${pc.signalingState}`,
-        );
+        if (this.enableDiagnosticLogs)
+          console.log(
+            `[WEBRTC-DIAG] Peer ${peerId}: pc.signalingState BEFORE createAnswer: ${pc.signalingState}`,
+          );
         answer = await pc.createAnswer();
-          if (this.enableDiagnosticLogs) console.log(
-          `[WEBRTC-DIAG] Peer ${peerId}: createAnswer() successful. Answer SDP:`,
-          answer.sdp,
-        );
+        if (this.enableDiagnosticLogs)
+          console.log(
+            `[WEBRTC-DIAG] Peer ${peerId}: createAnswer() successful. Answer SDP:`,
+            answer.sdp,
+          );
         if (window.Logger) {
           window.Logger.log(
             `[WEBRTC-DEBUG] Answer created successfully for ${peerId}`,
             "connections",
           );
         }
-        if (this.enableDiagnosticLogs) console.log(`[WEBRTC-DEBUG] Answer created successfully for ${peerId}`);
+        if (this.enableDiagnosticLogs)
+          console.log(
+            `[WEBRTC-DEBUG] Answer created successfully for ${peerId}`,
+          );
       } catch (e) {
         if (window.Logger) {
           window.Logger.log(
@@ -475,22 +519,25 @@ export class WebRTCManager {
 
       // Set local description
       try {
-        if (this.enableDiagnosticLogs) console.log(
-          `[WEBRTC-DIAG] Peer ${peerId}: pc.signalingState BEFORE setLocalDescription(answer): ${pc.signalingState}`,
-        );
+        if (this.enableDiagnosticLogs)
+          console.log(
+            `[WEBRTC-DIAG] Peer ${peerId}: pc.signalingState BEFORE setLocalDescription(answer): ${pc.signalingState}`,
+          );
         await pc.setLocalDescription(answer);
-          if (this.enableDiagnosticLogs) console.log(
-          `[WEBRTC-DIAG] Peer ${peerId}: setLocalDescription(answer) successful. pc.signalingState AFTER setLocalDescription: ${pc.signalingState}`,
-        );
+        if (this.enableDiagnosticLogs)
+          console.log(
+            `[WEBRTC-DIAG] Peer ${peerId}: setLocalDescription(answer) successful. pc.signalingState AFTER setLocalDescription: ${pc.signalingState}`,
+          );
         if (window.Logger) {
           window.Logger.log(
             `[WEBRTC-DEBUG] Local description set successfully for ${peerId}`,
             "connections",
           );
         }
-        if (this.enableDiagnosticLogs) console.log(
-          `[WEBRTC-DEBUG] Local description set successfully for ${peerId}`,
-        );
+        if (this.enableDiagnosticLogs)
+          console.log(
+            `[WEBRTC-DEBUG] Local description set successfully for ${peerId}`,
+          );
       } catch (e) {
         if (window.Logger) {
           window.Logger.log(
@@ -558,18 +605,21 @@ export class WebRTCManager {
         throw new Error(`No peer connection found for ${peerId}`);
       }
       const pc = peerData.connection;
-        if (this.enableDiagnosticLogs) console.log(
-        `[WEBRTC-DIAG] Peer ${peerId}: handleAnswer started. Answer SDP:`,
-        answer.sdp,
-      );
-        if (this.enableDiagnosticLogs) console.log(
-        `[WEBRTC-DIAG] Peer ${peerId}: In handleAnswer, pc.signalingState BEFORE setRemoteDescription: ${pc.signalingState}`,
-      );
+      if (this.enableDiagnosticLogs)
+        console.log(
+          `[WEBRTC-DIAG] Peer ${peerId}: handleAnswer started. Answer SDP:`,
+          answer.sdp,
+        );
+      if (this.enableDiagnosticLogs)
+        console.log(
+          `[WEBRTC-DIAG] Peer ${peerId}: In handleAnswer, pc.signalingState BEFORE setRemoteDescription: ${pc.signalingState}`,
+        );
 
       await pc.setRemoteDescription(answer);
-        if (this.enableDiagnosticLogs) console.log(
-        `[WEBRTC-DIAG] Peer ${peerId}: setRemoteDescription(answer) successful. pc.signalingState AFTER setRemoteDescription: ${pc.signalingState}`,
-      );
+      if (this.enableDiagnosticLogs)
+        console.log(
+          `[WEBRTC-DIAG] Peer ${peerId}: setRemoteDescription(answer) successful. pc.signalingState AFTER setRemoteDescription: ${pc.signalingState}`,
+        );
       // Process any queued ICE candidates now that remote description is set
       await this.processIceCandidateQueue(peerId);
 
@@ -601,16 +651,57 @@ export class WebRTCManager {
   async handleRemoteIceCandidate(message) {
     const { source: peerId, data: candidateData } = message; // candidateData is the ICE candidate object
 
-        if (this.enableDiagnosticLogs) console.log(
-      `[WEBRTC-DIAG] Peer ${peerId}: handleRemoteIceCandidate received candidateData:`,
-      JSON.stringify(candidateData),
-    );
+    if (this.enableDiagnosticLogs)
+      console.log(
+        `[WEBRTC-DIAG] Peer ${peerId}: handleRemoteIceCandidate received candidateData:`,
+        JSON.stringify(candidateData),
+      );
+
+    // Track remote candidate types
+    if (candidateData && candidateData.candidate) {
+      const candidateType = candidateData.candidate.includes("relay")
+        ? "RELAY"
+        : candidateData.candidate.includes("srflx")
+          ? "SRFLX"
+          : candidateData.candidate.includes("host")
+            ? "HOST"
+            : "OTHER";
+
+      const peerData = this.peers.get(peerId);
+      if (peerData && peerData.iceCandidateStats) {
+        const stats = peerData.iceCandidateStats;
+        stats.totalRemoteCandidates++;
+
+        switch (candidateType) {
+          case "RELAY":
+            stats.remoteCandidates.relay++;
+            stats.hasRemoteRelay = true;
+            break;
+          case "SRFLX":
+            stats.remoteCandidates.srflx++;
+            break;
+          case "HOST":
+            stats.remoteCandidates.host++;
+            break;
+          default:
+            stats.remoteCandidates.other++;
+        }
+
+        if (window.Logger) {
+          window.Logger.log(
+            `Received ${candidateType} candidate from ${peerId} (#${stats.totalRemoteCandidates}, Remote RELAY: ${stats.hasRemoteRelay ? "YES" : "NO"})`,
+            "connections",
+          );
+        }
+      }
+    }
 
     const peerData = this.peers.get(peerId);
     if (!peerData) {
-      if (this.enableDiagnosticLogs) console.error(
-        `[WEBRTC-DIAG] Peer ${peerId}: No peerData found in handleRemoteIceCandidate. Discarding candidate.`,
-      );
+      if (this.enableDiagnosticLogs)
+        console.error(
+          `[WEBRTC-DIAG] Peer ${peerId}: No peerData found in handleRemoteIceCandidate. Discarding candidate.`,
+        );
       if (window.Logger) {
         window.Logger.log(
           `No peer connection for ICE candidate from ${peerId}`,
@@ -625,18 +716,20 @@ export class WebRTCManager {
     // Critical: ICE candidates should only be added after setRemoteDescription has been called.
     // pc.remoteDescription will be non-null after a remote offer or answer has been successfully set.
     if (pc.remoteDescription && pc.remoteDescription.type) {
-      if (this.enableDiagnosticLogs) console.log(
-        `[WEBRTC-DIAG] Peer ${peerId}: remoteDescription is set (${pc.remoteDescription.type}). Adding ICE candidate directly. Current SignalingState: ${pc.signalingState}`,
-      );
+      if (this.enableDiagnosticLogs)
+        console.log(
+          `[WEBRTC-DIAG] Peer ${peerId}: remoteDescription is set (${pc.remoteDescription.type}). Adding ICE candidate directly. Current SignalingState: ${pc.signalingState}`,
+        );
       try {
         // An RTCIceCandidate object. candidateData can be null for end-of-candidates.
         const rtcIceCandidate = candidateData
           ? new RTCIceCandidate(candidateData)
           : null;
         await pc.addIceCandidate(rtcIceCandidate);
-          if (this.enableDiagnosticLogs) console.log(
-          `[WEBRTC-DIAG] Peer ${peerId}: Successfully added ICE candidate directly.`,
-        );
+        if (this.enableDiagnosticLogs)
+          console.log(
+            `[WEBRTC-DIAG] Peer ${peerId}: Successfully added ICE candidate directly.`,
+          );
         if (window.Logger) {
           window.Logger.log(
             `Added ICE candidate from ${peerId}: ${candidateData ? candidateData.candidate : "end-of-candidates"}`,
@@ -644,12 +737,13 @@ export class WebRTCManager {
           );
         }
       } catch (error) {
-        if (this.enableDiagnosticLogs) console.error(
-          `[WEBRTC-DIAG] Peer ${peerId}: Error adding ICE candidate directly:`,
-          error,
-          "Candidate:",
-          candidateData,
-        );
+        if (this.enableDiagnosticLogs)
+          console.error(
+            `[WEBRTC-DIAG] Peer ${peerId}: Error adding ICE candidate directly:`,
+            error,
+            "Candidate:",
+            candidateData,
+          );
         if (window.Logger) {
           window.Logger.log(
             `Error adding ICE candidate from ${peerId}: ${error.message}`,
@@ -660,9 +754,10 @@ export class WebRTCManager {
     } else {
       // If remoteDescription is not set, queue the candidate.
       peerData.iceCandidateQueue.push(candidateData);
-        if (this.enableDiagnosticLogs) console.log(
-        `[WEBRTC-DIAG] Peer ${peerId}: remoteDescription NOT YET SET. Queued ICE candidate. Queue size: ${peerData.iceCandidateQueue.length}. Current SignalingState: ${pc.signalingState}`,
-      );
+      if (this.enableDiagnosticLogs)
+        console.log(
+          `[WEBRTC-DIAG] Peer ${peerId}: remoteDescription NOT YET SET. Queued ICE candidate. Queue size: ${peerData.iceCandidateQueue.length}. Current SignalingState: ${pc.signalingState}`,
+        );
       if (window.Logger) {
         window.Logger.log(
           `Queued ICE candidate from ${peerId}. Remote desc not set. Queue size: ${peerData.iceCandidateQueue.length}`,
@@ -680,9 +775,10 @@ export class WebRTCManager {
   async processIceCandidateQueue(peerId) {
     const peerData = this.peers.get(peerId);
     if (!peerData) {
-      if (this.enableDiagnosticLogs) console.warn(
-        `[WEBRTC-DIAG] Peer ${peerId}: processIceCandidateQueue called but no peerData found.`,
-      );
+      if (this.enableDiagnosticLogs)
+        console.warn(
+          `[WEBRTC-DIAG] Peer ${peerId}: processIceCandidateQueue called but no peerData found.`,
+        );
       return;
     }
 
@@ -691,21 +787,26 @@ export class WebRTCManager {
 
     if (queue.length === 0) {
       // This is normal if no candidates were queued
-      if (this.enableDiagnosticLogs) console.log(`[WEBRTC-DIAG] Peer ${peerId}: ICE candidate queue is empty. Nothing to process.`);
+      if (this.enableDiagnosticLogs)
+        console.log(
+          `[WEBRTC-DIAG] Peer ${peerId}: ICE candidate queue is empty. Nothing to process.`,
+        );
       return;
     }
 
     // Double-check remoteDescription, though this function is called after it should be set.
     if (!pc.remoteDescription || !pc.remoteDescription.type) {
-      if (this.enableDiagnosticLogs) console.warn(
-        `[WEBRTC-DIAG] Peer ${peerId}: processIceCandidateQueue called, but remoteDescription is NOT YET SET. Candidates will remain queued. This should not happen if called correctly. SignalingState: ${pc.signalingState}`,
-      );
+      if (this.enableDiagnosticLogs)
+        console.warn(
+          `[WEBRTC-DIAG] Peer ${peerId}: processIceCandidateQueue called, but remoteDescription is NOT YET SET. Candidates will remain queued. This should not happen if called correctly. SignalingState: ${pc.signalingState}`,
+        );
       return;
     }
 
-        if (this.enableDiagnosticLogs) console.log(
-      `[WEBRTC-DIAG] Peer ${peerId}: Processing ${queue.length} queued ICE candidate(s) at ${new Date().toISOString()}. SignalingState: ${pc.signalingState}`,
-    );
+    if (this.enableDiagnosticLogs)
+      console.log(
+        `[WEBRTC-DIAG] Peer ${peerId}: Processing ${queue.length} queued ICE candidate(s) at ${new Date().toISOString()}. SignalingState: ${pc.signalingState}`,
+      );
 
     // Process a copy and clear the original queue *before* attempting to add them
     const candidatesToProcess = [...queue];
@@ -713,10 +814,11 @@ export class WebRTCManager {
 
     for (const candidateData of candidatesToProcess) {
       try {
-        if (this.enableDiagnosticLogs) console.log(
-          `[WEBRTC-DIAG] Peer ${peerId}: Attempting to add queued ICE candidate:`,
-          JSON.stringify(candidateData),
-        );
+        if (this.enableDiagnosticLogs)
+          console.log(
+            `[WEBRTC-DIAG] Peer ${peerId}: Attempting to add queued ICE candidate:`,
+            JSON.stringify(candidateData),
+          );
 
         // Add small delay between candidates to avoid overwhelming the ICE agent
         if (candidatesToProcess.indexOf(candidateData) > 0) {
@@ -727,9 +829,10 @@ export class WebRTCManager {
           ? new RTCIceCandidate(candidateData)
           : null;
         await pc.addIceCandidate(rtcIceCandidate);
-          if (this.enableDiagnosticLogs) console.log(
-          `[WEBRTC-DIAG] Peer ${peerId}: Successfully added queued ICE candidate.`,
-        );
+        if (this.enableDiagnosticLogs)
+          console.log(
+            `[WEBRTC-DIAG] Peer ${peerId}: Successfully added queued ICE candidate.`,
+          );
         if (window.Logger) {
           window.Logger.log(
             `Added queued ICE candidate from ${peerId}: ${candidateData ? candidateData.candidate : "end-of-candidates"}`,
@@ -737,12 +840,13 @@ export class WebRTCManager {
           );
         }
       } catch (error) {
-        if (this.enableDiagnosticLogs) console.error(
-          `[WEBRTC-DIAG] Peer ${peerId}: Error adding QUEUED ICE candidate:`,
-          error,
-          "Candidate:",
-          candidateData,
-        );
+        if (this.enableDiagnosticLogs)
+          console.error(
+            `[WEBRTC-DIAG] Peer ${peerId}: Error adding QUEUED ICE candidate:`,
+            error,
+            "Candidate:",
+            candidateData,
+          );
         if (window.Logger) {
           window.Logger.log(
             `Error adding queued ICE candidate from ${peerId}: ${error.message}`,
@@ -752,9 +856,10 @@ export class WebRTCManager {
         // Decide if you want to re-queue on certain errors, for now, it's discarded.
       }
     }
-        if (this.enableDiagnosticLogs) console.log(
-      `[WEBRTC-DIAG] Peer ${peerId}: Finished processing ICE candidate queue. Remaining queue size: ${peerData.iceCandidateQueue.length}`,
-    );
+    if (this.enableDiagnosticLogs)
+      console.log(
+        `[WEBRTC-DIAG] Peer ${peerId}: Finished processing ICE candidate queue. Remaining queue size: ${peerData.iceCandidateQueue.length}`,
+      );
   }
 
   /**
@@ -762,6 +867,57 @@ export class WebRTCManager {
    * @private
    */
   handleLocalIceCandidate(candidate, peerId) {
+    // Log candidate type for diagnostics
+    const candidateType = candidate.candidate.includes("relay")
+      ? "RELAY"
+      : candidate.candidate.includes("srflx")
+        ? "SRFLX"
+        : candidate.candidate.includes("host")
+          ? "HOST"
+          : "OTHER";
+
+    // Update ICE candidate statistics
+    const peerData = this.peers.get(peerId);
+    if (peerData && peerData.iceCandidateStats) {
+      const stats = peerData.iceCandidateStats;
+      stats.totalLocalCandidates++;
+
+      switch (candidateType) {
+        case "RELAY":
+          stats.localCandidates.relay++;
+          stats.hasLocalRelay = true;
+          break;
+        case "SRFLX":
+          stats.localCandidates.srflx++;
+          break;
+        case "HOST":
+          stats.localCandidates.host++;
+          break;
+        default:
+          stats.localCandidates.other++;
+      }
+
+      // Emit event for UI updates
+      this.eventBus.emit("webrtc:iceCandidateGenerated", {
+        peerId,
+        candidateType,
+        hasRelay: stats.hasLocalRelay,
+        totalCandidates: stats.totalLocalCandidates,
+      });
+
+      if (window.Logger) {
+        window.Logger.log(
+          `Generated ${candidateType} candidate for ${peerId} (#${stats.totalLocalCandidates}, RELAY: ${stats.hasLocalRelay ? "YES" : "NO"})`,
+          "connections",
+        );
+      }
+    } else if (window.Logger) {
+      window.Logger.log(
+        `Generated ${candidateType} candidate for ${peerId}`,
+        "connections",
+      );
+    }
+
     // Send ICE candidate via WebSocket
     if (window.webSocketManager) {
       window.webSocketManager.send({
@@ -772,7 +928,10 @@ export class WebRTCManager {
       });
 
       if (window.Logger) {
-        window.Logger.log(`Sent ICE candidate to ${peerId}`, "connections");
+        window.Logger.log(
+          `Sent ${candidateType} candidate to ${peerId}`,
+          "connections",
+        );
       }
     }
   }
@@ -784,7 +943,10 @@ export class WebRTCManager {
   handleConnectionStateChange(pc, peerId) {
     const state = pc.connectionState;
     // This state is already logged by the direct event listener, this function primarily handles logic.
-    if (this.enableDiagnosticLogs) console.log(`[WEBRTC-DIAG] Peer ${peerId}: handleConnectionStateChange. New state: ${state}`);
+    if (this.enableDiagnosticLogs)
+      console.log(
+        `[WEBRTC-DIAG] Peer ${peerId}: handleConnectionStateChange. New state: ${state}`,
+      );
 
     if (window.Logger) {
       window.Logger.log(
@@ -820,17 +982,19 @@ export class WebRTCManager {
         peerData.paramChannel &&
         peerData.paramChannel.readyState === "open"
       ) {
-        if (this.enableDiagnosticLogs) console.log(
-          `[WEBRTC-DIAG] Peer ${peerId}: Connection established and param channel open - emitting connected event`,
-        );
+        if (this.enableDiagnosticLogs)
+          console.log(
+            `[WEBRTC-DIAG] Peer ${peerId}: Connection established and param channel open - emitting connected event`,
+          );
         this.eventBus.emit("webrtc:connected", {
           peerId,
           timestamp: Date.now(),
         });
       } else {
-        if (this.enableDiagnosticLogs) console.log(
-          `[WEBRTC-DIAG] Peer ${peerId}: Connection established but waiting for param channel to open`,
-        );
+        if (this.enableDiagnosticLogs)
+          console.log(
+            `[WEBRTC-DIAG] Peer ${peerId}: Connection established but waiting for param channel to open`,
+          );
       }
     }
 
@@ -856,25 +1020,28 @@ export class WebRTCManager {
     }
 
     // Log ICE state details
-        if (this.enableDiagnosticLogs) console.log(
-      `[WEBRTC-DIAG] Peer ${peerId}: ICE state change:
+    if (this.enableDiagnosticLogs)
+      console.log(
+        `[WEBRTC-DIAG] Peer ${peerId}: ICE state change:
       - New state: ${state}
       - Local candidates gathered: ${pc.iceGatheringState}
       - Remote candidates in queue: ${peerData ? peerData.iceCandidateQueue.length : "N/A"}`,
-    );
+      );
 
     switch (state) {
       case "checking":
-        if (this.enableDiagnosticLogs) console.log(
-          `[WEBRTC-DIAG] Peer ${peerId}: ICE checking started. Monitoring for stuck state...`,
-        );
+        if (this.enableDiagnosticLogs)
+          console.log(
+            `[WEBRTC-DIAG] Peer ${peerId}: ICE checking started. Monitoring for stuck state...`,
+          );
         // Set a timeout to detect stuck ICE checking
         if (peerData && !peerData.iceCheckTimeout) {
           peerData.iceCheckTimeout = setTimeout(() => {
             if (pc.iceConnectionState === "checking") {
-              if (this.enableDiagnosticLogs) console.error(
-                `[WEBRTC-DIAG] Peer ${peerId}: ICE stuck in 'checking' state for 10s. Getting stats...`,
-              );
+              if (this.enableDiagnosticLogs)
+                console.error(
+                  `[WEBRTC-DIAG] Peer ${peerId}: ICE stuck in 'checking' state for 10s. Getting stats...`,
+                );
               this.getICECandidatePairStats(pc, peerId);
             }
           }, 10000);
@@ -897,40 +1064,68 @@ export class WebRTCManager {
             peerData.connectionTimeout = null;
           }
         }
-        if (this.enableDiagnosticLogs) console.log(`[WEBRTC-DIAG] Peer ${peerId}: ICE successfully ${state}`);
+        if (this.enableDiagnosticLogs)
+          console.log(
+            `[WEBRTC-DIAG] Peer ${peerId}: ICE successfully ${state}`,
+          );
         // Log successful connection details
         this.getICECandidatePairStats(pc, peerId);
 
         // Force check if datachannel is ready
         if (state === "connected" && peerData) {
-          if (this.enableDiagnosticLogs) console.log(
-            `[WEBRTC-DIAG] Peer ${peerId}: ICE connected, checking data channels...`,
-          );
+          if (this.enableDiagnosticLogs)
+            console.log(
+              `[WEBRTC-DIAG] Peer ${peerId}: ICE connected, checking data channels...`,
+            );
           // Give a small delay for data channels to stabilize
           setTimeout(() => {
             if (
               peerData.paramChannel &&
               peerData.paramChannel.readyState === "open"
             ) {
-              if (this.enableDiagnosticLogs) console.log(
-                `[WEBRTC-DIAG] Peer ${peerId}: ICE connected and param channel open - emitting connected event`,
-              );
+              if (this.enableDiagnosticLogs)
+                console.log(
+                  `[WEBRTC-DIAG] Peer ${peerId}: ICE connected and param channel open - emitting connected event`,
+                );
               this.eventBus.emit("webrtc:connected", {
                 peerId,
                 timestamp: Date.now(),
               });
             } else {
-              if (this.enableDiagnosticLogs) console.warn(
-                `[WEBRTC-DIAG] Peer ${peerId}: ICE connected but param channel not open. Channel state: ${peerData.paramChannel?.readyState}`,
-              );
+              if (this.enableDiagnosticLogs)
+                console.warn(
+                  `[WEBRTC-DIAG] Peer ${peerId}: ICE connected but param channel not open. Channel state: ${peerData.paramChannel?.readyState}`,
+                );
             }
           }, 100);
         }
         break;
       case "failed":
-        if (this.enableDiagnosticLogs) console.error(
-          `[WEBRTC-DIAG] Peer ${peerId}: ICE FAILED. Getting candidate pair stats...`,
-        );
+        if (this.enableDiagnosticLogs)
+          console.error(
+            `[WEBRTC-DIAG] Peer ${peerId}: ICE FAILED. Getting candidate pair stats...`,
+          );
+
+        // Log ICE candidate statistics on failure
+        if (peerData && peerData.iceCandidateStats) {
+          const stats = peerData.iceCandidateStats;
+          console.error(`[WEBRTC-DIAG] Peer ${peerId}: ICE Candidate Summary:
+            Local candidates: ${stats.totalLocalCandidates} (HOST: ${stats.localCandidates.host}, SRFLX: ${stats.localCandidates.srflx}, RELAY: ${stats.localCandidates.relay}, OTHER: ${stats.localCandidates.other})
+            Remote candidates: ${stats.totalRemoteCandidates} (HOST: ${stats.remoteCandidates.host}, SRFLX: ${stats.remoteCandidates.srflx}, RELAY: ${stats.remoteCandidates.relay}, OTHER: ${stats.remoteCandidates.other})
+            Has local RELAY: ${stats.hasLocalRelay}
+            Has remote RELAY: ${stats.hasRemoteRelay}`);
+
+          if (!stats.hasLocalRelay) {
+            console.error(
+              `[WEBRTC-DIAG] Peer ${peerId}: WARNING - No local RELAY candidates generated. Check ICE server configuration.`,
+            );
+          }
+          if (!stats.hasRemoteRelay) {
+            console.error(
+              `[WEBRTC-DIAG] Peer ${peerId}: WARNING - No remote RELAY candidates received. Remote peer may have ICE configuration issues.`,
+            );
+          }
+        }
         // Clear any pending timeouts
         if (peerData && peerData.iceCheckTimeout) {
           clearTimeout(peerData.iceCheckTimeout);
@@ -940,16 +1135,18 @@ export class WebRTCManager {
         this.handlePeerDisconnection(peerId);
         break;
       case "disconnected":
-        if (this.enableDiagnosticLogs) console.warn(
-          `[WEBRTC-DIAG] Peer ${peerId}: ICE disconnected. Will attempt to reconnect...`,
-        );
+        if (this.enableDiagnosticLogs)
+          console.warn(
+            `[WEBRTC-DIAG] Peer ${peerId}: ICE disconnected. Will attempt to reconnect...`,
+          );
         // Give it some time to reconnect before considering it failed
         if (peerData && !peerData.disconnectTimeout) {
           peerData.disconnectTimeout = setTimeout(() => {
             if (pc.iceConnectionState === "disconnected") {
-              if (this.enableDiagnosticLogs) console.error(
-                `[WEBRTC-DIAG] Peer ${peerId}: ICE failed to reconnect after 5s`,
-              );
+              if (this.enableDiagnosticLogs)
+                console.error(
+                  `[WEBRTC-DIAG] Peer ${peerId}: ICE failed to reconnect after 5s`,
+                );
               this.handlePeerDisconnection(peerId);
             }
           }, 5000);
@@ -972,7 +1169,8 @@ export class WebRTCManager {
   async getICECandidatePairStats(pc, peerId) {
     try {
       const stats = await pc.getStats();
-      if (this.enableDiagnosticLogs) console.log(`[WEBRTC-DIAG] Peer ${peerId}: ICE Candidate Pair Stats:`);
+      if (this.enableDiagnosticLogs)
+        console.log(`[WEBRTC-DIAG] Peer ${peerId}: ICE Candidate Pair Stats:`);
 
       let candidatePairs = [];
       let localCandidates = new Map();
@@ -1017,7 +1215,8 @@ export class WebRTCManager {
 
       // Log candidate pairs
       candidatePairs.forEach((pair, index) => {
-        if (this.enableDiagnosticLogs) console.log(`[WEBRTC-DIAG] Candidate Pair ${index + 1}:
+        if (this.enableDiagnosticLogs)
+          console.log(`[WEBRTC-DIAG] Candidate Pair ${index + 1}:
           State: ${pair.state}
           Nominated: ${pair.nominated}
           Local: ${pair.local}
@@ -1032,9 +1231,10 @@ export class WebRTCManager {
         (p) => p.state === "succeeded" && !p.nominated,
       );
       if (succeededButNotNominated.length > 0) {
-        if (this.enableDiagnosticLogs) console.warn(
-          `[WEBRTC-DIAG] Peer ${peerId}: ${succeededButNotNominated.length} candidate pair(s) succeeded but not nominated! This may indicate ICE negotiation issues.`,
-        );
+        if (this.enableDiagnosticLogs)
+          console.warn(
+            `[WEBRTC-DIAG] Peer ${peerId}: ${succeededButNotNominated.length} candidate pair(s) succeeded but not nominated! This may indicate ICE negotiation issues.`,
+          );
       }
 
       // Check for active candidate pair
@@ -1042,15 +1242,17 @@ export class WebRTCManager {
         (p) => p.state === "succeeded" || p.nominated,
       );
       if (!activePair) {
-        if (this.enableDiagnosticLogs) console.error(
-          `[WEBRTC-DIAG] Peer ${peerId}: No active candidate pair found!`,
-        );
+        if (this.enableDiagnosticLogs)
+          console.error(
+            `[WEBRTC-DIAG] Peer ${peerId}: No active candidate pair found!`,
+          );
       }
     } catch (error) {
-      if (this.enableDiagnosticLogs) console.error(
-        `[WEBRTC-DIAG] Peer ${peerId}: Error getting stats:`,
-        error,
-      );
+      if (this.enableDiagnosticLogs)
+        console.error(
+          `[WEBRTC-DIAG] Peer ${peerId}: Error getting stats:`,
+          error,
+        );
     }
   }
 
@@ -1062,10 +1264,11 @@ export class WebRTCManager {
     const channelName = channel.label;
 
     // Enhanced logging
-    if (this.enableDiagnosticLogs) console.log(
-      `[WEBRTC-DEBUG] handleDataChannel called for channel: ${channelName}, peer: ${peerId}, readyState: ${channel.readyState}`,
-      channel,
-    );
+    if (this.enableDiagnosticLogs)
+      console.log(
+        `[WEBRTC-DEBUG] handleDataChannel called for channel: ${channelName}, peer: ${peerId}, readyState: ${channel.readyState}`,
+        channel,
+      );
 
     if (window.Logger) {
       window.Logger.log(
@@ -1120,21 +1323,31 @@ export class WebRTCManager {
    * Setup unified data channel
    */
   setupDataChannel(channel, peerId, peerData) {
-    if (this.enableDiagnosticLogs) console.log(`[WEBRTC-DEBUG] Setting up data channel for ${peerId}, current readyState: ${channel.readyState}`);
+    if (this.enableDiagnosticLogs)
+      console.log(
+        `[WEBRTC-DEBUG] Setting up data channel for ${peerId}, current readyState: ${channel.readyState}`,
+      );
     peerData.dataChannel = channel;
     // Keep legacy references for backward compatibility
     peerData.paramChannel = channel;
-    
+
     // Debug what's stored
-    if (this.enableDiagnosticLogs) console.log(`[WEBRTC-DEBUG] Peer ${peerId} now has dataChannel: ${!!peerData.dataChannel}, paramChannel: ${!!peerData.paramChannel}`);
+    if (this.enableDiagnosticLogs)
+      console.log(
+        `[WEBRTC-DEBUG] Peer ${peerId} now has dataChannel: ${!!peerData.dataChannel}, paramChannel: ${!!peerData.paramChannel}`,
+      );
 
     channel.addEventListener("open", () => {
-      if (this.enableDiagnosticLogs) console.log(
-        `[WEBRTC-DIAG] Peer ${peerId}: Data channel opened. ReadyState: ${channel.readyState}`,
-      );
-      
+      if (this.enableDiagnosticLogs)
+        console.log(
+          `[WEBRTC-DIAG] Peer ${peerId}: Data channel opened. ReadyState: ${channel.readyState}`,
+        );
+
       // Re-check what's stored when channel opens
-      if (this.enableDiagnosticLogs) console.log(`[WEBRTC-DEBUG] On open - Peer ${peerId} has dataChannel: ${!!peerData.dataChannel}, paramChannel: ${!!peerData.paramChannel}`);
+      if (this.enableDiagnosticLogs)
+        console.log(
+          `[WEBRTC-DEBUG] On open - Peer ${peerId} has dataChannel: ${!!peerData.dataChannel}, paramChannel: ${!!peerData.paramChannel}`,
+        );
 
       if (window.Logger) {
         window.Logger.log(`Data channel open to ${peerId}`, "connections");
@@ -1148,9 +1361,10 @@ export class WebRTCManager {
           pc.iceConnectionState === "connected" ||
           pc.iceConnectionState === "completed")
       ) {
-        if (this.enableDiagnosticLogs) console.log(
-          `[WEBRTC-DIAG] Peer ${peerId}: Both connection and param channel are ready - emitting connected event`,
-        );
+        if (this.enableDiagnosticLogs)
+          console.log(
+            `[WEBRTC-DIAG] Peer ${peerId}: Both connection and param channel are ready - emitting connected event`,
+          );
         this.eventBus.emit("webrtc:connected", {
           peerId,
           timestamp: Date.now(),
@@ -1259,9 +1473,11 @@ export class WebRTCManager {
       });
 
       // Also emit legacy events based on message type for compatibility
-      if (data.type === MessageTypes.COMMAND || 
-          data.type === MessageTypes.SAVE_TO_BANK || 
-          data.type === MessageTypes.LOAD_FROM_BANK) {
+      if (
+        data.type === MessageTypes.COMMAND ||
+        data.type === MessageTypes.SAVE_TO_BANK ||
+        data.type === MessageTypes.LOAD_FROM_BANK
+      ) {
         this.eventBus.emit("webrtc:commandMessage", {
           peerId,
           data,
@@ -1369,9 +1585,10 @@ export class WebRTCManager {
    * @private
    */
   handlePeerDisconnection(peerId) {
-        if (this.enableDiagnosticLogs) console.log(
-      `[WEBRTC-DIAG] Peer ${peerId}: Starting cleanup for disconnection`,
-    );
+    if (this.enableDiagnosticLogs)
+      console.log(
+        `[WEBRTC-DIAG] Peer ${peerId}: Starting cleanup for disconnection`,
+      );
     const peerData = this.peers.get(peerId);
     if (peerData) {
       // Clear all timeouts
@@ -1393,31 +1610,37 @@ export class WebRTCManager {
         try {
           peerData.dataChannel.close();
         } catch (e) {
-          if (this.enableDiagnosticLogs) console.warn(
-            `[WEBRTC-DIAG] Peer ${peerId}: Error closing data channel:`,
-            e,
-          );
+          if (this.enableDiagnosticLogs)
+            console.warn(
+              `[WEBRTC-DIAG] Peer ${peerId}: Error closing data channel:`,
+              e,
+            );
         }
       }
       // Also close legacy channels if they exist
-      if (peerData.paramChannel && peerData.paramChannel !== peerData.dataChannel) {
+      if (
+        peerData.paramChannel &&
+        peerData.paramChannel !== peerData.dataChannel
+      ) {
         try {
           peerData.paramChannel.close();
         } catch (e) {
-          if (this.enableDiagnosticLogs) console.warn(
-            `[WEBRTC-DIAG] Peer ${peerId}: Error closing param channel:`,
-            e,
-          );
+          if (this.enableDiagnosticLogs)
+            console.warn(
+              `[WEBRTC-DIAG] Peer ${peerId}: Error closing param channel:`,
+              e,
+            );
         }
       }
       if (peerData.commandChannel) {
         try {
           peerData.commandChannel.close();
         } catch (e) {
-          if (this.enableDiagnosticLogs) console.warn(
-            `[WEBRTC-DIAG] Peer ${peerId}: Error closing command channel:`,
-            e,
-          );
+          if (this.enableDiagnosticLogs)
+            console.warn(
+              `[WEBRTC-DIAG] Peer ${peerId}: Error closing command channel:`,
+              e,
+            );
         }
       }
 
@@ -1425,17 +1648,19 @@ export class WebRTCManager {
       if (peerData.connection) {
         const connectionState = peerData.connection.connectionState;
         const iceState = peerData.connection.iceConnectionState;
-          if (this.enableDiagnosticLogs) console.log(
-          `[WEBRTC-DIAG] Peer ${peerId}: Closing connection. Final states - Connection: ${connectionState}, ICE: ${iceState}`,
-        );
+        if (this.enableDiagnosticLogs)
+          console.log(
+            `[WEBRTC-DIAG] Peer ${peerId}: Closing connection. Final states - Connection: ${connectionState}, ICE: ${iceState}`,
+          );
 
         try {
           peerData.connection.close();
         } catch (e) {
-          if (this.enableDiagnosticLogs) console.warn(
-            `[WEBRTC-DIAG] Peer ${peerId}: Error closing connection:`,
-            e,
-          );
+          if (this.enableDiagnosticLogs)
+            console.warn(
+              `[WEBRTC-DIAG] Peer ${peerId}: Error closing connection:`,
+              e,
+            );
         }
       }
 
@@ -1446,7 +1671,8 @@ export class WebRTCManager {
         window.Logger.log(`Disconnected from ${peerId}`, "connections");
       }
 
-      if (this.enableDiagnosticLogs) console.log(`[WEBRTC-DIAG] Peer ${peerId}: Cleanup completed`);
+      if (this.enableDiagnosticLogs)
+        console.log(`[WEBRTC-DIAG] Peer ${peerId}: Cleanup completed`);
 
       // Emit disconnected event
       this.eventBus.emit("webrtc:disconnected", {
@@ -1454,9 +1680,10 @@ export class WebRTCManager {
         timestamp: Date.now(),
       });
     } else {
-      if (this.enableDiagnosticLogs) console.warn(
-        `[WEBRTC-DIAG] Peer ${peerId}: No peer data found during disconnection`,
-      );
+      if (this.enableDiagnosticLogs)
+        console.warn(
+          `[WEBRTC-DIAG] Peer ${peerId}: No peer data found during disconnection`,
+        );
     }
   }
 
@@ -1469,7 +1696,7 @@ export class WebRTCManager {
   sendDataMessage(peerId, message) {
     const peerData = this.peers.get(peerId);
     const channel = peerData?.dataChannel || peerData?.paramChannel;
-    
+
     // Debug logging commented out - too verbose
     // console.log(`[WebRTC] sendDataMessage to ${peerId}:`, {
     //   hasPeerData: !!peerData,
@@ -1479,7 +1706,7 @@ export class WebRTCManager {
     //   paramChannelState: peerData?.paramChannel?.readyState,
     //   messageType: message.type
     // });
-    
+
     if (!channel || channel.readyState !== "open") {
       if (window.Logger) {
         window.Logger.log(
@@ -1494,10 +1721,9 @@ export class WebRTCManager {
       const messageStr = JSON.stringify(message);
       channel.send(messageStr);
 
-
       if (window.Logger) {
         window.Logger.log(
-          `Sent data message to ${peerId}: ${message.type}${message.name ? ` (${message.name})` : ''}`,
+          `Sent data message to ${peerId}: ${message.type}${message.name ? ` (${message.name})` : ""}`,
           "messages",
         );
       }
@@ -1548,7 +1774,7 @@ export class WebRTCManager {
         // Fall through to use data channel
       }
     }
-    
+
     // Use unified data channel
     return this.sendDataMessage(peerId, message);
   }
@@ -1605,20 +1831,23 @@ export class WebRTCManager {
       this.getPeerInfo(peerId),
     );
   }
-  
+
   /**
    * Debug method to check peer status
    */
   debugPeerStatus() {
-    if (this.enableDiagnosticLogs) console.log("[WEBRTC-DEBUG] Current peer status:");
+    if (this.enableDiagnosticLogs)
+      console.log("[WEBRTC-DEBUG] Current peer status:");
     this.peers.forEach((peerData, peerId) => {
-      if (this.enableDiagnosticLogs) console.log(`[WEBRTC-DEBUG] ${peerId}:`, {
-        hasDataChannel: !!peerData.dataChannel,
-        hasParamChannel: !!peerData.paramChannel,
-        dataChannelState: peerData.dataChannel?.readyState || "no channel",
-        paramChannelState: peerData.paramChannel?.readyState || "no channel",
-        connectionState: peerData.connection?.connectionState || "no connection"
-      });
+      if (this.enableDiagnosticLogs)
+        console.log(`[WEBRTC-DEBUG] ${peerId}:`, {
+          hasDataChannel: !!peerData.dataChannel,
+          hasParamChannel: !!peerData.paramChannel,
+          dataChannelState: peerData.dataChannel?.readyState || "no channel",
+          paramChannelState: peerData.paramChannel?.readyState || "no channel",
+          connectionState:
+            peerData.connection?.connectionState || "no connection",
+        });
     });
   }
 
@@ -1665,13 +1894,15 @@ export class WebRTCManager {
    * @param {string} mode - Test mode: 'stun-only', 'turn-only', 'all'
    */
   async testICEConfiguration(peerId, mode = "all") {
-        if (this.enableDiagnosticLogs) console.log(
-      `[WEBRTC-DIAG] Starting ICE configuration test for ${peerId} in ${mode} mode`,
-    );
+    if (this.enableDiagnosticLogs)
+      console.log(
+        `[WEBRTC-DIAG] Starting ICE configuration test for ${peerId} in ${mode} mode`,
+      );
 
     // Close existing connection if any
     if (this.peers.has(peerId)) {
-      if (this.enableDiagnosticLogs) console.log(`[WEBRTC-DIAG] Closing existing connection for ${peerId}`);
+      if (this.enableDiagnosticLogs)
+        console.log(`[WEBRTC-DIAG] Closing existing connection for ${peerId}`);
       this.handlePeerDisconnection(peerId);
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
@@ -1699,33 +1930,37 @@ export class WebRTCManager {
 
     const testConfig = testConfigs[mode];
     if (!testConfig) {
-      if (this.enableDiagnosticLogs) console.error(`[WEBRTC-DIAG] Invalid test mode: ${mode}`);
+      if (this.enableDiagnosticLogs)
+        console.error(`[WEBRTC-DIAG] Invalid test mode: ${mode}`);
       return;
     }
 
-        if (this.enableDiagnosticLogs) console.log(
-      `[WEBRTC-DIAG] Test configuration:`,
-      JSON.stringify(testConfig, null, 2),
-    );
+    if (this.enableDiagnosticLogs)
+      console.log(
+        `[WEBRTC-DIAG] Test configuration:`,
+        JSON.stringify(testConfig, null, 2),
+      );
 
     // Create test peer connection
     const pc = new RTCPeerConnection(testConfig);
 
     // Monitor ICE gathering
     pc.addEventListener("icegatheringstatechange", () => {
-      if (this.enableDiagnosticLogs) console.log(
-        `[WEBRTC-DIAG-TEST] ICE gathering state: ${pc.iceGatheringState}`,
-      );
+      if (this.enableDiagnosticLogs)
+        console.log(
+          `[WEBRTC-DIAG-TEST] ICE gathering state: ${pc.iceGatheringState}`,
+        );
     });
 
     pc.addEventListener("icecandidate", (event) => {
       if (event.candidate) {
-        if (this.enableDiagnosticLogs) console.log(`[WEBRTC-DIAG-TEST] Candidate gathered:`, {
-          type: event.candidate.type,
-          protocol: event.candidate.protocol,
-          address: event.candidate.address,
-          port: event.candidate.port,
-        });
+        if (this.enableDiagnosticLogs)
+          console.log(`[WEBRTC-DIAG-TEST] Candidate gathered:`, {
+            type: event.candidate.type,
+            protocol: event.candidate.protocol,
+            address: event.candidate.address,
+            port: event.candidate.port,
+          });
       }
     });
 
@@ -1736,9 +1971,10 @@ export class WebRTCManager {
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
 
-        if (this.enableDiagnosticLogs) console.log(
-      `[WEBRTC-DIAG-TEST] Test offer created. Waiting for ICE gathering...`,
-    );
+    if (this.enableDiagnosticLogs)
+      console.log(
+        `[WEBRTC-DIAG-TEST] Test offer created. Waiting for ICE gathering...`,
+      );
 
     // Wait for gathering to complete
     await new Promise((resolve) => {
@@ -1767,10 +2003,11 @@ export class WebRTCManager {
       }
     });
 
-        if (this.enableDiagnosticLogs) console.log(
-      `[WEBRTC-DIAG-TEST] Test complete. Gathered ${candidates.length} candidates:`,
-      candidates,
-    );
+    if (this.enableDiagnosticLogs)
+      console.log(
+        `[WEBRTC-DIAG-TEST] Test complete. Gathered ${candidates.length} candidates:`,
+        candidates,
+      );
 
     // Clean up
     testChannel.close();
@@ -1791,7 +2028,7 @@ export const webRTCManager = new WebRTCManager();
 if (typeof window !== "undefined") {
   window.WebRTCManager = WebRTCManager;
   window.webRTCManager = webRTCManager;
-  
+
   // Add debug helper
   window.debugWebRTC = () => webRTCManager.debugPeerStatus();
 }

@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebRTC Connection Diagnostic Tool</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        h1 {
+            color: #333;
+            margin-top: 0;
+        }
+        h2 {
+            color: #555;
+            border-bottom: 2px solid #eee;
+            padding-bottom: 10px;
+        }
+        .status {
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+            font-weight: 500;
+        }
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .status.warning {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeeba;
+        }
+        .status.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        .log-entry {
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 12px;
+            padding: 4px 8px;
+            margin: 2px 0;
+            background: #f8f9fa;
+            border-left: 3px solid #dee2e6;
+        }
+        .log-entry.error {
+            border-left-color: #dc3545;
+            background: #fff5f5;
+        }
+        .log-entry.success {
+            border-left-color: #28a745;
+            background: #f5fff5;
+        }
+        .log-entry.warning {
+            border-left-color: #ffc107;
+            background: #fffdf5;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            margin: 5px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        button:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+        }
+        .candidate-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 10px;
+            margin: 10px 0;
+        }
+        .stat-box {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+            text-align: center;
+        }
+        .stat-box .value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #333;
+        }
+        .stat-box .label {
+            font-size: 12px;
+            color: #666;
+            text-transform: uppercase;
+        }
+        #logs {
+            max-height: 400px;
+            overflow-y: auto;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 10px;
+            background: #f8f9fa;
+        }
+        .phase-indicator {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            margin-right: 10px;
+        }
+        .phase-indicator.pending {
+            background: #ffc107;
+        }
+        .phase-indicator.success {
+            background: #28a745;
+        }
+        .phase-indicator.failed {
+            background: #dc3545;
+        }
+        .connection-phase {
+            padding: 5px 10px;
+            margin: 5px 0;
+            display: flex;
+            align-items: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 WebRTC Connection Diagnostic Tool</h1>
+        <p>This tool helps diagnose WebRTC connection issues between synth and controller clients.</p>
+    </div>
+
+    <div class="container">
+        <h2>1. ICE Server Configuration</h2>
+        <button id="fetchIceServers">Fetch ICE Servers</button>
+        <button id="testTurnConnectivity">Test TURN Connectivity</button>
+        <div id="iceServerStatus"></div>
+    </div>
+
+    <div class="container">
+        <h2>2. WebRTC Connection Test</h2>
+        <button id="startLocalTest">Test Local Connection</button>
+        <button id="createOffer">Create Test Offer</button>
+        <button id="gatherCandidates">Gather ICE Candidates</button>
+        <div id="connectionStatus"></div>
+
+        <div class="candidate-stats" id="candidateStats" style="display:none;">
+            <div class="stat-box">
+                <div class="value" id="hostCount">0</div>
+                <div class="label">HOST</div>
+            </div>
+            <div class="stat-box">
+                <div class="value" id="srflxCount">0</div>
+                <div class="label">SRFLX (STUN)</div>
+            </div>
+            <div class="stat-box">
+                <div class="value" id="relayCount">0</div>
+                <div class="label">RELAY (TURN)</div>
+            </div>
+            <div class="stat-box">
+                <div class="value" id="totalCount">0</div>
+                <div class="label">TOTAL</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <h2>3. Connection Phases</h2>
+        <div id="connectionPhases">
+            <div class="connection-phase">
+                <span class="phase-indicator pending" id="phase-ice"></span>
+                <span>ICE Servers Loaded</span>
+            </div>
+            <div class="connection-phase">
+                <span class="phase-indicator pending" id="phase-offer"></span>
+                <span>Offer Created</span>
+            </div>
+            <div class="connection-phase">
+                <span class="phase-indicator pending" id="phase-candidates"></span>
+                <span>ICE Candidates Gathered</span>
+            </div>
+            <div class="connection-phase">
+                <span class="phase-indicator pending" id="phase-relay"></span>
+                <span>RELAY Candidates Available</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <h2>4. Diagnostic Logs</h2>
+        <button id="clearLogs">Clear Logs</button>
+        <button id="exportLogs">Export Logs</button>
+        <div id="logs"></div>
+    </div>
+
+    <script>
+        let logs = [];
+        let iceServers = [];
+        let pc = null;
+        let candidateStats = {
+            host: 0,
+            srflx: 0,
+            relay: 0,
+            total: 0
+        };
+
+        function log(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const entry = { timestamp, message, type };
+            logs.push(entry);
+
+            const logDiv = document.getElementById('logs');
+            const logEntry = document.createElement('div');
+            logEntry.className = `log-entry ${type}`;
+            logEntry.textContent = `[${timestamp}] ${message}`;
+            logDiv.appendChild(logEntry);
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        function updatePhase(phase, status) {
+            const indicator = document.getElementById(`phase-${phase}`);
+            if (indicator) {
+                indicator.className = `phase-indicator ${status}`;
+            }
+        }
+
+        function showStatus(elementId, message, type = 'info') {
+            const element = document.getElementById(elementId);
+            element.innerHTML = `<div class="status ${type}">${message}</div>`;
+        }
+
+        // Fetch ICE servers
+        document.getElementById('fetchIceServers').addEventListener('click', async () => {
+            try {
+                log('Fetching ICE servers from /ice-servers...');
+                const response = await fetch('/ice-servers');
+                const data = await response.json();
+
+                if (data.ice_servers) {
+                    iceServers = data.ice_servers;
+                    log(`Received ${iceServers.length} ICE servers`, 'success');
+
+                    // Analyze servers
+                    let stunCount = 0;
+                    let turnCount = 0;
+
+                    iceServers.forEach((server, index) => {
+                        const urls = Array.isArray(server.urls) ? server.urls : [server.urls];
+                        urls.forEach(url => {
+                            if (url.startsWith('stun:')) {
+                                stunCount++;
+                                log(`Server ${index + 1}: STUN - ${url}`);
+                            } else if (url.startsWith('turn:')) {
+                                turnCount++;
+                                log(`Server ${index + 1}: TURN - ${url} (has credentials: ${!!server.credential})`);
+                            }
+                        });
+                    });
+
+                    if (turnCount > 0) {
+                        showStatus('iceServerStatus',
+                            `✅ ICE servers loaded: ${stunCount} STUN, ${turnCount} TURN servers`,
+                            'success');
+                        updatePhase('ice', 'success');
+                    } else {
+                        showStatus('iceServerStatus',
+                            `⚠️ Only STUN servers available (${stunCount}). TURN needed for remote connections.`,
+                            'warning');
+                        updatePhase('ice', 'failed');
+                    }
+                } else {
+                    throw new Error('No ice_servers in response');
+                }
+            } catch (error) {
+                log(`Failed to fetch ICE servers: ${error.message}`, 'error');
+                showStatus('iceServerStatus', `❌ Failed to fetch ICE servers: ${error.message}`, 'error');
+                updatePhase('ice', 'failed');
+            }
+        });
+
+        // Test TURN connectivity
+        document.getElementById('testTurnConnectivity').addEventListener('click', async () => {
+            if (iceServers.length === 0) {
+                showStatus('iceServerStatus', '❌ Fetch ICE servers first', 'error');
+                return;
+            }
+
+            log('Testing TURN server connectivity...');
+
+            // Create a test peer connection with only TURN servers
+            const turnOnly = iceServers.filter(server => {
+                const urls = Array.isArray(server.urls) ? server.urls : [server.urls];
+                return urls.some(url => url.startsWith('turn:'));
+            });
+
+            if (turnOnly.length === 0) {
+                showStatus('iceServerStatus', '❌ No TURN servers configured', 'error');
+                return;
+            }
+
+            try {
+                const testPc = new RTCPeerConnection({ iceServers: turnOnly });
+                const dc = testPc.createDataChannel('test');
+
+                let turnCandidates = 0;
+                testPc.onicecandidate = (event) => {
+                    if (event.candidate) {
+                        if (event.candidate.candidate.includes('relay')) {
+                            turnCandidates++;
+                            log(`TURN candidate generated: ${event.candidate.candidate}`, 'success');
+                        }
+                    } else {
+                        // ICE gathering complete
+                        if (turnCandidates > 0) {
+                            showStatus('iceServerStatus',
+                                `✅ TURN connectivity verified! Generated ${turnCandidates} RELAY candidates`,
+                                'success');
+                        } else {
+                            showStatus('iceServerStatus',
+                                '❌ TURN servers configured but no RELAY candidates generated',
+                                'error');
+                        }
+                        testPc.close();
+                    }
+                };
+
+                const offer = await testPc.createOffer();
+                await testPc.setLocalDescription(offer);
+
+            } catch (error) {
+                log(`TURN test failed: ${error.message}`, 'error');
+                showStatus('iceServerStatus', `❌ TURN test failed: ${error.message}`, 'error');
+            }
+        });
+
+        // Create test offer
+        document.getElementById('createOffer').addEventListener('click', async () => {
+            if (iceServers.length === 0) {
+                showStatus('connectionStatus', '❌ Fetch ICE servers first', 'error');
+                return;
+            }
+
+            try {
+                // Close existing connection
+                if (pc) {
+                    pc.close();
+                }
+
+                // Reset stats
+                candidateStats = { host: 0, srflx: 0, relay: 0, total: 0 };
+                updateCandidateStats();
+                document.getElementById('candidateStats').style.display = 'grid';
+
+                log('Creating new RTCPeerConnection...');
+                pc = new RTCPeerConnection({ iceServers });
+
+                // Set up ICE candidate handler
+                pc.onicecandidate = (event) => {
+                    if (event.candidate) {
+                        candidateStats.total++;
+                        const candidate = event.candidate.candidate;
+
+                        if (candidate.includes('host')) {
+                            candidateStats.host++;
+                            log(`HOST candidate: ${candidate}`);
+                        } else if (candidate.includes('srflx')) {
+                            candidateStats.srflx++;
+                            log(`SRFLX candidate: ${candidate}`, 'success');
+                        } else if (candidate.includes('relay')) {
+                            candidateStats.relay++;
+                            log(`RELAY candidate: ${candidate}`, 'success');
+                            updatePhase('relay', 'success');
+                        }
+
+                        updateCandidateStats();
+                    } else {
+                        log(`ICE gathering complete. Total candidates: ${candidateStats.total}`, 'success');
+                        updatePhase('candidates', 'success');
+
+                        if (candidateStats.relay === 0) {
+                            showStatus('connectionStatus',
+                                '⚠️ No RELAY candidates generated. Remote connections will likely fail.',
+                                'warning');
+                            updatePhase('relay', 'failed');
+                        } else {
+                            showStatus('connectionStatus',
+                                `✅ ICE gathering complete: ${candidateStats.relay} RELAY candidates available`,
+                                'success');
+                        }
+                    }
+                };
+
+                // Create data channel
+                const dc = pc.createDataChannel('test');
+
+                // Create offer
+                log('Creating offer...');
+                const offer = await pc.createOffer();
+                await pc.setLocalDescription(offer);
+
+                log('Offer created successfully', 'success');
+                updatePhase('offer', 'success');
+
+                // Check if offer contains relay candidates in SDP
+                if (offer.sdp.includes('relay')) {
+                    log('Offer SDP contains RELAY candidates', 'success');
+                } else {
+                    log('Warning: Offer SDP does not contain RELAY candidates yet', 'warning');
+                }
+
+            } catch (error) {
+                log(`Failed to create offer: ${error.message}`, 'error');
+                showStatus('connectionStatus', `❌ Failed to create offer: ${error.message}`, 'error');
+                updatePhase('offer', 'failed');
+            }
+        });
+
+        // Gather candidates
+        document.getElementById('gatherCandidates').addEventListener('click', async () => {
+            if (!pc) {
+                showStatus('connectionStatus', '❌ Create an offer first', 'error');
+                return;
+            }
+
+            log('Waiting for ICE gathering to complete...');
+            showStatus('connectionStatus', 'Gathering ICE candidates...', 'info');
+        });
+
+        // Test local connection
+        document.getElementById('startLocalTest').addEventListener('click', async () => {
+            if (iceServers.length === 0) {
+                showStatus('connectionStatus', '❌ Fetch ICE servers first', 'error');
+                return;
+            }
+
+            try {
+                log('Starting local connection test...');
+
+                // Create two peer connections
+                const pc1 = new RTCPeerConnection({ iceServers });
+                const pc2 = new RTCPeerConnection({ iceServers });
+
+                // Set up ICE candidate exchange
+                pc1.onicecandidate = (e) => {
+                    if (e.candidate) {
+                        pc2.addIceCandidate(e.candidate);
+                    }
+                };
+
+                pc2.onicecandidate = (e) => {
+                    if (e.candidate) {
+                        pc1.addIceCandidate(e.candidate);
+                    }
+                };
+
+                // Monitor connection state
+                pc1.onconnectionstatechange = () => {
+                    log(`PC1 connection state: ${pc1.connectionState}`);
+                    if (pc1.connectionState === 'connected') {
+                        showStatus('connectionStatus', '✅ Local connection test successful!', 'success');
+                    }
+                };
+
+                // Create data channel
+                const dc = pc1.createDataChannel('test');
+                dc.onopen = () => {
+                    log('Data channel opened!', 'success');
+                    dc.send('Hello from PC1!');
+                };
+
+                pc2.ondatachannel = (e) => {
+                    const channel = e.channel;
+                    channel.onmessage = (e) => {
+                        log(`PC2 received: ${e.data}`, 'success');
+                    };
+                };
+
+                // Create offer/answer
+                const offer = await pc1.createOffer();
+                await pc1.setLocalDescription(offer);
+                await pc2.setRemoteDescription(offer);
+
+                const answer = await pc2.createAnswer();
+                await pc2.setLocalDescription(answer);
+                await pc1.setRemoteDescription(answer);
+
+                log('Local connection test initiated', 'success');
+
+            } catch (error) {
+                log(`Local test failed: ${error.message}`, 'error');
+                showStatus('connectionStatus', `❌ Local test failed: ${error.message}`, 'error');
+            }
+        });
+
+        function updateCandidateStats() {
+            document.getElementById('hostCount').textContent = candidateStats.host;
+            document.getElementById('srflxCount').textContent = candidateStats.srflx;
+            document.getElementById('relayCount').textContent = candidateStats.relay;
+            document.getElementById('totalCount').textContent = candidateStats.total;
+        }
+
+        // Clear logs
+        document.getElementById('clearLogs').addEventListener('click', () => {
+            logs = [];
+            document.getElementById('logs').innerHTML = '';
+            log('Logs cleared');
+        });
+
+        // Export logs
+        document.getElementById('exportLogs').addEventListener('click', () => {
+            const logText = logs.map(entry =>
+                `[${entry.timestamp}] [${entry.type.toUpperCase()}] ${entry.message}`
+            ).join('\n');
+
+            const blob = new Blob([logText], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `webrtc-diagnostic-${new Date().toISOString()}.log`;
+            a.click();
+            URL.revokeObjectURL(url);
+
+            log('Logs exported');
+        });
+
+        // Initial log
+        log('WebRTC Diagnostic Tool initialized');
+    </script>
+</body>
+</html>
