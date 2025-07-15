@@ -43,9 +43,7 @@
         // Wait for module loader to be available
         document.addEventListener('DOMContentLoaded', function() {
             if (typeof window.loadModule === 'function') {
-                window.loadModule('/v2/minimal-controller-main.js').catch(error => {
-                    console.error('Failed to load controller module:', error);
-                });
+                window.loadModule('/v2/minimal-controller-main.js');
             } else {
                 console.error('loadModule function not available');
             }

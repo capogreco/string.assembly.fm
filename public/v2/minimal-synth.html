@@ -46,9 +46,7 @@
         // Wait for module loader to be available
         document.addEventListener('DOMContentLoaded', function() {
             if (typeof window.loadModule === 'function') {
-                window.loadModule('/v2/minimal-synth-main.js').catch(error => {
-                    console.error('Failed to load synth module:', error);
-                });
+                window.loadModule('/v2/minimal-synth-main.js');
             } else {
                 console.error('loadModule function not available');
             }
