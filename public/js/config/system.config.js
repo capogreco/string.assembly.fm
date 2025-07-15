@@ -24,7 +24,7 @@ export const SystemConfig = {
         { urls: "stun:stun.l.google.com:19302" },
         { urls: "stun:stun1.l.google.com:19302" },
       ],
-      iceTransportPolicy: "relay", // Force TURN relay for all connections
+
       connectionTimeout: 10000, // milliseconds
       offerOptions: {
         offerToReceiveAudio: false,

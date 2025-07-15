@@ -582,6 +582,9 @@ export class WebRTCManager {
         return;
       }
 
+      // Process any queued ICE candidates BEFORE sending answer (like cicada)
+      await this.processIceCandidateQueue(peerId);
+
       // Send answer back via WebSocket
       // Send answer back to synth
       if (window.webSocketManager) {
@@ -598,8 +601,6 @@ export class WebRTCManager {
       }
 
       // Emit offer handled event
-      // Process any queued ICE candidates now that the full offer/answer flow is complete
-      await this.processIceCandidateQueue(peerId);
 
       this.eventBus.emit("webrtc:offerHandled", {
         peerId,

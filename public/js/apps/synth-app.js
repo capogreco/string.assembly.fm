@@ -508,6 +508,7 @@ class SynthApp {
       // Create unified data channel
       const dataChannel = pc.createDataChannel("data", {
         ordered: true,
+        maxRetransmits: 3,
       });
       controller.channel = dataChannel;
 
