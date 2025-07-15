@@ -40,14 +40,14 @@
     const pathname = window.location.pathname;
     
     if (pathname.includes('/ctrl') || pathname.endsWith('/ctrl.html')) {
-      appModule = './js/apps/controller-app.js';
+      appModule = '/js/apps/controller-app.js';
       // Detected controller page
     } else if (pathname.includes('/ensemble') || pathname.endsWith('/ensemble.html')) {
-      appModule = './js/apps/ensemble-app.js';
+      appModule = '/js/apps/ensemble-app.js';
       // Detected ensemble page
     } else {
       // Default to synth for index.html
-      appModule = './js/apps/synth-app.js';
+      appModule = '/js/apps/synth-app.js';
       // Detected synth page
     }
 
@@ -64,6 +64,31 @@
 
     script.onerror = function (error) {
       console.error("[MODULE-LOADER] Failed to load modular system", error);
+      hideLoadingIndicator();
+      showErrorMessage();
+    };
+
+    document.head.appendChild(script);
+  }
+
+  // Load a specific module by path (for manual loading)
+  function loadModule(modulePath) {
+    // Ensure the path is absolute from the public directory root
+    const absolutePath = modulePath.startsWith('/') ? modulePath : '/' + modulePath;
+    
+    // Create module script
+    const script = document.createElement("script");
+    script.type = "module";
+    script.src = absolutePath;
+
+    script.onload = function () {
+      console.log("[MODULE-LOADER] Module loaded successfully:", absolutePath);
+      document.body.classList.add("modular-loaded");
+      hideLoadingIndicator();
+    };
+
+    script.onerror = function (error) {
+      console.error("[MODULE-LOADER] Failed to load module:", absolutePath, error);
       hideLoadingIndicator();
       showErrorMessage();
     };
@@ -182,10 +207,14 @@
     initialize();
   }
 
-  // Expose module loader for debugging
+  // Expose module loader for debugging and manual loading
   window.moduleLoader = {
     supportsES6Modules,
     supportsRequiredFeatures,
-    loadModularSystem
+    loadModularSystem,
+    loadModule
   };
+
+  // Expose loadModule function globally for HTML files to use
+  window.loadModule = loadModule;
 })();
