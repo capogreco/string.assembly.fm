@@ -430,6 +430,7 @@ export class WebSocketManager {
     if (this.isConnected && this.clientId?.startsWith("ctrl-")) {
       this.send({
         type: "heartbeat",
+        target: "server",
         timestamp: Date.now(),
       });
     }
@@ -440,6 +441,7 @@ export class WebSocketManager {
         if (this.clientId?.startsWith("ctrl-")) {
           this.send({
             type: "heartbeat",
+            target: "server",
             timestamp: Date.now(),
           });
         }
