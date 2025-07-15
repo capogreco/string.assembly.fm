@@ -631,11 +631,13 @@ export class WebRTCManager {
         return;
       }
 
+      // Add a small delay after setting the local description to allow the
+      // ICE agent to start before the answer is sent. This can help prevent
+      // race conditions on some platforms.
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
       // Process any queued ICE candidates BEFORE sending answer (like cicada)
       await this.processIceCandidateQueue(peerId);
-
-      // Add small delay to ensure ICE agent is ready before sending answer
-      await new Promise((resolve) => setTimeout(resolve, 100));
 
       // Send answer back via WebSocket
       // Send answer back to synth
@@ -1434,19 +1436,14 @@ export class WebRTCManager {
     }
 
     // Handle single "data" channel or legacy channels
-    if (channelName === "data" || channelName === "main") {
+    if (
+      channelName === "data" ||
+      channelName === "main" ||
+      channelName === "params"
+    ) {
       if (window.Logger) {
         window.Logger.log(
           `handleDataChannel: Setting up ${channelName.toUpperCase()} channel for ${peerId}`,
-          "connections",
-        );
-      }
-      this.setupDataChannel(channel, peerId, peerData);
-    } else if (channelName === "params") {
-      // Legacy support - treat params channel as data channel
-      if (window.Logger) {
-        window.Logger.log(
-          `handleDataChannel: Setting up legacy PARAMS channel as DATA for ${peerId}`,
           "connections",
         );
       }
