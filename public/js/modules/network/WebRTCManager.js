@@ -485,8 +485,6 @@ export class WebRTCManager {
           console.log(
             `[WEBRTC-DIAG] Peer ${peerId}: setRemoteDescription(offer) successful. pc.signalingState AFTER setRemoteDescription: ${pc.signalingState}`,
           );
-        // Process any queued ICE candidates now that remote description is set
-        await this.processIceCandidateQueue(peerId);
         if (window.Logger) {
           window.Logger.log(
             `[WEBRTC-DEBUG] Remote description set successfully for ${peerId}`,
@@ -599,6 +597,9 @@ export class WebRTCManager {
       }
 
       // Emit offer handled event
+      // Process any queued ICE candidates now that the full offer/answer flow is complete
+      await this.processIceCandidateQueue(peerId);
+
       this.eventBus.emit("webrtc:offerHandled", {
         peerId,
         timestamp: Date.now(),
