@@ -780,6 +780,12 @@ class SynthApp {
 
       // Create and send offer
       // console.log(`[DEBUG] Creating WebRTC offer for ${controllerId}`);
+
+      // HACK: Add a no-op icecandidate listener before creating the offer.
+      // This is a known workaround for a race condition in some browser WebRTC
+      // implementations that can prevent the data channel from being negotiated correctly.
+      pc.addEventListener("icecandidate", () => {});
+
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
 
