@@ -237,8 +237,8 @@ async function connectToController(controllerId) {
                 log('Sending ICE candidate', 'info');
                 wsManager.send({
                     type: 'ice',
-                    to: controllerId,
-                    from: clientId,
+                    target: controllerId,
+                    source: clientId,
                     candidate: event.candidate
                 });
             }
@@ -290,8 +290,8 @@ async function connectToController(controllerId) {
         // Send offer
         wsManager.send({
             type: 'offer',
-            to: controllerId,
-            from: clientId,
+            target: controllerId,
+            source: clientId,
             offer: offer
         });
         log('Sent offer', 'info');
@@ -305,8 +305,21 @@ async function connectToController(controllerId) {
 // WebRTC handlers
 async function handleAnswer(message) {
     try {
-        log('Received answer', 'info');
-        await peerConnection.setRemoteDescription(new RTCSessionDescription(message.answer));
+        const senderId = message.source || message.from || message.sender_id;
+        log(`Received answer from ${senderId}`, 'info');
+        
+        // Debug the message structure
+        log(`V2 Debug: Full answer message: ${JSON.stringify(message)}`, 'info');
+        
+        // Extract the answer - it might be in message.answer or message.data
+        const answerData = message.answer || message.data;
+        if (!answerData) {
+            throw new Error('No answer data found in message');
+        }
+        
+        log(`V2 Debug: Answer data: ${JSON.stringify(answerData)}`, 'info');
+        
+        await peerConnection.setRemoteDescription(new RTCSessionDescription(answerData));
         log('Set remote description', 'info');
     } catch (error) {
         log(`Error handling answer: ${error.message}`, 'error');

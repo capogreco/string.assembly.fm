@@ -166,9 +166,14 @@ async function fetchIceServers() {
 // WebRTC handlers
 async function handleOffer(message) {
     try {
-        log(`Received offer from ${message.from}`, 'info');
-        remoteSynthId = message.from;
+        // Use source field (set by server) instead of from field
+        const senderId = message.source || message.from || message.sender_id;
+        log(`Received offer from ${senderId}`, 'info');
+        remoteSynthId = senderId;
         elements.remoteSynthDiv.textContent = remoteSynthId;
+        
+        // Debug the message structure
+        log(`V2 Debug: Full message structure: ${JSON.stringify(message)}`, 'info');
         
         // Create peer connection
         const serversResponse = await fetchIceServers();
@@ -184,8 +189,8 @@ async function handleOffer(message) {
                 log('Sending ICE candidate', 'info');
                 wsManager.send({
                     type: 'ice',
-                    to: remoteSynthId,
-                    from: clientId,
+                    target: remoteSynthId,
+                    source: clientId,
                     candidate: event.candidate
                 });
             }
@@ -235,8 +240,16 @@ async function handleOffer(message) {
             setupDataChannel();
         };
         
+        // Extract the offer - it might be in message.offer or message.data
+        const offerData = message.offer || message.data;
+        if (!offerData) {
+            throw new Error('No offer data found in message');
+        }
+        
+        log(`V2 Debug: Offer data: ${JSON.stringify(offerData)}`, 'info');
+        
         // Set remote description
-        await peerConnection.setRemoteDescription(new RTCSessionDescription(message.offer));
+        await peerConnection.setRemoteDescription(new RTCSessionDescription(offerData));
         log('Set remote description', 'info');
         
         // Create answer
@@ -247,8 +260,8 @@ async function handleOffer(message) {
         // Send answer
         wsManager.send({
             type: 'answer',
-            to: remoteSynthId,
-            from: clientId,
+            target: remoteSynthId,
+            source: clientId,
             answer: answer
         });
         log('Sent answer', 'info');
