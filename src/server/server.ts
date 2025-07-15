@@ -100,7 +100,12 @@ const TWILIO_AUTH_TOKEN = Deno.env.get("TWILIO_AUTH_TOKEN");
 
 // get TURN credentials from Twilio
 async function get_turn_credentials(): Promise<IceServer[] | null> {
+  // Log environment variable status
+  console.log(`[TURN] Environment check - TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID ? 'SET' : 'MISSING'}`);
+  console.log(`[TURN] Environment check - TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN ? 'SET' : 'MISSING'}`);
+  
   if (!TWILIO_ACCOUNT_SID || !TWILIO_AUTH_TOKEN) {
+    console.error(`[TURN] Missing Twilio credentials - SID: ${!!TWILIO_ACCOUNT_SID}, Token: ${!!TWILIO_AUTH_TOKEN}`);
     return null;
   }
 
@@ -108,6 +113,8 @@ async function get_turn_credentials(): Promise<IceServer[] | null> {
     const auth = btoa(`${TWILIO_ACCOUNT_SID}:${TWILIO_AUTH_TOKEN}`);
     const url = `https://api.twilio.com/2010-04-01/Accounts/${TWILIO_ACCOUNT_SID}/Tokens.json`;
 
+    console.log(`[TURN] Making request to Twilio API: ${url}`);
+    
     const response = await fetch(url, {
       method: "POST",
       headers: {
@@ -116,15 +123,23 @@ async function get_turn_credentials(): Promise<IceServer[] | null> {
       },
     });
 
+    console.log(`[TURN] Twilio API response status: ${response.status} ${response.statusText}`);
+
     if (!response.ok) {
-      console.error(`[TURN] Twilio error ${response.status}`);
+      const errorText = await response.text();
+      console.error(`[TURN] Twilio API error - Status: ${response.status}, Response: ${errorText}`);
       return null;
     }
 
     const data = await response.json();
+    console.log(`[TURN] Successfully fetched ${data.ice_servers?.length || 0} ICE servers from Twilio`);
     return data.ice_servers;
   } catch (error) {
     console.error(`[TURN] Error fetching TURN credentials:`, error);
+    console.error(`[TURN] Error details - Name: ${error.name}, Message: ${error.message}`);
+    if (error.stack) {
+      console.error(`[TURN] Stack trace: ${error.stack}`);
+    }
     return null;
   }
 }
@@ -132,6 +147,18 @@ async function get_turn_credentials(): Promise<IceServer[] | null> {
 // serve static files and handle websocket upgrade
 async function handle_request(request: Request): Promise<Response> {
   const url = new URL(request.url);
+
+  // Handle CORS preflight requests
+  if (request.method === "OPTIONS") {
+    return new Response(null, {
+      headers: {
+        "access-control-allow-origin": "*",
+        "access-control-allow-methods": "GET, POST, OPTIONS",
+        "access-control-allow-headers": "Content-Type",
+        "access-control-max-age": "86400",
+      },
+    });
+  }
 
   // websocket upgrade
   if (request.headers.get("upgrade") === "websocket") {
@@ -219,17 +246,48 @@ async function handle_request(request: Request): Promise<Response> {
 
   // handle ice servers request
   if (url.pathname === "/ice-servers") {
-    const ice_servers = await get_turn_credentials();
+    console.log(`[ICE-SERVERS] Request received from ${request.headers.get("user-agent")}`);
+    
+    try {
+      const ice_servers = await get_turn_credentials();
 
-    // ICE servers fetched successfully
-
-    const response: IceServersResponse = ice_servers
-      ? { ice_servers }
-      : { ice_servers: [{ urls: "stun:stun.l.google.com:19302" }] };
-
-    return new Response(JSON.stringify(response), {
-      headers: { "content-type": "application/json" },
-    });
+      if (ice_servers) {
+        console.log(`[ICE-SERVERS] Returning ${ice_servers.length} ICE servers from Twilio`);
+        const response: IceServersResponse = { ice_servers };
+        return new Response(JSON.stringify(response), {
+          headers: { 
+            "content-type": "application/json",
+            "access-control-allow-origin": "*",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-headers": "Content-Type"
+          },
+        });
+      } else {
+        console.log(`[ICE-SERVERS] Twilio credentials failed, returning fallback STUN servers`);
+        const response: IceServersResponse = { 
+          ice_servers: [{ urls: "stun:stun.l.google.com:19302" }] 
+        };
+        return new Response(JSON.stringify(response), {
+          headers: { 
+            "content-type": "application/json",
+            "access-control-allow-origin": "*",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-headers": "Content-Type"
+          },
+        });
+      }
+    } catch (error) {
+      console.error(`[ICE-SERVERS] Error processing request:`, error);
+      return new Response(JSON.stringify({ error: "Internal server error" }), {
+        status: 500,
+        headers: { 
+          "content-type": "application/json",
+          "access-control-allow-origin": "*",
+          "access-control-allow-methods": "GET, POST, OPTIONS",
+          "access-control-allow-headers": "Content-Type"
+        },
+      });
+    }
   }
 
   // serve static files
@@ -444,5 +502,9 @@ async function start_polling_for_client(
 // start server
 const port = parseInt(Deno.env.get("PORT") || "8000");
 console.log(`server starting on port ${port}`);
+
+// Log startup environment info
+console.log(`[STARTUP] Twilio credentials check - SID: ${TWILIO_ACCOUNT_SID ? 'SET' : 'MISSING'}, Token: ${TWILIO_AUTH_TOKEN ? 'SET' : 'MISSING'}`);
+console.log(`[STARTUP] Server will serve ICE servers from: ${TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN ? 'Twilio + fallback STUN' : 'fallback STUN only'}`);
 
 Deno.serve({ port }, handle_request);
