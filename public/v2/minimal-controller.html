@@ -41,7 +41,7 @@
     <script src="../js/module-loader.js"></script>
     <script>
         // Load the main application module
-        loadModule('./minimal-controller-main.js').catch(error => {
+        window.loadModule('/v2/minimal-controller-main.js').catch(error => {
             console.error('Failed to load controller module:', error);
         });
     </script>

@@ -44,7 +44,7 @@
     <script src="../js/module-loader.js"></script>
     <script>
         // Load the main application module
-        loadModule('./minimal-synth-main.js').catch(error => {
+        window.loadModule('/v2/minimal-synth-main.js').catch(error => {
             console.error('Failed to load synth module:', error);
         });
     </script>
