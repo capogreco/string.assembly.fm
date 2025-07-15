@@ -298,7 +298,9 @@ export class WebRTCManager {
         "connections",
       );
     }
-    console.log(`[WEBRTC-DIAG] About to add datachannel listener for ${peerId}`);
+    console.log(
+      `[WEBRTC-DIAG] About to add datachannel listener for ${peerId}`,
+    );
 
     peerData._dataChannelHandler = (event) => {
       console.log(`[WEBRTC-CRITICAL] datachannel event FIRED for ${peerId}!`, {
@@ -307,7 +309,7 @@ export class WebRTCManager {
         channelState: event.channel.readyState,
         channelOrdered: event.channel.ordered,
         channelProtocol: event.channel.protocol,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       });
 
       if (window.Logger) {
@@ -325,7 +327,9 @@ export class WebRTCManager {
     };
 
     pc.addEventListener("datachannel", peerData._dataChannelHandler);
-    console.log(`[WEBRTC-DIAG] datachannel listener added for ${peerId}. Total listeners: ${pc.listenerCount ? pc.listenerCount('datachannel') : 'unknown'}`);
+    console.log(
+      `[WEBRTC-DIAG] datachannel listener added for ${peerId}. Total listeners: ${pc.listenerCount ? pc.listenerCount("datachannel") : "unknown"}`,
+    );
 
     if (window.Logger) {
       window.Logger.log(
@@ -468,9 +472,13 @@ export class WebRTCManager {
 
       // Set remote description
       try {
-        console.log(`[WEBRTC-CRITICAL] About to setRemoteDescription for ${peerId}. datachannel listener exists: ${!!peerData._dataChannelHandler}`);
+        console.log(
+          `[WEBRTC-CRITICAL] About to setRemoteDescription for ${peerId}. datachannel listener exists: ${!!peerData._dataChannelHandler}`,
+        );
         await pc.setRemoteDescription(offer); // Listener for 'datachannel' should be active before this
-        console.log(`[WEBRTC-CRITICAL] setRemoteDescription completed for ${peerId}. Waiting for datachannel event...`);
+        console.log(
+          `[WEBRTC-CRITICAL] setRemoteDescription completed for ${peerId}. Waiting for datachannel event...`,
+        );
         if (this.enableDiagnosticLogs)
           console.log(
             `[WEBRTC-DIAG] Peer ${peerId}: setRemoteDescription(offer) successful. pc.signalingState AFTER setRemoteDescription: ${pc.signalingState}`,
@@ -1292,7 +1300,7 @@ export class WebRTCManager {
       ordered: channel.ordered,
       maxRetransmits: channel.maxRetransmits,
       protocol: channel.protocol,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
 
     if (this.enableDiagnosticLogs)
@@ -1306,7 +1314,6 @@ export class WebRTCManager {
         `Received data channel '${channelName}' from ${peerId}, state: ${channel.readyState}`,
         "connections",
       );
-    }
       window.Logger.log(
         `handleDataChannel: channel.label=${channel.label}, channel.readyState=${channel.readyState}`,
         "connections",
