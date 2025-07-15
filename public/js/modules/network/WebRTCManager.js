@@ -634,6 +634,9 @@ export class WebRTCManager {
       // Process any queued ICE candidates BEFORE sending answer (like cicada)
       await this.processIceCandidateQueue(peerId);
 
+      // Add small delay to ensure ICE agent is ready before sending answer
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
       // Send answer back via WebSocket
       // Send answer back to synth
       if (window.webSocketManager) {
