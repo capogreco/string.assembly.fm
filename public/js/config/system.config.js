@@ -7,6 +7,7 @@ export const SystemConfig = {
   // Network configuration
   network: {
     websocket: {
+      path: "/ws",
       url: (() => {
         const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
         return `${protocol}//${window.location.host}/ws`;
