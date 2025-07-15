@@ -401,6 +401,7 @@ export class WebRTCManager {
    * Handle incoming offer
    */
   async handleOffer(message) {
+    console.log("!!!!!!!!!! HANDLE OFFER CALLED !!!!!!!!!!", message);
     const { source: peerId, data: offer } = message;
 
     // Debug logging
