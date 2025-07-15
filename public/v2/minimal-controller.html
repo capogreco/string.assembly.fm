@@ -1,53 +1,99 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Minimal WebRTC Controller (Answerer)</title>
-    <style>
-        body { font-family: monospace; max-width: 800px; margin: 0 auto; padding: 20px; background: #1a1a1a; color: #eee; }
-        .panel { border: 1px solid #444; padding: 15px; background: #222; margin-bottom: 20px; }
-        h2 { margin-top: 0; color: #ffaf40; border-bottom: 1px solid #444; padding-bottom: 10px; }
-        button { background: #ffaf40; color: #000; border: none; padding: 10px 15px; margin: 5px 0; cursor: pointer; font-weight: bold; }
-        button:disabled { background: #555; color: #999; cursor: not-allowed; }
-        .log-area { background: #000; border: 1px solid #333; padding: 10px; height: 300px; overflow-y: auto; font-size: 12px; }
-        .log-area div { margin-bottom: 5px; border-bottom: 1px dotted #333; padding-bottom: 5px; word-break: break-all; }
-        .status { margin-top: 10px; padding: 8px; background: #333; border-left: 4px solid #ffaf40; }
-        .status-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-    </style>
-</head>
-<body>
-    <h1>Minimal WebRTC Controller (Answerer)</h1>
-    <div class="panel">
-        <h2>Controls</h2>
-        <button id="start-btn">1. Start & Register as Controller</button>
-        <div>Your ID: <b id="my-id">-</b></div>
-        <div class="status-grid">
-            <div class="status">WebSocket: <b id="ws-state">OFFLINE</b></div>
-            <div class="status">WebRTC State: <b id="connection-state">NEW</b></div>
-            <div class="status">ICE State: <b id="ice-state">NEW</b></div>
-            <div class="status">Data Channel: <b id="datachannel-state">CLOSED</b></div>
-        </div>
-    </div>
-    <div class="panel">
-        <h2>Event Log</h2>
-        <div id="event-log" class="log-area"></div>
-    </div>
-    <div class="panel">
-        <h2>Received Messages</h2>
-        <div id="messages" class="log-area"></div>
-    </div>
-
-    <script src="../js/module-loader.js"></script>
-    <script>
-        // Wait for module loader to be available
-        document.addEventListener('DOMContentLoaded', function() {
-            if (typeof window.loadModule === 'function') {
-                window.loadModule('/v2/minimal-controller-main.js');
-            } else {
-                console.error('loadModule function not available');
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Minimal WebRTC Controller (Answerer)</title>
+        <style>
+            body {
+                font-family: monospace;
+                max-width: 800px;
+                margin: 0 auto;
+                padding: 20px;
+                background: #1a1a1a;
+                color: #eee;
             }
-        });
-    </script>
-</body>
+            .panel {
+                border: 1px solid #444;
+                padding: 15px;
+                background: #222;
+                margin-bottom: 20px;
+            }
+            h2 {
+                margin-top: 0;
+                color: #ffaf40;
+                border-bottom: 1px solid #444;
+                padding-bottom: 10px;
+            }
+            button {
+                background: #ffaf40;
+                color: #000;
+                border: none;
+                padding: 10px 15px;
+                margin: 5px 0;
+                cursor: pointer;
+                font-weight: bold;
+            }
+            button:disabled {
+                background: #555;
+                color: #999;
+                cursor: not-allowed;
+            }
+            .log-area {
+                background: #000;
+                border: 1px solid #333;
+                padding: 10px;
+                height: 300px;
+                overflow-y: auto;
+                font-size: 12px;
+            }
+            .log-area div {
+                margin-bottom: 5px;
+                border-bottom: 1px dotted #333;
+                padding-bottom: 5px;
+                word-break: break-all;
+            }
+            .status {
+                margin-top: 10px;
+                padding: 8px;
+                background: #333;
+                border-left: 4px solid #ffaf40;
+            }
+            .status-grid {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 10px;
+            }
+        </style>
+    </head>
+    <body>
+        <h1>Minimal WebRTC Controller (Answerer)</h1>
+        <div class="panel">
+            <h2>Controls</h2>
+            <button id="start-btn">1. Start & Register as Controller</button>
+            <div>Your ID: <b id="my-id">-</b></div>
+            <div class="status-grid">
+                <div class="status">
+                    WebSocket: <b id="ws-state">OFFLINE</b>
+                </div>
+                <div class="status">
+                    WebRTC State: <b id="connection-state">NEW</b>
+                </div>
+                <div class="status">ICE State: <b id="ice-state">NEW</b></div>
+                <div class="status">
+                    Data Channel: <b id="datachannel-state">CLOSED</b>
+                </div>
+            </div>
+        </div>
+        <div class="panel">
+            <h2>Event Log</h2>
+            <div id="event-log" class="log-area"></div>
+        </div>
+        <div class="panel">
+            <h2>Received Messages</h2>
+            <div id="messages" class="log-area"></div>
+        </div>
+
+        <script type="module" src="/v2/minimal-controller-main.js"></script>
+    </body>
 </html>

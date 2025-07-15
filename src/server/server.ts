@@ -187,9 +187,10 @@ async function handle_request(request: Request): Promise<Response> {
       // handle client registration
       if (data.type === "register") {
         const old_id = client_id;
-        client_id = data.synth_id || data.client_id; // Handle both synth_id and client_id
+        client_id = data.synth_id || data.client_id || data.id; // Handle synth_id, client_id, and id
         
         console.log(`[WEBSOCKET] Registration attempt - old_id: ${old_id}, new client_id: ${client_id}`);
+        console.log(`[WEBSOCKET] Registration message details:`, data);
         
         // Ensure client_id is not undefined
         if (!client_id) {
@@ -233,11 +234,29 @@ async function handle_request(request: Request): Promise<Response> {
         return;
       }
 
-      await handle_websocket_message(client_id, event.data);
+      // Only handle non-registration messages if client has registered
+      if (client_id && client_id !== temp_id) {
+        await handle_websocket_message(client_id, event.data);
+      } else {
+        console.log(`[WEBSOCKET] Ignoring message from unregistered client ${temp_id}:`, data.type);
+      }
     });
 
     socket.addEventListener("close", async () => {
       connections.delete(client_id);
+
+      // Clean up any remaining messages for this client in KV
+      if (client_id && client_id !== temp_id) {
+        console.log(`[WEBSOCKET] Cleaning up KV messages for disconnected client: ${client_id}`);
+        try {
+          const entries = kv.list({ prefix: ["messages", client_id] });
+          for await (const entry of entries) {
+            await kv.delete(entry.key);
+          }
+        } catch (error) {
+          console.error(`[WEBSOCKET] Error cleaning up KV messages for ${client_id}:`, error);
+        }
+      }
 
       // if this was a controller, remove from KV registry
       if (client_id && client_id.startsWith("ctrl-")) {
@@ -434,6 +453,12 @@ async function handle_websocket_message(
     message.sender_id = sender_id;
     message.timestamp = Date.now();
 
+    // Ensure sender_id is valid
+    if (!sender_id || typeof sender_id !== 'string') {
+      console.error(`[WEBSOCKET] Invalid sender_id: ${sender_id}`);
+      return;
+    }
+
     // handle heartbeat from controller
     if (message.type === "heartbeat" && sender_id.startsWith("ctrl-")) {
       const key = ["controllers", sender_id];
@@ -530,6 +555,7 @@ async function handle_websocket_message(
     } else if (message.target) {
       // queue message in kv with ttl of 30 seconds
       const key = ["messages", message.target, crypto.randomUUID()];
+      console.log(`[KV-QUEUE] Queueing ${message.type} from ${sender_id} to ${message.target}`);
       await kv.set(key, message, { expireIn: 30 * 1000 });
     } else {
       console.error(`message missing target: ${JSON.stringify(message)}`);
@@ -544,6 +570,8 @@ async function start_polling_for_client(
   client_id: string,
   socket: WebSocket,
 ): Promise<void> {
+  console.log(`[POLLING] Starting polling for client: ${client_id}`);
+  
   while (socket.readyState === WebSocket.OPEN) {
     try {
       // check for messages targeted specifically to this client
@@ -552,6 +580,9 @@ async function start_polling_for_client(
       for await (const entry of entries) {
         const message = entry.value as Message;
 
+        // Debug logging for message delivery
+        console.log(`[POLLING] Delivering message from ${message.sender_id} to ${client_id}: ${message.type}`);
+
         // send message to client
         socket.send(JSON.stringify(message));
 
@@ -559,11 +590,41 @@ async function start_polling_for_client(
         await kv.delete(entry.key);
       }
     } catch (error) {
-      console.error(`polling error: ${error}`);
+      console.error(`[POLLING] Error for client ${client_id}: ${error}`);
     }
 
     // poll every 100ms
     await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  
+  console.log(`[POLLING] Stopped polling for client: ${client_id} (socket closed)`);
+}
+
+// Clean up stale KV entries on startup
+async function cleanupKVOnStartup() {
+  console.log('[STARTUP] Cleaning up stale KV entries...');
+  
+  try {
+    // Clean up old messages
+    const messageEntries = kv.list({ prefix: ["messages"] });
+    let messageCount = 0;
+    for await (const entry of messageEntries) {
+      await kv.delete(entry.key);
+      messageCount++;
+    }
+    console.log(`[STARTUP] Cleaned up ${messageCount} stale message entries`);
+    
+    // Clean up old controller entries
+    const controllerEntries = kv.list({ prefix: ["controllers"] });
+    let controllerCount = 0;
+    for await (const entry of controllerEntries) {
+      await kv.delete(entry.key);
+      controllerCount++;
+    }
+    console.log(`[STARTUP] Cleaned up ${controllerCount} stale controller entries`);
+    
+  } catch (error) {
+    console.error('[STARTUP] Error cleaning up KV entries:', error);
   }
 }
 
@@ -574,5 +635,8 @@ console.log(`server starting on port ${port}`);
 // Log startup environment info
 console.log(`[STARTUP] Twilio credentials check - SID: ${TWILIO_ACCOUNT_SID ? 'SET' : 'MISSING'}, Token: ${TWILIO_AUTH_TOKEN ? 'SET' : 'MISSING'}`);
 console.log(`[STARTUP] Server will serve ICE servers from: ${TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN ? 'Twilio + fallback STUN' : 'fallback STUN only'}`);
+
+// Clean up stale KV entries before starting
+await cleanupKVOnStartup();
 
 Deno.serve({ port }, handle_request);

@@ -2,9 +2,12 @@
 // This version uses the application's core modules instead of inline code
 
 import { Logger } from '../js/modules/core/Logger.js';
-import { eventBus } from '../js/modules/core/EventBus.js';
+import { EventBus } from '../js/modules/core/EventBus.js';
 import { WebSocketManager } from '../js/modules/network/WebSocketManager.js';
 import { SystemConfig } from '../js/config/system.config.js';
+
+// Create a separate EventBus instance for v2 synth to avoid conflicts with main app
+const v2EventBus = new EventBus();
 
 // Enable logging for debugging
 Logger.enable('connections');
@@ -19,6 +22,7 @@ let dataChannel = null;
 let wsManager = null;
 let connectedController = null;
 let iceServers = null;
+let isReady = false; // Ready state flag
 
 // DOM elements
 const elements = {
@@ -42,8 +46,8 @@ function log(message, ...args) {
     entry.innerHTML = `<strong>${timestamp}</strong>: ${message} ${args.length > 0 ? `<pre>${JSON.stringify(args, null, 2)}</pre>` : ''}`;
     elements.eventLog.insertBefore(entry, elements.eventLog.firstChild);
     
-    // Also log to Logger
-    Logger.log(message, 'lifecycle');
+    // Also log to Logger with V2 prefix
+    Logger.log(`[V2-SYNTH] ${message}`, 'lifecycle');
 }
 
 function logMessage(message, direction = 'received') {
@@ -60,15 +64,15 @@ async function initializeWebSocket() {
         clientId = 'synth-' + Math.random().toString(36).substr(2, 9);
         elements.myIdEl.textContent = clientId;
         
-        // Create WebSocketManager instance
+        // Create WebSocketManager instance with separate EventBus
         const wsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}${SystemConfig.network.websocket.path}`;
-        wsManager = new WebSocketManager(wsUrl, eventBus);
+        wsManager = new WebSocketManager(wsUrl, v2EventBus);
         
-        // Set up WebSocket event listeners
-        eventBus.on('websocket:connected', handleWebSocketConnected);
-        eventBus.on('websocket:disconnected', handleWebSocketDisconnected);
-        eventBus.on('websocket:message', handleWebSocketMessage);
-        eventBus.on('websocket:error', handleWebSocketError);
+        // Set up WebSocket event listeners on v2 EventBus
+        v2EventBus.on('websocket:connected', handleWebSocketConnected);
+        v2EventBus.on('websocket:disconnected', handleWebSocketDisconnected);
+        v2EventBus.on('websocket:message', handleWebSocketMessage);
+        v2EventBus.on('websocket:error', handleWebSocketError);
         
         // Connect
         elements.wsStateEl.textContent = 'CONNECTING';
@@ -88,26 +92,53 @@ async function initializeWebSocket() {
 // WebSocket event handlers
 function handleWebSocketConnected() {
     log('✅ WebSocket connected');
+    log(`🆔 Client ID: ${clientId}`); // DEBUG
     elements.wsStateEl.textContent = 'CONNECTED';
     elements.startBtn.disabled = true;
     
-    // Register as synth
-    wsManager.send({
-        type: 'register',
-        role: 'synth',
-        id: clientId
-    });
-    
-    log(`Registered as synth with ID: ${clientId}`);
-    
-    // Request controller list
-    requestControllers();
+    // Initialize WebRTC capabilities before registering
+    initializeWebRTCCapabilities();
+}
+
+// Initialize WebRTC capabilities
+async function initializeWebRTCCapabilities() {
+    try {
+        log('🔧 Initializing WebRTC capabilities...');
+        
+        // Pre-fetch ICE servers
+        await fetchIceServers();
+        log('✅ ICE servers ready');
+        
+        // Set ready state
+        isReady = true;
+        log('✅ Synth ready for WebRTC connections');
+        
+        // Now register as synth
+        wsManager.send({
+            type: 'register',
+            role: 'synth',
+            id: clientId
+        });
+        
+        log(`📋 Registered as synth with ID: ${clientId}`);
+        
+        // Request controller list
+        requestControllers();
+        
+    } catch (error) {
+        log(`❌ Failed to initialize WebRTC capabilities: ${error.message}`);
+        elements.wsStateEl.textContent = 'READY_FAILED';
+        elements.startBtn.disabled = false;
+    }
 }
 
 function handleWebSocketDisconnected() {
     log('❌ WebSocket disconnected');
     elements.wsStateEl.textContent = 'OFFLINE';
     elements.startBtn.disabled = false;
+    
+    // Reset ready state
+    isReady = false;
     
     // Clean up any active connections
     if (peerConnection) {
@@ -120,8 +151,11 @@ function handleWebSocketMessage(data) {
     const message = data.message;
     logMessage(message, 'received');
     
+    log(`🔍 Handling message type: ${message.type}`); // DEBUG
+    
     switch (message.type) {
         case 'controllers-list':
+            log(`📋 Processing controllers-list message`); // DEBUG
             handleControllersList(message);
             break;
         case 'answer':
@@ -132,7 +166,7 @@ function handleWebSocketMessage(data) {
             handleIceCandidate(message);
             break;
         default:
-            log(`Unknown message type: ${message.type}`);
+            log(`❓ Unknown message type: ${message.type}`);
     }
 }
 
@@ -153,6 +187,7 @@ function requestControllers() {
 function handleControllersList(message) {
     const controllers = message.controllers || [];
     log(`📋 Received ${controllers.length} controllers`);
+    log(`🔗 Current connectedController: ${connectedController}`); // DEBUG
     
     if (controllers.length === 0) {
         log('No controllers found');
@@ -161,7 +196,10 @@ function handleControllersList(message) {
         
         // Auto-connect to first controller
         if (!connectedController) {
+            log(`🚀 Auto-connecting to controller: ${controllers[0]}`); // DEBUG
             connectToController(controllers[0]);
+        } else {
+            log(`⚠️ Already connected to controller: ${connectedController}`); // DEBUG
         }
     }
 }
@@ -192,6 +230,14 @@ async function fetchIceServers() {
 // Connect to a controller
 async function connectToController(controllerId) {
     try {
+        // Check if synth is ready
+        if (!isReady) {
+            log('⚠️ Synth not ready, delaying connection attempt');
+            // Retry after a short delay
+            setTimeout(() => connectToController(controllerId), 500);
+            return;
+        }
+        
         if (peerConnection) {
             log('Closing existing connection');
             peerConnection.close();
@@ -202,9 +248,8 @@ async function connectToController(controllerId) {
         connectedController = controllerId;
         elements.peerIdEl.textContent = controllerId;
         
-        // Create peer connection
-        const servers = await fetchIceServers();
-        peerConnection = new RTCPeerConnection({ iceServers: servers });
+        // Create peer connection (ICE servers already fetched)
+        peerConnection = new RTCPeerConnection({ iceServers: iceServers });
         
         elements.connectionStateEl.textContent = 'CONNECTING';
         elements.iceStateEl.textContent = 'GATHERING';

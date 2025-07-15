@@ -34,20 +34,33 @@
   // Load modular system
   function loadModularSystem() {
     // Loading modular system...
-    
+
     // Determine which app to load based on the page
     let appModule;
     const pathname = window.location.pathname;
-    
-    if (pathname.includes('/ctrl') || pathname.endsWith('/ctrl.html')) {
-      appModule = '/js/apps/controller-app.js';
+
+    // Skip auto-loading for v2 test pages
+    if (pathname.includes("/v2/")) {
+      console.log(
+        "[MODULE-LOADER] V2 test page detected, skipping auto app load:",
+        pathname,
+      );
+      hideLoadingIndicator();
+      return;
+    }
+
+    if (pathname.includes("/ctrl") || pathname.endsWith("/ctrl.html")) {
+      appModule = "/js/apps/controller-app.js";
       // Detected controller page
-    } else if (pathname.includes('/ensemble') || pathname.endsWith('/ensemble.html')) {
-      appModule = '/js/apps/ensemble-app.js';
+    } else if (
+      pathname.includes("/ensemble") ||
+      pathname.endsWith("/ensemble.html")
+    ) {
+      appModule = "/js/apps/ensemble-app.js";
       // Detected ensemble page
     } else {
-      // Default to synth for index.html
-      appModule = '/js/apps/synth-app.js';
+      // Default to synth for main pages (index.html, etc)
+      appModule = "/js/apps/synth-app.js";
       // Detected synth page
     }
 
@@ -74,8 +87,10 @@
   // Load a specific module by path (for manual loading)
   function loadModule(modulePath) {
     // Ensure the path is absolute from the public directory root
-    const absolutePath = modulePath.startsWith('/') ? modulePath : '/' + modulePath;
-    
+    const absolutePath = modulePath.startsWith("/")
+      ? modulePath
+      : "/" + modulePath;
+
     // Create module script
     const script = document.createElement("script");
     script.type = "module";
@@ -88,7 +103,11 @@
     };
 
     script.onerror = function (error) {
-      console.error("[MODULE-LOADER] Failed to load module:", absolutePath, error);
+      console.error(
+        "[MODULE-LOADER] Failed to load module:",
+        absolutePath,
+        error,
+      );
       hideLoadingIndicator();
       showErrorMessage();
     };
@@ -194,7 +213,9 @@
       // Browser supports ES6 modules
       loadModularSystem();
     } else {
-      console.error("[MODULE-LOADER] Browser does not support required features");
+      console.error(
+        "[MODULE-LOADER] Browser does not support required features",
+      );
       hideLoadingIndicator();
       showErrorMessage();
     }
@@ -212,7 +233,7 @@
     supportsES6Modules,
     supportsRequiredFeatures,
     loadModularSystem,
-    loadModule
+    loadModule,
   };
 
   // Expose loadModule function globally for HTML files to use
