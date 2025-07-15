@@ -506,11 +506,7 @@ class SynthApp {
       controller.connection = pc;
 
       // Create unified data channel
-      // Use negotiated data channel for better reliability
-      const dataChannel = pc.createDataChannel("data", {
-        negotiated: true,
-        id: 0, // Use a consistent ID
-      });
+      const dataChannel = pc.createDataChannel("data");
       controller.channel = dataChannel;
 
       // Initialize and track data channel diagnostics

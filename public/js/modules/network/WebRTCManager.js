@@ -140,12 +140,6 @@ export class WebRTCManager {
 
     const pc = new RTCPeerConnection(currentConfig);
 
-    // Use a negotiated data channel for reliability. This means we must create it on both sides.
-    const dataChannel = pc.createDataChannel("data", {
-      negotiated: true,
-      id: 0, // Must match the ID on the synth client
-    });
-
     // Set peerId for SDP logging
     if (pc.peerId !== undefined) {
       pc.peerId = peerId;
@@ -161,7 +155,6 @@ export class WebRTCManager {
       isInitiator,
       paramChannel: null,
       commandChannel: null,
-      dataChannel: null, // Will be set by setupDataChannel
       latency: null,
       lastPing: null,
       state: null,
@@ -181,9 +174,6 @@ export class WebRTCManager {
     };
 
     this.peers.set(peerId, peerData);
-
-    // Setup listeners for the negotiated data channel immediately
-    this.setupDataChannel(dataChannel, peerId, peerData);
 
     // Debug: Confirming setupPeerEventListeners is about to be called
     if (window.Logger) {
@@ -300,10 +290,42 @@ export class WebRTCManager {
         );
     });
 
-    // Data channel handling for negotiated channels is now done directly in `createPeerConnection`.
-    // The `ondatachannel` event listener is intentionally omitted here.
+    // Data channel handling
+    // Store the handler reference so we can remove it later if needed
+    if (window.Logger) {
+      window.Logger.log(
+        `[WEBRTC-DIAG] Setting up datachannel event listener for ${peerId}`,
+        "connections",
+      );
+    }
+    console.log(`[WEBRTC-DIAG] About to add datachannel listener for ${peerId}`);
+
+    peerData._dataChannelHandler = (event) => {
+      console.log(`[WEBRTC-CRITICAL] datachannel event FIRED for ${peerId}!`, {
+        channelLabel: event.channel.label,
+        channelId: event.channel.id,
+        channelState: event.channel.readyState,
+        channelOrdered: event.channel.ordered,
+        channelProtocol: event.channel.protocol,
+        timestamp: new Date().toISOString()
+      });
+
+      if (window.Logger) {
+        window.Logger.log(
+          `[WEBRTC-DIAG] Peer ${peerId}: 'datachannel' event FIRED. Channel label: ${event.channel.label}, state: ${event.channel.readyState}`,
+          "connections",
+        );
+      }
+      if (this.enableDiagnosticLogs)
+        console.log(
+          `[WEBRTC-DIAG] Peer ${peerId}: 'datachannel' event FIRED. Channel label: ${event.channel.label}`,
+          event,
+        );
+      this.handleDataChannel(event.channel, peerId, peerData);
+    };
 
     pc.addEventListener("datachannel", peerData._dataChannelHandler);
+    console.log(`[WEBRTC-DIAG] datachannel listener added for ${peerId}. Total listeners: ${pc.listenerCount ? pc.listenerCount('datachannel') : 'unknown'}`);
 
     if (window.Logger) {
       window.Logger.log(
@@ -442,12 +464,13 @@ export class WebRTCManager {
         console.log(
           `[WEBRTC-DIAG] Peer ${peerId}: In handleOffer, pc.signalingState BEFORE setRemoteDescription: ${pc.signalingState}`,
         );
-      // For negotiated data channels, the channel is created on both sides in createPeerConnection.
-      // The `ondatachannel` event will not fire for it.
+      // Data channels will be created by the remote peer (synth) and handled by the 'datachannel' event listener.
 
       // Set remote description
       try {
+        console.log(`[WEBRTC-CRITICAL] About to setRemoteDescription for ${peerId}. datachannel listener exists: ${!!peerData._dataChannelHandler}`);
         await pc.setRemoteDescription(offer); // Listener for 'datachannel' should be active before this
+        console.log(`[WEBRTC-CRITICAL] setRemoteDescription completed for ${peerId}. Waiting for datachannel event...`);
         if (this.enableDiagnosticLogs)
           console.log(
             `[WEBRTC-DIAG] Peer ${peerId}: setRemoteDescription(offer) successful. pc.signalingState AFTER setRemoteDescription: ${pc.signalingState}`,
@@ -1261,6 +1284,17 @@ export class WebRTCManager {
     const channelName = channel.label;
 
     // Enhanced logging
+    console.log(`[WEBRTC-CRITICAL] handleDataChannel called:`, {
+      channelName,
+      peerId,
+      readyState: channel.readyState,
+      id: channel.id,
+      ordered: channel.ordered,
+      maxRetransmits: channel.maxRetransmits,
+      protocol: channel.protocol,
+      timestamp: new Date().toISOString()
+    });
+
     if (this.enableDiagnosticLogs)
       console.log(
         `[WEBRTC-DEBUG] handleDataChannel called for channel: ${channelName}, peer: ${peerId}, readyState: ${channel.readyState}`,
@@ -1269,9 +1303,10 @@ export class WebRTCManager {
 
     if (window.Logger) {
       window.Logger.log(
-        `Received data channel '${channelName}' from ${peerId}`,
+        `Received data channel '${channelName}' from ${peerId}, state: ${channel.readyState}`,
         "connections",
       );
+    }
       window.Logger.log(
         `handleDataChannel: channel.label=${channel.label}, channel.readyState=${channel.readyState}`,
         "connections",
