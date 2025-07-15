@@ -172,9 +172,6 @@ async function handleOffer(message) {
         remoteSynthId = senderId;
         elements.remoteSynthDiv.textContent = remoteSynthId;
         
-        // Debug the message structure
-        log(`V2 Debug: Full message structure: ${JSON.stringify(message)}`, 'info');
-        
         // Create peer connection
         const serversResponse = await fetchIceServers();
         const servers = serversResponse.ice_servers || serversResponse || [];
@@ -245,8 +242,6 @@ async function handleOffer(message) {
         if (!offerData) {
             throw new Error('No offer data found in message');
         }
-        
-        log(`V2 Debug: Offer data: ${JSON.stringify(offerData)}`, 'info');
         
         // Set remote description
         await peerConnection.setRemoteDescription(new RTCSessionDescription(offerData));

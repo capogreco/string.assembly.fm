@@ -426,7 +426,6 @@ export class WebRTCManager {
    * Handle incoming offer
    */
   async handleOffer(message) {
-    console.log("!!!!!!!!!! HANDLE OFFER CALLED !!!!!!!!!!", message);
     const { source: peerId, data: offer } = message;
 
     // Debug logging
@@ -500,23 +499,7 @@ export class WebRTCManager {
 
       // Set remote description
       try {
-        console.log(
-          `[WEBRTC-CRITICAL] About to setRemoteDescription for ${peerId}. datachannel listener exists: ${!!peerData._dataChannelHandler}`,
-        );
-
-        // Log SDP content for debugging
-        console.log(`[SDP-DEBUG] Offer SDP from ${peerId}:`, offer.sdp);
-        const offerHasDataChannel = offer.sdp.includes("m=application");
-        const offerSctpLines = offer.sdp
-          .split("\n")
-          .filter((line) => line.includes("sctp"));
-        console.log(`[SDP-DEBUG] Offer analysis:
-          - Has data channel (m=application): ${offerHasDataChannel}
-          - SCTP lines: ${offerSctpLines.length > 0 ? offerSctpLines.join("; ") : "NONE"}
-        `);
-
         await pc.setRemoteDescription(offer); // Listener for 'datachannel' should be active before this
-        console.log(
           `[WEBRTC-CRITICAL] setRemoteDescription completed for ${peerId}. Waiting for datachannel event...`,
         );
         if (this.enableDiagnosticLogs)
@@ -646,7 +629,7 @@ export class WebRTCManager {
           type: "answer",
           target: peerId,
           source: this.clientId || window.webSocketManager.clientId,
-          data: answer,
+          answer: answer,
         });
 
         if (window.Logger) {
@@ -1011,7 +994,7 @@ export class WebRTCManager {
         type: "ice",
         target: peerId,
         source: this.clientId || window.webSocketManager.clientId,
-        data: candidate,
+        candidate: candidate,
       };
 
       console.log(

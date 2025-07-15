@@ -308,16 +308,11 @@ async function handleAnswer(message) {
         const senderId = message.source || message.from || message.sender_id;
         log(`Received answer from ${senderId}`, 'info');
         
-        // Debug the message structure
-        log(`V2 Debug: Full answer message: ${JSON.stringify(message)}`, 'info');
-        
         // Extract the answer - it might be in message.answer or message.data
         const answerData = message.answer || message.data;
         if (!answerData) {
             throw new Error('No answer data found in message');
         }
-        
-        log(`V2 Debug: Answer data: ${JSON.stringify(answerData)}`, 'info');
         
         await peerConnection.setRemoteDescription(new RTCSessionDescription(answerData));
         log('Set remote description', 'info');
