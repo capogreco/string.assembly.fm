@@ -859,7 +859,7 @@ class SynthApp {
           }
         }
         break;
-      case MessageTypes.PING:
+      case MessageTypes.PING: {
         // Respond to ping immediately, as per documentation
         const pingResponse = MessageBuilders.pong(
           message.timestamp,
@@ -880,6 +880,7 @@ class SynthApp {
           }
         }
         break;
+      }
       case MessageTypes.PROGRAM:
         // Receive program from controller
         Logger.log(`"[DEBUG] Received program message:", message`, "messages");
