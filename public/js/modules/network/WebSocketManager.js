@@ -13,7 +13,8 @@ export class WebSocketManager {
     this.ws = null;
     this.heartbeatInterval = null;
     this.reconnectAttempts = 0;
-    this.maxReconnectAttempts = SystemConfig.network.websocket.maxReconnectAttempts;
+    this.maxReconnectAttempts =
+      SystemConfig.network.websocket.maxReconnectAttempts;
     this.reconnectDelay = SystemConfig.network.websocket.reconnectDelay;
     this.messageQueue = [];
     this.isConnected = false;
@@ -112,7 +113,9 @@ export class WebSocketManager {
       this.ws.readyState !== 1 // WebSocket.OPEN = 1
     ) {
       // Queue message for later if not connected
-      if (this.messageQueue.length < SystemConfig.network.websocket.maxQueueSize) {
+      if (
+        this.messageQueue.length < SystemConfig.network.websocket.maxQueueSize
+      ) {
         this.messageQueue.push(message);
         if (window.Logger) {
           window.Logger.log("Message queued (WebSocket not ready)", "messages");
@@ -207,7 +210,6 @@ export class WebSocketManager {
     this.isConnected = true;
     this.isConnecting = false;
     this.reconnectAttempts = 0;
-
 
     // Emit connection event immediately
     this.eventBus.emit("websocket:connected", {
@@ -470,7 +472,10 @@ export class WebSocketManager {
     this.reconnectAttempts++;
     const delay =
       this.reconnectDelay *
-      Math.pow(SystemConfig.network.websocket.reconnectBackoff, this.reconnectAttempts - 1);
+      Math.pow(
+        SystemConfig.network.websocket.reconnectBackoff,
+        this.reconnectAttempts - 1,
+      );
 
     if (window.Logger) {
       window.Logger.log(
@@ -559,7 +564,9 @@ export class WebSocketManager {
 }
 
 // Create global instance
-export const webSocketManager = new WebSocketManager();
+export const webSocketManager = new WebSocketManager(
+  SystemConfig.network.websocket.url,
+);
 
 // Make available globally for backward compatibility
 if (typeof window !== "undefined") {
