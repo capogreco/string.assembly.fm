@@ -284,6 +284,31 @@ export class WebRTCManager {
 
     // ICE gathering state changes
     pc.addEventListener("icegatheringstatechange", () => {
+      const gatheringState = pc.iceGatheringState;
+      console.log(`[ICE-GATHERING] ${peerId} state: ${gatheringState}`);
+
+      if (gatheringState === "complete") {
+        // Log statistics when gathering is complete
+        pc.getStats().then((stats) => {
+          let localCandidateCount = 0;
+          let candidateTypes = new Set();
+
+          stats.forEach((report) => {
+            if (report.type === "local-candidate") {
+              localCandidateCount++;
+              candidateTypes.add(report.candidateType);
+            }
+          });
+
+          console.log(
+            `[ICE-GATHERING] ${peerId} complete with ${localCandidateCount} local candidates`,
+          );
+          console.log(
+            `[ICE-GATHERING] ${peerId} candidate types: ${Array.from(candidateTypes).join(", ")}`,
+          );
+        });
+      }
+
       if (this.enableDiagnosticLogs)
         console.log(
           `[WEBRTC-DIAG] Peer ${peerId}: iceGatheringState CHANGED to ${pc.iceGatheringState}`,
@@ -1096,6 +1121,42 @@ export class WebRTCManager {
       - iceGatheringState: ${pc.iceGatheringState}
     `);
 
+    // Log detailed stats on connection attempts
+    if (state === "checking") {
+      console.log(`[ICE-DEBUG] ${peerId} starting connectivity checks...`);
+
+      // Monitor connection progress
+      setTimeout(() => {
+        if (pc.iceConnectionState === "checking") {
+          console.log(
+            `[ICE-DEBUG] ${peerId} still checking after 5 seconds - possible connectivity issue`,
+          );
+
+          pc.getStats().then((stats) => {
+            let candidatePairs = [];
+            stats.forEach((report) => {
+              if (report.type === "candidate-pair") {
+                candidatePairs.push({
+                  state: report.state,
+                  nominated: report.nominated,
+                  priority: report.priority,
+                  bytesSent: report.bytesSent,
+                  bytesReceived: report.bytesReceived,
+                  requestsSent: report.requestsSent,
+                  responsesReceived: report.responsesReceived,
+                });
+              }
+            });
+
+            console.log(
+              `[ICE-DEBUG] ${peerId} candidate pairs:`,
+              candidatePairs,
+            );
+          });
+        }
+      }, 5000);
+    }
+
     // Log ICE state details
     if (this.enableDiagnosticLogs)
       console.log(
@@ -1370,10 +1431,10 @@ export class WebRTCManager {
     }
 
     // Handle single "data" channel or legacy channels
-    if (channelName === "data") {
+    if (channelName === "data" || channelName === "main") {
       if (window.Logger) {
         window.Logger.log(
-          `handleDataChannel: Setting up DATA channel for ${peerId}`,
+          `handleDataChannel: Setting up ${channelName.toUpperCase()} channel for ${peerId}`,
           "connections",
         );
       }

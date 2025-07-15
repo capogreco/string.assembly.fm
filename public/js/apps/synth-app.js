@@ -360,6 +360,8 @@ class SynthApp {
             // console.log(`[DEBUG] Processing ${controller.iceQueue.length} queued ICE candidates`);
             for (const candidate of controller.iceQueue) {
               await controller.connection.addIceCandidate(candidate);
+              // Add small delay to avoid overwhelming the connection
+              await new Promise((resolve) => setTimeout(resolve, 50));
             }
             controller.iceQueue = [];
           }
@@ -408,6 +410,8 @@ class SynthApp {
             if (targetController.connection.remoteDescription) {
               // console.log(`[DEBUG] Adding ICE candidate immediately`);
               await targetController.connection.addIceCandidate(message.data);
+              // Add small delay to avoid overwhelming the connection
+              await new Promise((resolve) => setTimeout(resolve, 50));
             } else {
               // Queue ICE candidate until remote description is set
               // console.log(`[DEBUG] Queueing ICE candidate (no remote description yet)`);
@@ -508,7 +512,6 @@ class SynthApp {
       // Create unified data channel
       const dataChannel = pc.createDataChannel("data", {
         ordered: true,
-        maxRetransmits: 3,
       });
       controller.channel = dataChannel;
 
