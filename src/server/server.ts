@@ -182,11 +182,21 @@ async function handle_request(request: Request): Promise<Response> {
 
     socket.addEventListener("message", async (event) => {
       const data = JSON.parse(event.data);
+      console.log(`[WEBSOCKET] Received message from temp_id ${temp_id}:`, data);
 
       // handle client registration
       if (data.type === "register") {
         const old_id = client_id;
         client_id = data.synth_id || data.client_id; // Handle both synth_id and client_id
+        
+        console.log(`[WEBSOCKET] Registration attempt - old_id: ${old_id}, new client_id: ${client_id}`);
+        
+        // Ensure client_id is not undefined
+        if (!client_id) {
+          console.error(`[WEBSOCKET] Registration failed: missing client_id in message:`, data);
+          return;
+        }
+        
         connections.delete(old_id);
         connections.set(client_id, {
           socket,
@@ -230,7 +240,7 @@ async function handle_request(request: Request): Promise<Response> {
       connections.delete(client_id);
 
       // if this was a controller, remove from KV registry
-      if (client_id.startsWith("ctrl-")) {
+      if (client_id && client_id.startsWith("ctrl-")) {
         await kv.delete(["controllers", client_id]);
 
         // notify all connected synths about the controller leaving
