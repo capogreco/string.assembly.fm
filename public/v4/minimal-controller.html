@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>V2 Minimal WebRTC Controller</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #2a2a2a;
+            color: #fff;
+        }
+        h1 {
+            color: #4a9eff;
+        }
+        .section {
+            background-color: #333;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+        }
+        .status {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 5px;
+        }
+        .status.disconnected { background-color: #ff4444; }
+        .status.connected { background-color: #44ff44; }
+        .status.connecting { background-color: #ffaa44; }
+        #log {
+            background-color: #1a1a1a;
+            padding: 10px;
+            border-radius: 5px;
+            height: 300px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .log-entry {
+            margin: 2px 0;
+            padding: 2px;
+        }
+        .log-entry.error { color: #ff6666; }
+        .log-entry.info { color: #66aaff; }
+        .log-entry.success { color: #66ff66; }
+        .log-entry.data { color: #ffff66; }
+        .controls {
+            margin: 10px 0;
+        }
+        button {
+            background-color: #4a9eff;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+        button:hover {
+            background-color: #3a8eef;
+        }
+        button:disabled {
+            background-color: #666;
+            cursor: not-allowed;
+        }
+        input[type="text"] {
+            background-color: #1a1a1a;
+            color: white;
+            border: 1px solid #444;
+            padding: 8px;
+            border-radius: 4px;
+            width: 300px;
+        }
+    </style>
+</head>
+<body>
+    <h1>V4 Minimal WebRTC Controller (Answerer)</h1>
+    
+    <div class="section">
+        <h3>Connection Status</h3>
+        <div>
+            <span id="ws-status" class="status disconnected"></span>
+            <span>WebSocket: <span id="ws-state">Disconnected</span></span>
+        </div>
+        <div>
+            <span id="rtc-status" class="status disconnected"></span>
+            <span>WebRTC: <span id="rtc-state">Disconnected</span></span>
+        </div>
+        <div>
+            <span id="ice-status" class="status disconnected"></span>
+            <span>ICE: <span id="ice-state">Not started</span></span>
+        </div>
+        <div>
+            <span id="dc-status" class="status disconnected"></span>
+            <span>Data Channel: <span id="dc-state">Not created</span></span>
+        </div>
+    </div>
+    
+    <div class="section">
+        <h3>Client ID</h3>
+        <div id="client-id">Not assigned</div>
+    </div>
+    
+    <div class="section">
+        <h3>Remote Synth</h3>
+        <div id="remote-synth">None connected</div>
+    </div>
+    
+    <div class="section">
+        <h3>Controls</h3>
+        <div class="controls">
+            <input type="text" id="message-input" placeholder="Enter message to send" disabled>
+            <button id="send-btn" disabled>Send Message</button>
+            <button id="clear-log-btn">Clear Log</button>
+        </div>
+    </div>
+    
+    <div class="section">
+        <h3>Log</h3>
+        <div id="log"></div>
+    </div>
+
+    <!-- Load the module loader -->
+    <script src="../js/module-loader.js"></script>
+    
+    <!-- Load the main application script -->
+    <script>
+        // Use the module loader to load the main controller script
+        window.loadModule('v4/minimal-controller-main.js');
+    </script>
+</body>
+</html>
