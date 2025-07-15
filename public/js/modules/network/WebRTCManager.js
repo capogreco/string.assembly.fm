@@ -478,6 +478,18 @@ export class WebRTCManager {
         console.log(
           `[WEBRTC-CRITICAL] About to setRemoteDescription for ${peerId}. datachannel listener exists: ${!!peerData._dataChannelHandler}`,
         );
+
+        // Log SDP content for debugging
+        console.log(`[SDP-DEBUG] Offer SDP from ${peerId}:`, offer.sdp);
+        const offerHasDataChannel = offer.sdp.includes("m=application");
+        const offerSctpLines = offer.sdp
+          .split("\n")
+          .filter((line) => line.includes("sctp"));
+        console.log(`[SDP-DEBUG] Offer analysis:
+          - Has data channel (m=application): ${offerHasDataChannel}
+          - SCTP lines: ${offerSctpLines.length > 0 ? offerSctpLines.join("; ") : "NONE"}
+        `);
+
         await pc.setRemoteDescription(offer); // Listener for 'datachannel' should be active before this
         console.log(
           `[WEBRTC-CRITICAL] setRemoteDescription completed for ${peerId}. Waiting for datachannel event...`,
@@ -519,6 +531,18 @@ export class WebRTCManager {
             `[WEBRTC-DIAG] Peer ${peerId}: pc.signalingState BEFORE createAnswer: ${pc.signalingState}`,
           );
         answer = await pc.createAnswer();
+
+        // Log answer SDP for debugging
+        console.log(`[SDP-DEBUG] Answer SDP for ${peerId}:`, answer.sdp);
+        const answerHasDataChannel = answer.sdp.includes("m=application");
+        const answerSctpLines = answer.sdp
+          .split("\n")
+          .filter((line) => line.includes("sctp"));
+        console.log(`[SDP-DEBUG] Answer analysis:
+          - Has data channel (m=application): ${answerHasDataChannel}
+          - SCTP lines: ${answerSctpLines.length > 0 ? answerSctpLines.join("; ") : "NONE"}
+        `);
+
         if (this.enableDiagnosticLogs)
           console.log(
             `[WEBRTC-DIAG] Peer ${peerId}: createAnswer() successful. Answer SDP:`,
@@ -953,12 +977,24 @@ export class WebRTCManager {
 
     // Send ICE candidate via WebSocket
     if (window.webSocketManager) {
-      window.webSocketManager.send({
+      const message = {
         type: "ice",
         target: peerId,
         source: this.clientId || window.webSocketManager.clientId,
         data: candidate,
-      });
+      };
+
+      console.log(
+        `[ICE-EXCHANGE] Sending ${candidateType} candidate to ${peerId}:`,
+        {
+          candidate: candidate.candidate,
+          sdpMLineIndex: candidate.sdpMLineIndex,
+          sdpMid: candidate.sdpMid,
+          timestamp: new Date().toISOString(),
+        },
+      );
+
+      window.webSocketManager.send(message);
 
       if (window.Logger) {
         window.Logger.log(
@@ -1041,16 +1077,24 @@ export class WebRTCManager {
    * Handle ICE connection state changes
    * @private
    */
-  handleIceConnectionStateChange(pc, peerId) {
+  handleIceConnectionStateChange(pc, peerId, peerData) {
     const state = pc.iceConnectionState;
-    const peerData = this.peers.get(peerId);
+    const connectionState = pc.connectionState;
 
     if (window.Logger) {
       window.Logger.log(
-        `Peer ${peerId} ICE connection state: ${state}`,
+        `[WEBRTC-DEBUG] ICE state for ${peerId}: ${state}, Connection state: ${connectionState}`,
         "connections",
       );
     }
+
+    // Log detailed ICE state for debugging
+    console.log(`[ICE-DEBUG] ${peerId} ICE state change:
+      - iceConnectionState: ${state}
+      - connectionState: ${connectionState}
+      - signalingState: ${pc.signalingState}
+      - iceGatheringState: ${pc.iceGatheringState}
+    `);
 
     // Log ICE state details
     if (this.enableDiagnosticLogs)
