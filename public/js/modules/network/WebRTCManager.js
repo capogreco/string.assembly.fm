@@ -1685,7 +1685,7 @@ export class WebRTCManager {
         }
       }
 
-      // Close peer connection
+      // Close connection
       if (peerData.connection) {
         const connectionState = peerData.connection.connectionState;
         const iceState = peerData.connection.iceConnectionState;
@@ -1726,6 +1726,24 @@ export class WebRTCManager {
           `[WEBRTC-DIAG] Peer ${peerId}: No peer data found during disconnection`,
         );
     }
+  }
+
+  /**
+   * Send ping to all connected peers
+   */
+  pingAllPeers() {
+    this.peers.forEach((peerData, peerId) => {
+      if (
+        peerData.paramChannel &&
+        peerData.paramChannel.readyState === "open"
+      ) {
+        const pingMessage = {
+          type: MessageTypes.PING,
+          timestamp: Date.now(),
+        };
+        this.sendParamMessage(peerId, pingMessage);
+      }
+    });
   }
 
   /**

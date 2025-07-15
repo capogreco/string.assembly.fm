@@ -859,7 +859,27 @@ class SynthApp {
           }
         }
         break;
-
+      case MessageTypes.PING:
+        // Respond to ping immediately, as per documentation
+        const pongMessage = MessageBuilders.pong(
+          message.timestamp,
+          this.getSynthState(),
+        );
+        const controller = this.controllers.get(controllerId);
+        if (
+          controller &&
+          controller.channel &&
+          controller.channel.readyState === "open"
+        ) {
+          controller.channel.send(JSON.stringify(pongMessage));
+          if (window.Logger) {
+            window.Logger.log(
+              `Responded to ping from ${controllerId}`,
+              "messages",
+            );
+          }
+        }
+        break;
       case MessageTypes.PROGRAM:
         // Receive program from controller
         Logger.log(`"[DEBUG] Received program message:", message`, "messages");
