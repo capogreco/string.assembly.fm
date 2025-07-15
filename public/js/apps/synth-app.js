@@ -349,7 +349,7 @@ class SynthApp {
         const controller = this.controllers.get(message.source);
         if (controller && controller.connection) {
           // console.log(`[DEBUG] Setting remote description for ${message.source}`);
-          await controller.connection.setRemoteDescription(message.data);
+          await controller.connection.setRemoteDescription(message.answer);
           this.updateDebugInfo(
             "error",
             `Answer set for ${message.source.substr(-6)}`,
@@ -372,7 +372,7 @@ class SynthApp {
       case "ice": // Server sends "ice" not "ice-candidate"
         // Handle ICE candidate from controller
         // console.log(`[DEBUG] Received ICE candidate from ${message.source}`);
-        const candidateInfo = message.data.candidate || "";
+        const candidateInfo = message.candidate.candidate || "";
         const candidateType = candidateInfo.includes("relay")
           ? "RELAY"
           : candidateInfo.includes("srflx")
@@ -407,11 +407,11 @@ class SynthApp {
           try {
             if (targetController.connection.remoteDescription) {
               // console.log(`[DEBUG] Adding ICE candidate immediately`);
-              await targetController.connection.addIceCandidate(message.data);
+              await targetController.connection.addIceCandidate(message.candidate);
             } else {
               // Queue ICE candidate until remote description is set
               // console.log(`[DEBUG] Queueing ICE candidate (no remote description yet)`);
-              targetController.iceQueue.push(message.data);
+              targetController.iceQueue.push(message.candidate);
             }
           } catch (error) {
             // console.log(`[DEBUG] Error adding ICE candidate: ${error.message}`);
