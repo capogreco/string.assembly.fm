@@ -430,8 +430,8 @@ export class WebRTCManager {
         );
 
       this.handlePeerDisconnection(peerId);
-      // Add small delay to ensure cleanup is complete
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      // Add a longer delay to ensure cleanup is complete, especially for remote connections
+      await new Promise((resolve) => setTimeout(resolve, 500));
     }
 
     try {
