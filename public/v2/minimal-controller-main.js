@@ -145,16 +145,19 @@ async function fetchIceServers() {
     if (iceServers) return iceServers;
     
     try {
-        const response = await fetch('/ice-servers');
+        log('V2 Test: Fetching ICE servers from /test-ice-servers endpoint', 'info');
+        const response = await fetch('/test-ice-servers');
         if (response.ok) {
             iceServers = await response.json();
-            log('Fetched ICE servers from server', 'info');
+            log('V2 Test: Fetched ICE servers from test endpoint', 'info');
+            log(`V2 Test: Received ${iceServers.ice_servers?.length || 0} ICE servers`, 'info');
         } else {
-            throw new Error('Failed to fetch ICE servers');
+            throw new Error(`Failed to fetch ICE servers: ${response.status} ${response.statusText}`);
         }
     } catch (error) {
-        log('Using fallback STUN server', 'info');
-        iceServers = [{ urls: 'stun:stun.l.google.com:19302' }];
+        log(`V2 Test: ICE server fetch failed: ${error.message}`, 'error');
+        log('V2 Test: Using fallback STUN server', 'info');
+        iceServers = { ice_servers: [{ urls: 'stun:stun.l.google.com:19302' }] };
     }
     
     return iceServers;
@@ -168,7 +171,8 @@ async function handleOffer(message) {
         elements.remoteSynthDiv.textContent = remoteSynthId;
         
         // Create peer connection
-        const servers = await fetchIceServers();
+        const serversResponse = await fetchIceServers();
+        const servers = serversResponse.ice_servers || serversResponse || [];
         peerConnection = new RTCPeerConnection({ iceServers: servers });
         
         updateStatus('rtc', 'Connecting...', 'connecting');
