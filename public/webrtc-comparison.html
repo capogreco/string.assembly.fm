@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebRTC Forensics Comparison</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0a0a0a;
+            color: #e2e8f0;
+        }
+        .container {
+            display: flex;
+            height: 100vh;
+            gap: 2px;
+            background: #333;
+        }
+        .panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: #0a0a0a;
+        }
+        .header {
+            padding: 10px;
+            background: #1a1a1a;
+            border-bottom: 1px solid #333;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .title {
+            font-weight: bold;
+            font-size: 18px;
+        }
+        .cicada .title {
+            color: #00aa00;
+        }
+        .string .title {
+            color: #0088ff;
+        }
+        iframe {
+            flex: 1;
+            border: none;
+            width: 100%;
+        }
+        .controls {
+            padding: 10px;
+            background: #1a1a1a;
+            border-top: 1px solid #333;
+            text-align: center;
+        }
+        button {
+            background: #4a5568;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 0 5px;
+            font-size: 14px;
+        }
+        button:hover {
+            background: #5a6578;
+        }
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .status {
+            font-size: 12px;
+            color: #94a3b8;
+        }
+        .divergence {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: #1e293b;
+            border: 2px solid #dc2626;
+            border-radius: 8px;
+            padding: 20px;
+            max-width: 600px;
+            max-height: 80vh;
+            overflow-y: auto;
+            display: none;
+            z-index: 1000;
+        }
+        .divergence.show {
+            display: block;
+        }
+        .divergence h3 {
+            color: #f87171;
+            margin-top: 0;
+        }
+        .divergence pre {
+            background: #0f172a;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+            font-size: 12px;
+        }
+        .close-btn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: #dc2626;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .event-count {
+            display: inline-block;
+            margin-left: 10px;
+            padding: 2px 8px;
+            background: #374151;
+            border-radius: 12px;
+            font-size: 12px;
+        }
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #64748b;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="panel cicada">
+            <div class="header">
+                <div>
+                    <span class="title">CICADA (Working Reference)</span>
+                    <span class="event-count" id="cicada-count">0 events</span>
+                </div>
+                <span class="status" id="cicada-status">Loading...</span>
+            </div>
+            <iframe id="cicada-frame" src="https://cicada.assembly.fm/ctrl.html"></iframe>
+        </div>
+        <div class="panel string">
+            <div class="header">
+                <div>
+                    <span class="title">STRING (Under Test)</span>
+                    <span class="event-count" id="string-count">0 events</span>
+                </div>
+                <span class="status" id="string-status">Loading...</span>
+            </div>
+            <iframe id="string-frame" src="/ctrl.html"></iframe>
+        </div>
+    </div>
+
+    <div class="controls">
+        <button id="compare-btn" disabled>Compare Forensics</button>
+        <button id="export-btn" disabled>Export Data</button>
+        <button id="clear-btn">Clear & Reload</button>
+        <button id="pause-btn">Pause Logging</button>
+    </div>
+
+    <div class="divergence" id="divergence-modal">
+        <button class="close-btn" onclick="closeDivergence()">×</button>
+        <h3>Divergence Analysis</h3>
+        <div id="divergence-content"></div>
+    </div>
+
+    <script>
+        let cicadaWindow, stringWindow;
+        let isPaused = false;
+        let updateInterval;
+
+        // Wait for iframes to load
+        document.getElementById('cicada-frame').addEventListener('load', function() {
+            cicadaWindow = this.contentWindow;
+            document.getElementById('cicada-status').textContent = 'Ready';
+            checkReady();
+        });
+
+        document.getElementById('string-frame').addEventListener('load', function() {
+            stringWindow = this.contentWindow;
+            document.getElementById('string-status').textContent = 'Ready';
+            checkReady();
+        });
+
+        function checkReady() {
+            if (cicadaWindow && stringWindow) {
+                document.getElementById('compare-btn').disabled = false;
+                document.getElementById('export-btn').disabled = false;
+                startMonitoring();
+            }
+        }
+
+        function startMonitoring() {
+            updateInterval = setInterval(() => {
+                if (isPaused) return;
+
+                try {
+                    if (cicadaWindow.exportForensics) {
+                        const cicadaData = cicadaWindow.exportForensics();
+                        document.getElementById('cicada-count').textContent =
+                            `${cicadaData.events.length} events`;
+                    }
+                } catch (e) {}
+
+                try {
+                    if (stringWindow.exportForensics) {
+                        const stringData = stringWindow.exportForensics();
+                        document.getElementById('string-count').textContent =
+                            `${stringData.events.length} events`;
+                    }
+                } catch (e) {}
+            }, 500);
+        }
+
+        document.getElementById('compare-btn').addEventListener('click', () => {
+            compareForensics();
+        });
+
+        document.getElementById('export-btn').addEventListener('click', () => {
+            exportData();
+        });
+
+        document.getElementById('clear-btn').addEventListener('click', () => {
+            cicadaWindow.location.reload();
+            stringWindow.location.reload();
+            document.getElementById('compare-btn').disabled = true;
+            document.getElementById('export-btn').disabled = true;
+            document.getElementById('cicada-status').textContent = 'Reloading...';
+            document.getElementById('string-status').textContent = 'Reloading...';
+        });
+
+        document.getElementById('pause-btn').addEventListener('click', function() {
+            isPaused = !isPaused;
+            this.textContent = isPaused ? 'Resume Logging' : 'Pause Logging';
+        });
+
+        function compareForensics() {
+            try {
+                const cicadaData = cicadaWindow.exportForensics();
+                const stringData = stringWindow.exportForensics();
+
+                let html = '<h4>Summary</h4><pre>';
+                html += `CICADA: ${cicadaData.events.length} events\n`;
+                html += `STRING: ${stringData.events.length} events\n\n`;
+
+                // Find divergence point
+                let divergencePoint = -1;
+                const minLength = Math.min(cicadaData.events.length, stringData.events.length);
+
+                for (let i = 0; i < minLength; i++) {
+                    if (cicadaData.events[i].event !== stringData.events[i].event) {
+                        divergencePoint = i;
+                        break;
+                    }
+                }
+
+                if (divergencePoint >= 0) {
+                    html += `\n🔴 DIVERGENCE at event ${divergencePoint}:\n`;
+                    html += `CICADA: ${cicadaData.events[divergencePoint].event}\n`;
+                    html += `STRING: ${stringData.events[divergencePoint].event}\n`;
+                    html += '</pre>';
+
+                    // Show context
+                    html += '<h4>Context (5 events before divergence)</h4><pre>';
+                    for (let i = Math.max(0, divergencePoint - 5); i < divergencePoint; i++) {
+                        html += `[${i}] BOTH: ${cicadaData.events[i].event}\n`;
+                    }
+                    html += '</pre>';
+
+                    // Show what happens after
+                    html += '<h4>Events After Divergence</h4><pre>';
+                    html += 'CICADA:\n';
+                    for (let i = divergencePoint; i < Math.min(divergencePoint + 5, cicadaData.events.length); i++) {
+                        html += `  [${i}] ${cicadaData.events[i].event}\n`;
+                    }
+                    html += '\nSTRING:\n';
+                    for (let i = divergencePoint; i < Math.min(divergencePoint + 5, stringData.events.length); i++) {
+                        html += `  [${i}] ${stringData.events[i].event}\n`;
+                    }
+                    html += '</pre>';
+                } else {
+                    html += '✅ No divergence in common events\n';
+                    if (cicadaData.events.length !== stringData.events.length) {
+                        html += `\nBut CICADA has ${Math.abs(cicadaData.events.length - stringData.events.length)} ${cicadaData.events.length > stringData.events.length ? 'more' : 'fewer'} events`;
+                    }
+                    html += '</pre>';
+                }
+
+                // Compare milestones
+                html += '<h4>Milestone Comparison</h4><pre>';
+                const allMilestones = new Set([
+                    ...Object.keys(cicadaData.summary.milestones || {}),
+                    ...Object.keys(stringData.summary.milestones || {})
+                ]);
+
+                allMilestones.forEach(milestone => {
+                    const cicadaMilestone = cicadaData.summary.milestones?.[milestone] || 'NOT_REACHED';
+                    const stringMilestone = stringData.summary.milestones?.[milestone] || 'NOT_REACHED';
+                    const symbol = cicadaMilestone === stringMilestone ? '✅' : '🔴';
+                    html += `${symbol} ${milestone}: CICADA=${cicadaMilestone}, STRING=${stringMilestone}\n`;
+                });
+                html += '</pre>';
+
+                document.getElementById('divergence-content').innerHTML = html;
+                document.getElementById('divergence-modal').classList.add('show');
+            } catch (e) {
+                console.error('Error comparing forensics:', e);
+                alert('Error comparing forensics. Check console for details.');
+            }
+        }
+
+        function exportData() {
+            try {
+                const cicadaData = cicadaWindow.exportForensics();
+                const stringData = stringWindow.exportForensics();
+
+                const exportData = {
+                    timestamp: new Date().toISOString(),
+                    cicada: cicadaData,
+                    string: stringData
+                };
+
+                const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `webrtc-forensics-${Date.now()}.json`;
+                a.click();
+                URL.revokeObjectURL(url);
+            } catch (e) {
+                console.error('Error exporting data:', e);
+                alert('Error exporting data. Check console for details.');
+            }
+        }
+
+        function closeDivergence() {
+            document.getElementById('divergence-modal').classList.remove('show');
+        }
+
+        // Close modal on escape
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                closeDivergence();
+            }
+        });
+    </script>
+</body>
+</html>
