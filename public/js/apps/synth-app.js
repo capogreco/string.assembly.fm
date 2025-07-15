@@ -506,7 +506,9 @@ class SynthApp {
       controller.connection = pc;
 
       // Create unified data channel
-      const dataChannel = pc.createDataChannel("data");
+      const dataChannel = pc.createDataChannel("data", {
+        ordered: true,
+      });
       controller.channel = dataChannel;
 
       // Initialize and track data channel diagnostics
@@ -784,6 +786,17 @@ class SynthApp {
       // Log offer SDP to check if TURN is in the offer
       const sdpLines = offer.sdp.split("\n");
       const hasTurnInSdp = sdpLines.some((line) => line.includes("relay"));
+
+      // Check if data channel is in SDP
+      const hasDataChannel = sdpLines.some((line) =>
+        line.includes("m=application"),
+      );
+      const sctpLines = sdpLines.filter((line) => line.includes("sctp"));
+      console.log(`[WEBRTC-CRITICAL] Offer SDP analysis for ${controllerId}:
+        - Has data channel (m=application): ${hasDataChannel}
+        - SCTP lines found: ${sctpLines.length}
+        - SCTP content: ${sctpLines.join("; ")}
+        - Data channel state before offer: ${dataChannel.readyState}`);
       this.updateDebugInfo(
         "error",
         `Created offer for ${controllerId.substr(-6)} - TURN in SDP: ${hasTurnInSdp}`,
@@ -826,18 +839,24 @@ class SynthApp {
 
     switch (message.type) {
       case MessageTypes.PING:
-        // Respond to ping
+        // Respond to ping immediately, as per documentation
+        const pongMessage = MessageBuilders.pong(
+          message.timestamp,
+          this.getSynthState(),
+        );
         const controller = this.controllers.get(controllerId);
         if (
           controller &&
           controller.channel &&
           controller.channel.readyState === "open"
         ) {
-          const pongMessage = MessageBuilders.pong(
-            message.timestamp,
-            this.getSynthState(),
-          );
           controller.channel.send(JSON.stringify(pongMessage));
+          if (window.Logger) {
+            window.Logger.log(
+              `Responded to ping from ${controllerId}`,
+              "messages",
+            );
+          }
         }
         break;
 

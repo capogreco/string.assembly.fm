@@ -429,6 +429,8 @@ export class WebRTCManager {
         );
 
       this.handlePeerDisconnection(peerId);
+      // Add small delay to ensure cleanup is complete
+      await new Promise((resolve) => setTimeout(resolve, 100));
     }
 
     try {
@@ -1819,7 +1821,48 @@ export class WebRTCManager {
   }
 
   /**
-   * Send ping to all connected peers
+   * Send command message to a specific peer (legacy)
+   * @param {string} peerId - Target peer ID
+   * @param {Object} message - Message to send
+   * @returns {boolean} Whether send was successful
+   */
+  sendCommandMessage(peerId, message) {
+    const peerData = this.peers.get(peerId);
+    if (!peerData) {
+      if (window.Logger) {
+        window.Logger.log(
+          `Cannot send command to ${peerId} - peer not found`,
+          "error",
+        );
+      }
+      return false;
+    }
+
+    // Try legacy command channel first
+    if (
+      peerData.commandChannel &&
+      peerData.commandChannel.readyState === "open"
+    ) {
+      try {
+        peerData.commandChannel.send(JSON.stringify(message));
+        if (window.Logger) {
+          window.Logger.log(
+            `Sent command via legacy channel to ${peerId}`,
+            "messages",
+          );
+        }
+        return true;
+      } catch (error) {
+        // Fall through to use data channel
+      }
+    }
+
+    // Use unified data channel
+    return this.sendDataMessage(peerId, message);
+  }
+
+  /**
+   * Periodically ping all connected peers
    */
   pingAllPeers() {
     const pingMessage = {

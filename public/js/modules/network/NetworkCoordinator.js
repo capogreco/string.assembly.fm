@@ -7,7 +7,11 @@ import { webSocketManager } from "./WebSocketManager.js";
 import { webRTCManager } from "./WebRTCManager.js";
 import { eventBus } from "../core/EventBus.js";
 import { appState } from "../state/AppState.js";
-import { MessageBuilders, validateMessage, MessageTypes } from "../../protocol/MessageProtocol.js";
+import {
+  MessageBuilders,
+  validateMessage,
+  MessageTypes,
+} from "../../protocol/MessageProtocol.js";
 
 export class NetworkCoordinator {
   constructor() {
@@ -18,6 +22,7 @@ export class NetworkCoordinator {
     this.isInitialized = false;
     this.controllerId = null;
     this.statusUpdateInterval = null;
+    this.pingInterval = null;
   }
 
   /**
@@ -37,7 +42,7 @@ export class NetworkCoordinator {
 
     this.controllerId =
       controllerId || `ctrl-${Math.random().toString(36).substr(2, 9)}`;
-    
+
     // Store controller ID in new state structure
     this.appState.setNested("connections.controllerId", this.controllerId);
 
@@ -81,7 +86,7 @@ export class NetworkCoordinator {
         // Update connection status - both new and legacy structure
         this.appState.setNested("connections.websocket.connected", true);
         this.appState.setNested("connections.websocket.reconnecting", false);
-          
+
         // Initialize WebRTC manager after WebSocket is connected
         this.webRTC.initialize();
 
@@ -94,7 +99,10 @@ export class NetworkCoordinator {
         // Update connection status - both new and legacy structure
         this.appState.setNested("connections.websocket.connected", false);
         this.appState.setNested("connections.websocket.reconnecting", false);
-        this.appState.setNested("connections.websocket.lastError", "Failed to establish network connection");
+        this.appState.setNested(
+          "connections.websocket.lastError",
+          "Failed to establish network connection",
+        );
         return false;
       }
     } catch (error) {
@@ -104,7 +112,10 @@ export class NetworkCoordinator {
       // Update connection status - both new and legacy structure
       this.appState.setNested("connections.websocket.connected", false);
       this.appState.setNested("connections.websocket.reconnecting", false);
-      this.appState.setNested("connections.websocket.lastError", error.message || error.toString());
+      this.appState.setNested(
+        "connections.websocket.lastError",
+        error.message || error.toString(),
+      );
       return false;
     }
   }
@@ -168,7 +179,10 @@ export class NetworkCoordinator {
       // Update connection status - both new and legacy structure
       this.appState.setNested("connections.websocket.connected", false);
       this.appState.setNested("connections.websocket.reconnecting", false);
-      this.appState.setNested("connections.websocket.lastError", "Controller was kicked");
+      this.appState.setNested(
+        "connections.websocket.lastError",
+        "Controller was kicked",
+      );
       this.eventBus.emit("network:kicked", data);
     });
 
@@ -197,10 +211,7 @@ export class NetworkCoordinator {
     this.webRTC.on("dataChannelOpen", (data) => {
       // Data channel open event received
       if (window.Logger) {
-        window.Logger.log(
-          `Data channel open: ${data.peerId}`,
-          "connections",
-        );
+        window.Logger.log(`Data channel open: ${data.peerId}`, "connections");
       }
 
       // Add to connected synths
@@ -245,10 +256,7 @@ export class NetworkCoordinator {
 
     this.webRTC.on("dataChannelClosed", (data) => {
       if (window.Logger) {
-        window.Logger.log(
-          `Data channel closed: ${data.peerId}`,
-          "connections",
-        );
+        window.Logger.log(`Data channel closed: ${data.peerId}`, "connections");
       }
       this.appState.removeConnectedSynth(data.peerId);
     });
@@ -301,9 +309,11 @@ export class NetworkCoordinator {
     const { peerId, data: message, peerData } = data;
 
     // Route to appropriate handler based on message type
-    if (message.type === MessageTypes.COMMAND || 
-        message.type === MessageTypes.SAVE_TO_BANK || 
-        message.type === MessageTypes.LOAD_FROM_BANK) {
+    if (
+      message.type === MessageTypes.COMMAND ||
+      message.type === MessageTypes.SAVE_TO_BANK ||
+      message.type === MessageTypes.LOAD_FROM_BANK
+    ) {
       this.handleCommandMessage(data);
     } else {
       this.handleParamMessage(data);
@@ -327,7 +337,7 @@ export class NetworkCoordinator {
           this.appState.updateSynthState(peerId, {
             audioEnabled: message.state.audio_enabled,
             instrumentJoined: message.state.joined,
-            state: message.state
+            state: message.state,
           });
         }
 
@@ -349,10 +359,13 @@ export class NetworkCoordinator {
       //     timestamp: Date.now(),
       //   });
       //   break;
-        
+
       case "request_bank_program":
         if (window.Logger) {
-          window.Logger.log(`Bank program request from ${peerId} for bank ${message.bank}`, "messages");
+          window.Logger.log(
+            `Bank program request from ${peerId} for bank ${message.bank}`,
+            "messages",
+          );
         }
 
         // Emit bank program request event for handling by other modules
@@ -370,8 +383,12 @@ export class NetworkCoordinator {
         const stateUpdate = message.state || {};
         this.appState.updateSynthState(peerId, {
           state: stateUpdate,
-          audioEnabled: message.audioEnabled || message.audio_enabled || stateUpdate.audio_enabled,
-          instrumentJoined: message.instrumentJoined || message.joined || stateUpdate.joined
+          audioEnabled:
+            message.audioEnabled ||
+            message.audio_enabled ||
+            stateUpdate.audio_enabled,
+          instrumentJoined:
+            message.instrumentJoined || message.joined || stateUpdate.joined,
         });
         break;
 
@@ -414,14 +431,14 @@ export class NetworkCoordinator {
   sendProgramToSynth(synthId, program, transition = null) {
     // Extract power state if it's embedded in the program
     const power = program.power !== undefined ? program.power : true;
-    
+
     // Create clean program without power field
     const cleanProgram = { ...program };
     delete cleanProgram.power;
-    
+
     // Use protocol builder
     const message = MessageBuilders.program(cleanProgram, power, transition);
-    
+
     // Validate before sending
     try {
       validateMessage(message);
@@ -450,13 +467,20 @@ export class NetworkCoordinator {
   sendCommandToSynth(synthId, command) {
     // Ensure command has proper format
     let message;
-    
+
     // Handle legacy command format
-    if (command.type === MessageTypes.SAVE_TO_BANK || command.type === MessageTypes.LOAD_FROM_BANK) {
+    if (
+      command.type === MessageTypes.SAVE_TO_BANK ||
+      command.type === MessageTypes.LOAD_FROM_BANK
+    ) {
       message = command; // Already in correct format
     } else if (command.type === "command") {
       // Convert to protocol format
-      message = MessageBuilders.command(command.name, command.value, command.data);
+      message = MessageBuilders.command(
+        command.name,
+        command.value,
+        command.data,
+      );
       if (command.bank !== undefined) {
         message.bank = command.bank;
       }
@@ -464,7 +488,7 @@ export class NetworkCoordinator {
       // Assume it's a raw command
       message = command;
     }
-    
+
     // Validate before sending
     try {
       validateMessage(message);
@@ -474,17 +498,17 @@ export class NetworkCoordinator {
       }
       return false;
     }
-    
+
     const success = this.webRTC.sendDataMessage(synthId, message);
 
     if (success && window.Logger) {
       window.Logger.log(
-        `Sent command to ${synthId}: ${command.type}${command.name ? ` (${command.name})` : ''}`,
+        `Sent command to ${synthId}: ${command.type}${command.name ? ` (${command.name})` : ""}`,
         "messages",
       );
     } else if (!success && window.Logger) {
       window.Logger.log(
-        `Failed to send command to ${synthId}: ${command.type}${command.name ? ` (${command.name})` : ''}`,
+        `Failed to send command to ${synthId}: ${command.type}${command.name ? ` (${command.name})` : ""}`,
         "error",
       );
     }
@@ -526,54 +550,62 @@ export class NetworkCoordinator {
   onSynthConnected(synthId, channel = null) {
     // onSynthConnected called
     if (window.Logger) {
-      window.Logger.log(`Synth ${synthId} connected - sending current program`, 'network');
+      window.Logger.log(
+        `Synth ${synthId} connected - sending current program`,
+        "network",
+      );
     }
-    
+
     // Get the active program from PartManager's last sent program
-    const partManager = window.partManager || this.appState.get('partManager');
+    const partManager = window.partManager || this.appState.get("partManager");
     const systemState = this.appState.getSystemState();
-    
+
     // Check PartManager availability
     // Check lastSentProgram
-    
+
     if (partManager && partManager.lastSentProgram) {
       // Use the last successfully sent program (the active program)
       const baseProgram = partManager.lastSentProgram.baseProgram;
       // Got active program
-      
+
       // Send the base program to the synth
       // PartManager will handle assigning specific frequency/expression via sendProgramToSpecificSynth
       const sentProgram = {
         ...baseProgram,
-        power: systemState.audio.power
+        power: systemState.audio.power,
       };
-      
+
       // Triggering program send
-      
+
       // Use PartManager to send program with proper frequency/expression assignment
       partManager.sendProgramToSpecificSynth(synthId);
-      
+
       // Track that we sent to this synth
-      const connections = this.appState.getNested('connections.synths');
+      const connections = this.appState.getNested("connections.synths");
       const existingConnection = connections.get(synthId) || {};
       connections.set(synthId, {
         ...existingConnection,
         connected: true,
-        lastProgramSent: Date.now()
+        lastProgramSent: Date.now(),
       });
-      this.appState.setNested('connections.synths', new Map(connections));
-      
+      this.appState.setNested("connections.synths", new Map(connections));
+
       if (window.Logger) {
-        window.Logger.log(`Triggered program send to synth ${synthId}`, 'network');
+        window.Logger.log(
+          `Triggered program send to synth ${synthId}`,
+          "network",
+        );
       }
     } else {
       // No active program available
       if (window.Logger) {
-        window.Logger.log(`No active program to send to synth ${synthId} - user hasn't sent a program yet`, 'network');
+        window.Logger.log(
+          `No active program to send to synth ${synthId} - user hasn't sent a program yet`,
+          "network",
+        );
       }
     }
   }
-
 
   /**
    * Broadcast program to all connected synths
@@ -581,17 +613,17 @@ export class NetworkCoordinator {
    */
   broadcastProgram(program) {
     const systemState = this.appState.getSystemState();
-    
+
     // Add power state to program
     const programWithPower = {
       ...program,
-      power: systemState.audio.power
+      power: systemState.audio.power,
     };
-    
+
     // Send to all connected synths
-    const synths = this.appState.getNested('connections.synths');
+    const synths = this.appState.getNested("connections.synths");
     let successCount = 0;
-    
+
     synths.forEach((synthInfo, synthId) => {
       if (synthInfo.connected) {
         if (this.sendProgramToSynth(synthId, programWithPower)) {
@@ -599,11 +631,14 @@ export class NetworkCoordinator {
         }
       }
     });
-    
+
     if (window.Logger) {
-      window.Logger.log(`Broadcast program to ${successCount}/${synths.size} synths`, 'network');
+      window.Logger.log(
+        `Broadcast program to ${successCount}/${synths.size} synths`,
+        "network",
+      );
     }
-    
+
     return successCount;
   }
 
@@ -664,6 +699,10 @@ export class NetworkCoordinator {
     this.statusUpdateInterval = setInterval(() => {
       this.updateNetworkStatus();
     }, 5000); // Update every 5 seconds
+
+    this.pingInterval = setInterval(() => {
+      this.pingAllSynths();
+    }, 1000); // Ping every second, as per documentation
   }
 
   /**
@@ -674,6 +713,10 @@ export class NetworkCoordinator {
     if (this.statusUpdateInterval) {
       clearInterval(this.statusUpdateInterval);
       this.statusUpdateInterval = null;
+    }
+    if (this.pingInterval) {
+      clearInterval(this.pingInterval);
+      this.pingInterval = null;
     }
   }
 
@@ -686,8 +729,10 @@ export class NetworkCoordinator {
     const wsStatus = this.webSocket.getStatus();
 
     // Update connection status based on WebSocket
-    const isConnected = this.appState.getNested("connections.websocket.connected");
-    
+    const isConnected = this.appState.getNested(
+      "connections.websocket.connected",
+    );
+
     // Simply update connection state based on WebSocket status
     if (wsStatus.connected) {
       this.appState.setNested("connections.websocket.connected", true);
@@ -700,10 +745,7 @@ export class NetworkCoordinator {
       this.appState.setNested("connections.websocket.reconnecting", false);
     }
 
-    // Ping all synths for latency updates
-    if (wsStatus.connected) {
-      this.pingAllSynths();
-    }
+    // Pinging is now handled by a separate interval.
 
     // Clean up disconnected peers
     const currentTime = Date.now();
@@ -740,7 +782,9 @@ export class NetworkCoordinator {
   getNetworkStatus() {
     const wsStatus = this.webSocket.getStatus();
     const connectedSynths = this.appState.getNested("connections.synths");
-    const averageLatency = this.appState.getNested("connections.metrics.averageLatency");
+    const averageLatency = this.appState.getNested(
+      "connections.metrics.averageLatency",
+    );
 
     return {
       websocket: {
@@ -757,7 +801,9 @@ export class NetworkCoordinator {
         averageLatency,
       },
       overall: {
-        status: this.appState.getNested("connections.websocket.connected") ? "connected" : "disconnected",
+        status: this.appState.getNested("connections.websocket.connected")
+          ? "connected"
+          : "disconnected",
         controllerId: this.controllerId,
         initialized: this.isInitialized,
       },
