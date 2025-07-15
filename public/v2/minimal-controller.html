@@ -40,9 +40,15 @@
 
     <script src="../js/module-loader.js"></script>
     <script>
-        // Load the main application module
-        window.loadModule('/v2/minimal-controller-main.js').catch(error => {
-            console.error('Failed to load controller module:', error);
+        // Wait for module loader to be available
+        document.addEventListener('DOMContentLoaded', function() {
+            if (typeof window.loadModule === 'function') {
+                window.loadModule('/v2/minimal-controller-main.js').catch(error => {
+                    console.error('Failed to load controller module:', error);
+                });
+            } else {
+                console.error('loadModule function not available');
+            }
         });
     </script>
 </body>
