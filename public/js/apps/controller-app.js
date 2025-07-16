@@ -655,12 +655,6 @@ function setupUIEventHandlers() {
     // Add the complete part using new parts paradigm
     partManager.addPartNew(data.part);
 
-    // Update piano visuals from current parts
-    const pianoKeyboard = appState.get('pianoKeyboard');
-    if (pianoKeyboard) {
-      pianoKeyboard.renderParts(partManager.getParts());
-    }
-
     // Update expression group visibility immediately
     updateExpressionGroupVisibility();
     // Do NOT update active program display - that only shows what was sent/loaded
@@ -672,12 +666,6 @@ function setupUIEventHandlers() {
 
     // Remove the part using new parts paradigm
     partManager.removePart(data.partId);
-
-    // Update piano visuals from current parts
-    const pianoKeyboard = appState.get('pianoKeyboard');
-    if (pianoKeyboard) {
-      pianoKeyboard.renderParts(partManager.getParts());
-    }
 
     // Update expression group visibility immediately
     updateExpressionGroupVisibility();
@@ -693,12 +681,6 @@ function setupUIEventHandlers() {
 
     // Update the part using new parts paradigm
     partManager.updatePart(data.partId, data.updates);
-
-    // Update piano visuals from current parts
-    const pianoKeyboard = appState.get('pianoKeyboard');
-    if (pianoKeyboard) {
-      pianoKeyboard.renderParts(partManager.getParts());
-    }
 
     // Update expression group visibility immediately
     updateExpressionGroupVisibility();

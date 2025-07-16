@@ -78,6 +78,9 @@ export class PartManager {
     // Redistribute parts to synths
     this.redistributePartsNew();
     
+    // Update piano visuals
+    this.updatePianoVisuals();
+    
     Logger.log(`Set ${partInstances.length} parts`, 'parts');
   }
 
@@ -106,6 +109,9 @@ export class PartManager {
     
     // Redistribute parts to synths (no events, no sync tracking)
     this.redistributePartsNew();
+    
+    // Update piano visuals
+    this.updatePianoVisuals();
     
     Logger.log(`Set ${partInstances.length} parts directly (bank load)`, 'parts');
   }
