@@ -100,14 +100,24 @@ export class PartManager {
     const plainParts = partInstances.map(p => p.toObject());
     this.appState.setNested('performance.currentProgram.parts', plainParts);
     
-    // Update legacy frequency array
+    // Update legacy frequency array for compatibility
     const frequencies = partInstances.map(p => p.frequency);
     this.appState.setNested('performance.currentProgram.chord.frequencies', frequencies);
     
-    // Redistribute parts to synths (no events)
+    // Redistribute parts to synths (no events, no sync tracking)
     this.redistributePartsNew();
     
     Logger.log(`Set ${partInstances.length} parts directly (bank load)`, 'parts');
+  }
+
+  /**
+   * Update piano visuals after PartManager changes (helper method)
+   */
+  updatePianoVisuals() {
+    const pianoKeyboard = this.appState.get('pianoKeyboard');
+    if (pianoKeyboard) {
+      pianoKeyboard.renderParts(this.getParts());
+    }
   }
   
   /**

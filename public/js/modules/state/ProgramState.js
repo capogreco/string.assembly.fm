@@ -187,11 +187,7 @@ export class ProgramState {
       // Apply harmonic selections
       this.applyHarmonicSelectionsToUI(program.harmonicSelections);
       
-      // Emit events for chord and expressions
-      eventBus.emit('programState:chordChanged', {
-        frequencies: program.chord.frequencies,
-        expressions: program.chord.expressions
-      });
+      // NOTE: Removed chord event emission - using direct renderParts() calls instead
       
       // Applied program state to UI
     } finally {
@@ -457,11 +453,11 @@ export class ProgramState {
       }
     }
     
-    // 4. Update PianoKeyboard directly (no events)
+    // 4. Update PianoKeyboard directly from Parts (single source of truth)
     const pianoKeyboard = appState.get('pianoKeyboard');
-    if (pianoKeyboard) {
-      pianoKeyboard.setChordDirectly(this.currentProgram.chord.frequencies || []);
-      pianoKeyboard.setExpressionsDirectly(this.currentProgram.chord.expressions || {});
+    if (pianoKeyboard && partManager) {
+      const currentParts = partManager.getParts();
+      pianoKeyboard.renderParts(currentParts);
     }
     
     // Emit single completion event

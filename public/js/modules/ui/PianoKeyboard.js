@@ -361,28 +361,7 @@ export class PianoKeyboard {
       });
     }
     
-    // Listen for chord changes (e.g., from loading banks)
-    this.eventBus.on("chord:changed", (data) => {
-      if (window.Logger) {
-        window.Logger.log(`PianoKeyboard received chord:changed event with ${data.frequencies?.length || 0} notes`, "lifecycle");
-      }
-      
-      // Clear current chord
-      this.currentChord.clear();
-      
-      // Add new frequencies
-      if (data.frequencies && Array.isArray(data.frequencies)) {
-        data.frequencies.forEach(freq => {
-          this.currentChord.add(freq);
-        });
-      }
-      
-      // Update the visual display
-      if (this.expressionHandler) {
-        this.expressionHandler.updateKeyVisuals();
-      }
-      
-    });
+    // NOTE: Removed chord:changed event listener - now using direct renderParts() calls
   }
 
   /**
@@ -790,55 +769,78 @@ export class PianoKeyboard {
   }
 
   /**
-   * Set chord directly without events (for bank loading)
-   * @param {number[]} frequencies - Array of frequencies
+   * Render piano visuals from Parts array (single source of truth)
+   * @param {Part[]|Object[]} parts - Array of Part objects
    */
-  setChordDirectly(frequencies) {
-    // Clear current chord
+  renderParts(parts) {
+    if (window.Logger) {
+      window.Logger.log(`PianoKeyboard rendering ${parts?.length || 0} parts`, "lifecycle");
+    }
+    
+    // Clear current state
     this.currentChord.clear();
     
-    // Add new frequencies
-    if (frequencies && Array.isArray(frequencies)) {
-      frequencies.forEach(freq => {
-        this.currentChord.add(freq);
-      });
-    }
-    
-    // Update visual display directly
     if (this.expressionHandler) {
+      // Clear expression handler state
+      this.expressionHandler.expressions.clear();
+      this.expressionHandler.relatedNotes.clear();
+      this.expressionHandler.chordNotes.clear();
+      
+      // Process each part
+      if (parts && Array.isArray(parts)) {
+        parts.forEach(part => {
+          const frequency = part.frequency;
+          const expression = part.expression || { type: 'none' };
+          
+          // Add to chord state
+          this.currentChord.add(frequency);
+          this.expressionHandler.chordNotes.add(frequency);
+          
+          // Add expression if not 'none'
+          if (expression.type !== 'none') {
+            const noteName = this.frequencyToNoteName(frequency);
+            this.expressionHandler.expressions.set(noteName, expression);
+            
+            // Handle related notes for trill
+            if (expression.type === 'trill' && expression.toNote) {
+              const toFreq = this.noteNameToFrequency(expression.toNote);
+              if (toFreq > 0) {
+                this.expressionHandler.relatedNotes.set(frequency, toFreq);
+              }
+            }
+          }
+        });
+      }
+      
+      // Update all visuals in one call
       this.expressionHandler.updateKeyVisuals();
-    }
-    
-    if (window.Logger) {
-      window.Logger.log(`PianoKeyboard chord set directly: ${frequencies.length} notes`, "lifecycle");
+      this.expressionHandler.updateChordDisplay();
+      this.expressionHandler.render(); // Update canvas overlays
     }
   }
 
   /**
-   * Set expressions directly without events (for bank loading)
-   * @param {Object} expressions - Object mapping note names to expressions
+   * Convert note name to frequency (helper for renderParts)
+   * @param {string} noteName - Note name (e.g., "C4")
+   * @returns {number} Frequency in Hz
    */
-  setExpressionsDirectly(expressions) {
-    if (this.expressionHandler) {
-      // Clear existing expressions without events
-      this.expressionHandler.expressions.clear();
-      this.expressionHandler.relatedNotes.clear();
-      
-      // Set new expressions directly
-      if (expressions && typeof expressions === 'object') {
-        Object.entries(expressions).forEach(([noteName, expression]) => {
-          this.expressionHandler.expressions.set(noteName, expression);
-        });
-      }
-      
-      // Update visuals and chord display
-      this.expressionHandler.updateKeyVisuals();
-      this.expressionHandler.updateChordDisplay();
-    }
+  noteNameToFrequency(noteName) {
+    const A4 = 440;
+    const noteRegex = /^([A-G])(#|b)?(\d)$/;
+    const match = noteName.match(noteRegex);
     
-    if (window.Logger) {
-      window.Logger.log(`PianoKeyboard expressions set directly: ${Object.keys(expressions || {}).length} expressions`, "lifecycle");
-    }
+    if (!match) return 0;
+    
+    const [, note, accidental, octave] = match;
+    const noteOffsets = { C: -9, D: -7, E: -5, F: -4, G: -2, A: 0, B: 2 };
+    
+    let semitones = noteOffsets[note];
+    if (accidental === '#') semitones += 1;
+    if (accidental === 'b') semitones -= 1;
+    
+    semitones += (parseInt(octave) - 4) * 12;
+    
+    return A4 * Math.pow(2, semitones / 12);
   }
 
   /**
