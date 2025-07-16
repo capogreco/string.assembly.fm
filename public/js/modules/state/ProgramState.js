@@ -479,12 +479,6 @@ export class ProgramState {
       this.currentProgram.chord.frequencies.forEach(freq => {
         pianoKeyboard.currentChord.add(freq);
       });
-      
-      // Update visual display and chord display directly
-      if (pianoKeyboard.expressionHandler) {
-        pianoKeyboard.expressionHandler.updateKeyVisuals();
-        pianoKeyboard.expressionHandler.updateChordDisplay();
-      }
     }
     
     // Emit chord:changed event for piano keyboard with flag to indicate bank load
@@ -508,7 +502,15 @@ export class ProgramState {
       if (Object.keys(expressions).length > 0) {
         Logger.log(`Restoring expressions to PianoKeyboard: ${JSON.stringify(expressions)}`, 'lifecycle');
         pianoKeyboard.expressionHandler.restoreExpressions(expressions);
+      } else {
+        // Clear any existing expressions when loading a bank with no expressions
+        Logger.log(`Clearing expressions from PianoKeyboard (bank has none)`, 'lifecycle');
+        pianoKeyboard.expressionHandler.restoreExpressions({});
       }
+      
+      // Update visual display and chord display after all expression work is complete
+      pianoKeyboard.expressionHandler.updateKeyVisuals();
+      pianoKeyboard.expressionHandler.updateChordDisplay();
     }
     
     Logger.log(`Loaded program from bank ${bankId}`, 'lifecycle');
