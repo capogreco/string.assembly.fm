@@ -381,21 +381,62 @@ export class UIManager {
   }
 
   /**
-   * Update chord display
-   * @param {Array} chord - Array of frequencies
+   * Update chord display with Part notation and color coding
+   * @param {Array} parts - Array of Part objects (or frequencies for backward compatibility)
    */
-  updateChordDisplay(chord) {
+  updateChordDisplay(parts) {
     if (!this.elements.chordDisplay) return;
 
-    if (!chord || chord.length === 0) {
-      this.elements.chordDisplay.textContent = "None";
+    if (!parts || parts.length === 0) {
+      this.elements.chordDisplay.innerHTML = '<span style="color: #64748b;">None</span>';
       this.elements.chordDisplay.className = "chord-display empty";
       return;
     }
 
-    // Convert frequencies to note names
-    const noteNames = chord.map((freq) => this.frequencyToNote(freq));
-    this.elements.chordDisplay.textContent = noteNames.join(", ");
+    // Expression colors matching the piano keyboard
+    const EXPRESSION_COLORS = {
+      none: "#9b59b6",    // Purple
+      vibrato: "#e74c3c", // Red
+      tremolo: "#f1c40f", // Yellow
+      trill: "#3498db",   // Blue
+    };
+
+    // Handle backward compatibility - if passed frequencies instead of parts
+    if (typeof parts[0] === 'number') {
+      const noteNames = parts.map((freq) => this.frequencyToNote(freq));
+      this.elements.chordDisplay.innerHTML = noteNames.map(note => 
+        `<span style="color: ${EXPRESSION_COLORS.none};">${note}</span>`
+      ).join(" ");
+      this.elements.chordDisplay.className = "chord-display active";
+      return;
+    }
+
+    // Convert parts to notation with colors
+    const noteStrings = parts.map((part) => {
+      const noteName = this.frequencyToNote(part.frequency);
+      
+      if (part.expression && part.expression.type !== "none") {
+        const expr = part.expression;
+        const color = EXPRESSION_COLORS[expr.type] || EXPRESSION_COLORS.none;
+        
+        switch (expr.type) {
+          case "vibrato":
+            return `<span style="color: ${color};">${noteName}v${Math.round((expr.depth || 0.01) * 100)}</span>`;
+          case "tremolo":
+            return `<span style="color: ${color};">${noteName}t${Math.round((expr.articulation || 0.8) * 100)}</span>`;
+          case "trill":
+            const targetNote = expr.targetNote || 
+              this.frequencyToNote(part.frequency * Math.pow(2, (expr.interval || 2) / 12));
+            return `<span style="color: ${color};">${noteName}(→${targetNote})</span>`;
+          default:
+            return `<span style="color: ${EXPRESSION_COLORS.none};">${noteName}</span>`;
+        }
+      }
+      
+      return `<span style="color: ${EXPRESSION_COLORS.none};">${noteName}</span>`;
+    });
+
+    this.elements.chordDisplay.innerHTML = noteStrings.join(" ");
     this.elements.chordDisplay.className = "chord-display active";
   }
 

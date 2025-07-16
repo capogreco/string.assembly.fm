@@ -125,12 +125,11 @@ export class PartManager {
       pianoKeyboard.renderParts(this.getParts());
     }
     
-    // Update chord display
+    // Update chord display with parts (for notation and color)
     const uiManager = this.appState.get('uiManager');
     if (uiManager && uiManager.updateChordDisplay) {
       const parts = this.getParts();
-      const frequencies = parts.map(p => p.frequency);
-      uiManager.updateChordDisplay(frequencies);
+      uiManager.updateChordDisplay(parts);
     }
   }
   
