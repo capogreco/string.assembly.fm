@@ -413,6 +413,20 @@ export class WebRTCManager {
           );
         this.handleRemoteIceCandidate(message);
         break;
+      case "ice-candidate":
+        if (window.Logger) {
+          window.Logger.log(
+            `WebRTCManager routing ICE candidate from ${message.source}`,
+            "messages",
+          );
+        }
+        if (this.enableDiagnosticLogs)
+          console.log(
+            `[WEBRTC-DIAG] Peer ${message.source}: Received remote ICE candidate via signaling (ice-candidate type):`,
+            message.data,
+          );
+        this.handleRemoteIceCandidate(message);
+        break;
       default:
         if (window.Logger) {
           window.Logger.log(
