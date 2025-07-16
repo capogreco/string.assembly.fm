@@ -576,9 +576,9 @@ export class WebSocketManager {
   }
 }
 
-// Create global instance only if not in v2 test environment
+// Create global instance (exclude only v2 test environment, allow v3 and main app)
 let webSocketManager = null;
-if (typeof window !== "undefined" && !window.location.pathname.includes('/v2/')) {
+if (typeof window !== "undefined" && !window.location.pathname.startsWith('/v2/')) {
   webSocketManager = new WebSocketManager(
     SystemConfig.network.websocket.url,
   );
