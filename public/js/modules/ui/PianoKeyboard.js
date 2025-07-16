@@ -64,7 +64,7 @@ export class PianoKeyboard {
       this.initializeBodyType();
     }
 
-    // Create piano keyboard
+    // Create piano keyboard with indicator zones
     this.createPianoKeyboard();
 
     // Set up event listeners
@@ -78,14 +78,34 @@ export class PianoKeyboard {
   }
 
   /**
-   * Create the piano keyboard SVG
+   * Create the piano keyboard with indicator zones
    */
   createPianoKeyboard() {
     // Clear existing content
     this.container.innerHTML = "";
     this.keys.clear();
 
-    // Create SVG
+    // Create grid container
+    const gridContainer = document.createElement("div");
+    gridContainer.style.display = "grid";
+    gridContainer.style.gridTemplateRows = "40px 200px 40px";
+    gridContainer.style.width = "100%";
+    gridContainer.style.position = "relative";
+    
+    // Create top indicator zone
+    this.topIndicators = document.createElement("div");
+    this.topIndicators.style.position = "relative";
+    this.topIndicators.style.width = "100%";
+    this.topIndicators.style.height = "40px";
+    gridContainer.appendChild(this.topIndicators);
+
+    // Create piano SVG container
+    const pianoContainer = document.createElement("div");
+    pianoContainer.style.position = "relative";
+    pianoContainer.style.width = "100%";
+    pianoContainer.style.height = "200px";
+    
+    // Create SVG for piano keys
     const width = this.container.clientWidth || 800;
     const height = 200;
     
@@ -95,6 +115,15 @@ export class PianoKeyboard {
     this.svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
     this.svg.style.display = "block";
     this.svg.style.userSelect = "none";
+    pianoContainer.appendChild(this.svg);
+    gridContainer.appendChild(pianoContainer);
+    
+    // Create bottom indicator zone
+    this.bottomIndicators = document.createElement("div");
+    this.bottomIndicators.style.position = "relative";
+    this.bottomIndicators.style.width = "100%";
+    this.bottomIndicators.style.height = "40px";
+    gridContainer.appendChild(this.bottomIndicators);
 
     // Calculate key dimensions
     const whiteKeyCount = this.countWhiteKeys(this.startNote, this.endNote);
@@ -138,8 +167,11 @@ export class PianoKeyboard {
       }
     });
 
-    // Append SVG to container
-    this.container.appendChild(this.svg);
+    // Append grid container to main container
+    this.container.appendChild(gridContainer);
+    
+    // Store key width for indicator positioning
+    this.whiteKeyWidth = whiteKeyWidth;
 
     // Create feedback element for drag visualization
     this.feedbackElement = document.createElement("div");
@@ -412,15 +444,15 @@ export class PianoKeyboard {
   renderParts(parts) {
     Logger.log(`PianoKeyboard rendering ${parts?.length || 0} parts`, "lifecycle");
 
-    // First, reset all keys to their original colors and remove indicators
+    // First, reset all keys to their original colors
     this.keys.forEach((keyElement) => {
       const originalFill = keyElement.getAttribute("data-original-fill");
       keyElement.setAttribute("fill", originalFill);
-      
-      // Remove any existing expression indicators
-      const indicators = this.svg.querySelectorAll(`[data-key-freq="${keyElement.getAttribute('data-frequency')}"]`);
-      indicators.forEach(ind => ind.remove());
     });
+    
+    // Clear all indicators
+    if (this.topIndicators) this.topIndicators.innerHTML = "";
+    if (this.bottomIndicators) this.bottomIndicators.innerHTML = "";
 
     // Color keys based on parts
     if (parts && Array.isArray(parts)) {
@@ -550,53 +582,87 @@ export class PianoKeyboard {
     if (!part.expression || part.expression.type === 'none') return;
     
     const x = parseFloat(keyElement.getAttribute('x'));
-    const y = parseFloat(keyElement.getAttribute('y'));
     const width = parseFloat(keyElement.getAttribute('width'));
-    const height = parseFloat(keyElement.getAttribute('height'));
-    const isBlack = keyElement.classList.contains('black-key');
+    const keyMidX = x + width / 2;
     
     switch (part.expression.type) {
       case 'vibrato':
-        // Add wavy line above key
-        const vibratoPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
-        const waveY = isBlack ? -10 : -15;
-        const waveWidth = width * 0.8;
-        const waveX = x + (width - waveWidth) / 2;
-        vibratoPath.setAttribute("d", 
-          `M${waveX},${y + waveY} q${waveWidth/4},-5 ${waveWidth/2},0 t${waveWidth/2},0`
-        );
-        vibratoPath.setAttribute("stroke", EXPRESSION_COLORS.vibrato);
-        vibratoPath.setAttribute("stroke-width", "2");
-        vibratoPath.setAttribute("fill", "none");
-        vibratoPath.setAttribute("data-key-freq", keyElement.getAttribute('data-frequency'));
-        vibratoPath.style.pointerEvents = "none";
-        this.svg.appendChild(vibratoPath);
+        // Add indicator above the key
+        const vibratoDiv = document.createElement('div');
+        vibratoDiv.style.position = 'absolute';
+        vibratoDiv.style.left = `${keyMidX - 15}px`;
+        vibratoDiv.style.top = '10px';
+        vibratoDiv.style.width = '30px';
+        vibratoDiv.style.height = '20px';
+        vibratoDiv.style.pointerEvents = 'none';
+        
+        // Create wavy line using CSS
+        vibratoDiv.style.borderBottom = `3px solid ${EXPRESSION_COLORS.vibrato}`;
+        vibratoDiv.style.borderRadius = '50%';
+        vibratoDiv.style.transform = 'rotate(-5deg)';
+        
+        // Add animation
+        vibratoDiv.style.animation = 'vibrato-wave 0.5s ease-in-out infinite alternate';
+        
+        this.topIndicators.appendChild(vibratoDiv);
+        
+        // Add CSS animation if not already present
+        if (!document.getElementById('piano-animations')) {
+          const style = document.createElement('style');
+          style.id = 'piano-animations';
+          style.textContent = `
+            @keyframes vibrato-wave {
+              from { transform: rotate(-5deg) translateY(0); }
+              to { transform: rotate(5deg) translateY(-3px); }
+            }
+          `;
+          document.head.appendChild(style);
+        }
         break;
         
       case 'tremolo':
-        // Add oscillating lines below key
-        const tremoloGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
-        tremoloGroup.setAttribute("data-key-freq", keyElement.getAttribute('data-frequency'));
-        tremoloGroup.style.pointerEvents = "none";
+        // Add indicators below the key
+        const tremoloDiv = document.createElement('div');
+        tremoloDiv.style.position = 'absolute';
+        tremoloDiv.style.left = `${keyMidX - 15}px`;
+        tremoloDiv.style.top = '10px';
+        tremoloDiv.style.width = '30px';
+        tremoloDiv.style.height = '20px';
+        tremoloDiv.style.display = 'flex';
+        tremoloDiv.style.justifyContent = 'space-around';
+        tremoloDiv.style.alignItems = 'center';
+        tremoloDiv.style.pointerEvents = 'none';
         
+        // Create three vertical lines
         for (let i = 0; i < 3; i++) {
-          const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
-          const lineX = x + width * (0.25 + i * 0.25);
-          const lineY1 = y + height + 5;
-          const lineY2 = y + height + 10;
-          line.setAttribute("x1", lineX);
-          line.setAttribute("y1", lineY1);
-          line.setAttribute("x2", lineX);
-          line.setAttribute("y2", lineY2);
-          line.setAttribute("stroke", EXPRESSION_COLORS.tremolo);
-          line.setAttribute("stroke-width", "2");
-          tremoloGroup.appendChild(line);
+          const line = document.createElement('div');
+          line.style.width = '2px';
+          line.style.height = '15px';
+          line.style.backgroundColor = EXPRESSION_COLORS.tremolo;
+          line.style.animation = `tremolo-pulse ${0.3 + i * 0.1}s ease-in-out infinite`;
+          tremoloDiv.appendChild(line);
         }
-        this.svg.appendChild(tremoloGroup);
+        
+        this.bottomIndicators.appendChild(tremoloDiv);
+        
+        // Add CSS animation if not already present
+        if (!document.querySelector('#piano-animations')?.textContent.includes('tremolo-pulse')) {
+          const style = document.getElementById('piano-animations') || document.createElement('style');
+          style.id = 'piano-animations';
+          style.textContent += `
+            @keyframes tremolo-pulse {
+              0%, 100% { opacity: 0.3; transform: scaleY(0.7); }
+              50% { opacity: 1; transform: scaleY(1); }
+            }
+          `;
+          if (!document.getElementById('piano-animations')) {
+            document.head.appendChild(style);
+          }
+        }
         break;
         
       case 'trill':
-        // Add arrow pointing to target note
+        // Add arrow in the top zone pointing to target
         if (part.expression.targetNote) {
           const targetFreq = this.noteNameToFrequency(part.expression.targetNote);
           let targetElement = this.keys.get(targetFreq);
@@ -613,25 +679,30 @@ export class PianoKeyboard {
           if (targetElement) {
             const targetX = parseFloat(targetElement.getAttribute('x'));
             const targetWidth = parseFloat(targetElement.getAttribute('width'));
+            const targetMidX = targetX + targetWidth / 2;
+            
+            // Create SVG for the arrow
+            const arrowSvg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+            arrowSvg.style.position = 'absolute';
+            arrowSvg.style.left = `${Math.min(keyMidX, targetMidX) - 10}px`;
+            arrowSvg.style.top = '5px';
+            arrowSvg.style.width = `${Math.abs(targetMidX - keyMidX) + 20}px`;
+            arrowSvg.style.height = '30px';
+            arrowSvg.style.pointerEvents = 'none';
             
             const arrow = document.createElementNS("http://www.w3.org/2000/svg", "path");
-            const startX = x + width / 2;
-            const startY = isBlack ? y - 5 : y - 10;
-            const endX = targetX + targetWidth / 2;
-            const endY = startY;
+            const startX = keyMidX < targetMidX ? 10 : parseFloat(arrowSvg.style.width) - 10;
+            const endX = keyMidX < targetMidX ? parseFloat(arrowSvg.style.width) - 10 : 10;
             
-            // Create curved arrow
-            const midX = (startX + endX) / 2;
-            const midY = startY - 15;
             arrow.setAttribute("d", 
-              `M${startX},${startY} Q${midX},${midY} ${endX},${endY} l-5,-3 m5,3 l-5,3`
+              `M${startX},20 Q${(startX + endX) / 2},5 ${endX},20 l${keyMidX < targetMidX ? '-5,-3 m5,3 l-5,3' : '5,-3 m-5,3 l5,3'}`
             );
             arrow.setAttribute("stroke", EXPRESSION_COLORS.trill);
             arrow.setAttribute("stroke-width", "2");
             arrow.setAttribute("fill", "none");
-            arrow.setAttribute("data-key-freq", keyElement.getAttribute('data-frequency'));
-            arrow.style.pointerEvents = "none";
-            this.svg.appendChild(arrow);
+            
+            arrowSvg.appendChild(arrow);
+            this.topIndicators.appendChild(arrowSvg);
           }
         }
         break;
