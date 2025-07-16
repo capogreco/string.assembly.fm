@@ -140,7 +140,9 @@ export class WebRTCManager {
       currentConfig.iceServers = [{ urls: "stun:stun.l.google.com:19302" }];
     }
 
-    const pc = new RTCPeerConnection(currentConfig);
+    const pc = new RTCPeerConnection({ 
+      iceServers: currentConfig.iceServers 
+    });
 
     // Set peerId for SDP logging
     if (pc.peerId !== undefined) {

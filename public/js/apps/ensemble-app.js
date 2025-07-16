@@ -384,7 +384,9 @@ class EnsembleApp {
     // Initiating connection to controller
 
     try {
-      const pc = new RTCPeerConnection(this.rtcConfig);
+      const pc = new RTCPeerConnection({ 
+        iceServers: this.rtcConfig.iceServers 
+      });
       controller.connection = pc;
       // Created RTCPeerConnection
 

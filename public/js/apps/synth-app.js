@@ -502,7 +502,9 @@ class SynthApp {
         this.updateIceDiagnosticsDisplay();
       }
 
-      const pc = new RTCPeerConnection(this.rtcConfig);
+      const pc = new RTCPeerConnection({ 
+        iceServers: this.rtcConfig.iceServers 
+      });
       controller.connection = pc;
 
       // Create unified data channel
