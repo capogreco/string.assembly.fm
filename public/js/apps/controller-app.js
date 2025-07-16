@@ -684,6 +684,27 @@ function setupUIEventHandlers() {
     // Do NOT update active program display - that only shows what was sent/loaded
   });
 
+  // Handle part updated (expression changed)
+  eventBus.on("part:updated", (data) => {
+    Logger.log(
+      `Part updated: ${data.partId}, new expression: ${data.updates.expression?.type || 'none'}`,
+      "expressions"
+    );
+
+    // Update the part using new parts paradigm
+    partManager.updatePart(data.partId, data.updates);
+
+    // Update piano visuals from current parts
+    const pianoKeyboard = appState.get('pianoKeyboard');
+    if (pianoKeyboard) {
+      pianoKeyboard.renderParts(partManager.getParts());
+    }
+
+    // Update expression group visibility immediately
+    updateExpressionGroupVisibility();
+    // Do NOT update active program display - that only shows what was sent/loaded
+  });
+
   // Handle parts updated event (e.g., from bank load)
   eventBus.on("parts:updated", (data) => {
     Logger.log(`Parts updated from ${data.source}`, "expressions");
