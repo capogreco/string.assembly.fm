@@ -397,6 +397,7 @@ export class PianoKeyboard {
    * Render parts (display current state)
    */
   renderParts(parts) {
+    console.log(`[PIANO] renderParts called with ${parts?.length || 0} parts`);
     Logger.log(`PianoKeyboard rendering ${parts?.length || 0} parts`, "lifecycle");
 
     // First, reset all keys to their original colors
@@ -408,7 +409,7 @@ export class PianoKeyboard {
     // Color keys based on parts
     if (parts && Array.isArray(parts)) {
       parts.forEach(part => {
-        const keyElement = this.keys.get(part.frequency);
+        let keyElement = this.keys.get(part.frequency);
         if (!keyElement) {
           // Try to find by approximation
           for (const [freq, elem] of this.keys) {
@@ -421,13 +422,22 @@ export class PianoKeyboard {
 
         if (keyElement) {
           const color = EXPRESSION_COLORS[part.expression?.type || "none"];
+          console.log(`[PIANO] Setting key ${part.frequency}Hz to ${color} for expression ${part.expression?.type}`);
           keyElement.setAttribute("fill", color);
+          // Double-check it was set
+          const newFill = keyElement.getAttribute("fill");
+          console.log(`[PIANO] Key fill is now: ${newFill}`);
+          Logger.log(`Set key ${part.frequency}Hz to color ${color} (${part.expression?.type})`, "piano");
+        } else {
+          console.log(`[PIANO] ERROR: Could not find key element for frequency ${part.frequency}Hz`);
+          Logger.log(`Could not find key element for frequency ${part.frequency}Hz`, "warn");
         }
       });
     }
 
     // Update range styling
     this.updateKeyRangeStyles();
+    console.log("[PIANO] renderParts completed");
   }
 
   /**

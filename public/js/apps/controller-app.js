@@ -622,28 +622,9 @@ function setupUIEventHandlers() {
     // Removed auto-send to synths
   });
 
-  // Handle chord changes from piano (don't auto-distribute)
-  pianoKeyboard.on("chordChanged", (data) => {
-    Logger.log(`Chord updated: ${data.noteNames.join(", ")}`, "expressions");
-
-    // NOTE: In the new parts paradigm, chord changes should happen through
-    // part:added and part:removed events. This handler is kept for compatibility
-    // but should not modify parts directly.
-
-    // Update legacy app state for compatibility
-    appState.setNested(
-      "performance.currentProgram.chord.frequencies",
-      data.chord,
-    );
-
-    // Do NOT call partManager.setChord here as it would wipe out expressions
-    // Parts are managed through part:added/part:removed events
-
-    // Update expression group visibility
-    setTimeout(() => {
-      updateExpressionGroupVisibility();
-    }, 10);
-  });
+  // NOTE: In the new parts paradigm, chord changes happen through
+  // part:added and part:removed events. The old chordChanged event
+  // is no longer used.
 
   // Handle part added from piano
   eventBus.on("part:added", (data) => {
