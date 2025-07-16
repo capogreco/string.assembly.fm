@@ -381,6 +381,14 @@ export class PianoKeyboard {
       if (this.expressionHandler) {
         this.expressionHandler.updateKeyVisuals();
       }
+      
+      // Emit piano:chordChanged to notify other components (like chord display)
+      this.eventBus.emit("piano:chordChanged", {
+        chord: data.frequencies || [],
+        noteNames: (data.frequencies || []).map(f => this.frequencyToNoteName(f)),
+        timestamp: Date.now(),
+        source: "bankLoad"
+      });
     });
   }
 
