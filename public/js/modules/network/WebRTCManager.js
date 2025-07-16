@@ -17,6 +17,7 @@ export class WebRTCManager {
     this.peers = new Map();
     this.pendingOffers = new Map();
     this.isInitialized = false;
+    this.isReady = false; // Ready state flag
     this.clientId = null; // Will be set during initialization
     this.enableDiagnosticLogs = false; // Set to true to enable WEBRTC-DIAG logs
   }
@@ -56,6 +57,7 @@ export class WebRTCManager {
     });
 
     this.isInitialized = true;
+    this.isReady = true; // Set ready state after initialization
 
     if (window.Logger) {
       window.Logger.log(
@@ -327,7 +329,8 @@ export class WebRTCManager {
       `[WEBRTC-DIAG] About to add datachannel listener for ${peerId}`,
     );
 
-    peerData._dataChannelHandler = (event) => {
+    // Use direct assignment instead of addEventListener to ensure it's not overwritten
+    pc.ondatachannel = (event) => {
       console.log(`[WEBRTC-CRITICAL] datachannel event FIRED for ${peerId}!`, {
         channelLabel: event.channel.label,
         channelId: event.channel.id,
@@ -350,8 +353,6 @@ export class WebRTCManager {
         );
       this.handleDataChannel(event.channel, peerId, peerData);
     };
-
-    pc.addEventListener("datachannel", peerData._dataChannelHandler);
     console.log(
       `[WEBRTC-DIAG] datachannel listener added for ${peerId}. Total listeners: ${pc.listenerCount ? pc.listenerCount("datachannel") : "unknown"}`,
     );
@@ -427,6 +428,16 @@ export class WebRTCManager {
    */
   async handleOffer(message) {
     const { source: peerId, data: offer } = message;
+    
+    // Check if WebRTC is ready
+    if (!this.isReady) {
+      if (window.Logger) {
+        window.Logger.log(`WebRTC not ready, delaying offer handling for ${peerId}`, "connections");
+      }
+      // Retry after a short delay
+      setTimeout(() => this.handleOffer(message), 500);
+      return;
+    }
 
     // Debug logging
     if (this.enableDiagnosticLogs)
@@ -496,10 +507,19 @@ export class WebRTCManager {
           `[WEBRTC-DIAG] Peer ${peerId}: In handleOffer, pc.signalingState BEFORE setRemoteDescription: ${pc.signalingState}`,
         );
       // Data channels will be created by the remote peer (synth) and handled by the 'datachannel' event listener.
+      
+      // Verify the datachannel listener is set before setting remote description
+      if (!pc.ondatachannel) {
+        console.error(`[WEBRTC-ERROR] No datachannel listener set for ${peerId}! This will cause datachannel events to be missed.`);
+        if (window.Logger) {
+          window.Logger.log(`[WEBRTC-ERROR] No datachannel listener set for ${peerId}`, "error");
+        }
+      }
 
       // Set remote description
       try {
         await pc.setRemoteDescription(offer); // Listener for 'datachannel' should be active before this
+        console.log(
           `[WEBRTC-CRITICAL] setRemoteDescription completed for ${peerId}. Waiting for datachannel event...`,
         );
         if (this.enableDiagnosticLogs)
