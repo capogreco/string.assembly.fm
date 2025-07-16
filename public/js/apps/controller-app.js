@@ -196,6 +196,15 @@ function initializeProgramManager() {
     Logger.log(`Bank ${data.bankId} cleared`, "lifecycle");
   });
 
+  // Listen for banks loaded from storage to update UI
+  eventBus.on("programState:banksLoaded", (data) => {
+    Logger.log(`Banks loaded from storage: ${data.bankCount} banks`, "lifecycle");
+    // Update bank display if the function exists (it will exist after initializeUI)
+    if (typeof updateBankDisplay === 'function') {
+      updateBankDisplay();
+    }
+  });
+
   // Program management initialized
 }
 

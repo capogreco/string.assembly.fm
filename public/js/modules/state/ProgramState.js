@@ -600,14 +600,27 @@ export class ProgramState {
         appState.setNested('banking.metadata.lastModified', Date.now());
         
         // Banks loaded from storage
+        // Emit event to update UI
+        eventBus.emit('programState:banksLoaded', {
+          bankCount: banks.size
+        });
       } else {
         // Initialize empty banks
         appState.setNested('banking.banks', banks);
+        // Emit event even for empty banks to update UI
+        eventBus.emit('programState:banksLoaded', {
+          bankCount: 0
+        });
       }
     } catch (error) {
       Logger.log(`Failed to load banks: ${error}`, 'error');
       // Initialize empty banks on error
       appState.setNested('banking.banks', new Map());
+      // Emit event even on error to update UI
+      eventBus.emit('programState:banksLoaded', {
+        bankCount: 0,
+        error: error.message
+      });
     }
   }
   
