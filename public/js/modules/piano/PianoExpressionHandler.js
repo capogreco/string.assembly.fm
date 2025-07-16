@@ -38,17 +38,17 @@ export class PianoExpressionHandler {
     // Expression colors
     this.EXPRESSION_COLORS = {
       none: "#9b59b6", // Purple for chord notes without expression
-      trill: "#3498db", // Blue
       vibrato: "#e74c3c", // Red
-      tremolo: "#f39c12", // Orange
+      tremolo: "#f1c40f", // Yellow (corrected from orange)
+      trill: "#3498db", // Blue
     };
 
     // Lighter shades for related notes (trill targets, etc)
     this.EXPRESSION_COLORS_LIGHT = {
       none: "#c39bd3",
-      trill: "#85c1e2",
       vibrato: "#f1948a",
-      tremolo: "#f8c471",
+      tremolo: "#f7dc6f", // Light yellow (corrected)
+      trill: "#85c1e2",
     };
 
     this.isInitialized = false;
@@ -742,6 +742,11 @@ export class PianoExpressionHandler {
 
     // Clear drag feedback by re-rendering
     this.render();
+    
+    // Ensure visual updates persist after gesture (small delay to let Parts update)
+    setTimeout(() => {
+      this.updateKeyVisuals();
+    }, 50);
   }
 
   /**
@@ -1204,12 +1209,12 @@ export class PianoExpressionHandler {
       return;
     }
 
-    // Expression colors to match Active Program display
+    // Expression colors to match piano keyboard highlighting
     const EXPRESSION_COLORS = {
-      none: "#60a5fa",    // Light blue
-      vibrato: "#f87171", // Light red
-      tremolo: "#4ade80", // Light green
-      trill: "#fbbf24",   // Amber
+      none: "#9b59b6",    // Purple
+      vibrato: "#e74c3c", // Red
+      tremolo: "#f1c40f", // Yellow
+      trill: "#3498db",   // Blue
     };
 
     // Get current parts to match exact notation
