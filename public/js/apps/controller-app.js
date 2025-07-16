@@ -752,10 +752,10 @@ function updateActiveProgramDisplay() {
 
   // Define expression colors locally (optimized for dark mode)
   const EXPRESSION_COLORS = {
-    none: "#60a5fa", // Light blue
-    vibrato: "#f87171", // Light red
-    tremolo: "#4ade80", // Light green
-    trill: "#fbbf24", // Amber (instead of yellow for better visibility)
+    none: "#9b59b6", // Purple (to match piano keyboard)
+    vibrato: "#e74c3c", // Red
+    tremolo: "#f1c40f", // Yellow  
+    trill: "#3498db", // Blue
   };
 
   let chordDisplay = '<span style="color: #64748b;">No chord</span>';

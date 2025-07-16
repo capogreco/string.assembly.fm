@@ -492,10 +492,7 @@ export class PianoKeyboard {
       }
     });
 
-    // Update expression handler after range styling
-    if (this.expressionHandler) {
-      this.expressionHandler.updateKeyVisuals();
-    }
+    // Range styling complete - renderParts() will handle expression colors when needed
 
     if (window.Logger) {
       window.Logger.log(

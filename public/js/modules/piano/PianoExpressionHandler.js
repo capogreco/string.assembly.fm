@@ -714,12 +714,7 @@ export class PianoExpressionHandler {
       distance < this.DRAG_THRESHOLD &&
       !this.chordNotes.has(this.dragStartNote)
     ) {
-      // If it was a click that REMOVED a note, expression is null.
-      // Ensure the visual is restored to default if it wasn't handled by removeFromChord's updateKeyVisuals call.
-      // This path (click that removed) should have already updated visuals via removeFromChord -> pianoKeyboard.remove -> event -> handleChordChange -> updateKeyVisuals
-      // So, direct update here might be redundant unless there's a timing issue.
-      // For safety, ensure its visual is default if no expression was set and it's not in chordNotes.
-      this.updateKeyVisual(this.dragStartElement, this.dragStartNote);
+      // Note was removed - renderParts() will handle visual updates automatically
     }
 
     // Clean up
@@ -735,18 +730,18 @@ export class PianoExpressionHandler {
       this.currentHoverElement = null;
     }
 
+    // Update chordNotes immediately if adding a note (before clearing dragStartNote)
+    if (expression && this.dragStartNote && !this.chordNotes.has(this.dragStartNote)) {
+      this.chordNotes.add(this.dragStartNote);
+    }
+
     this.potentialExpressionType = null; // Reset potential type
     this.dragStartNote = null;
     this.dragStartFrequency = null;
     this.dragStartElement = null;
-
-    // Clear drag feedback by re-rendering
-    this.render();
     
-    // Ensure visual updates persist after gesture (small delay to let Parts update)
-    setTimeout(() => {
-      this.updateKeyVisuals();
-    }, 50);
+    // Clear drag feedback by re-rendering canvas overlays
+    this.render();
   }
 
   /**
@@ -1085,23 +1080,17 @@ export class PianoExpressionHandler {
       (element.classList.contains("white-key") ? "white" : "#333");
 
     if (this.chordNotes.has(note)) {
-      // Note is in chord - get expression from Parts data for consistency
+      // Note is in chord - get expression from Parts data (single source of truth)
       const frequency = this.pianoKeyboard.noteNameToFrequency(note);
       const partManager = this.pianoKeyboard.appState.get("partManager");
       let expression = { type: "none" };
       
-      // Get expression from current Parts
       if (partManager) {
         const currentParts = partManager.getParts();
         const part = currentParts.find(p => Math.abs(p.frequency - frequency) < 0.1);
         if (part && part.expression) {
           expression = part.expression;
         }
-      }
-      
-      // Fallback to local expressions if Parts lookup fails
-      if (expression.type === "none") {
-        expression = this.expressions.get(note) || { type: "none" };
       }
       
       const relation = this.relatedNotes.get(note);
@@ -1118,11 +1107,6 @@ export class PianoExpressionHandler {
           if (mainPart && mainPart.expression) {
             mainExpression = mainPart.expression;
           }
-        }
-        
-        // Fallback to local expressions
-        if (mainExpression.type === "none") {
-          mainExpression = this.expressions.get(mainNote) || { type: "none" };
         }
         
         color = this.EXPRESSION_COLORS_LIGHT[mainExpression.type];
