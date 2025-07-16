@@ -140,8 +140,8 @@ export class WebRTCManager {
       currentConfig.iceServers = [{ urls: "stun:stun.l.google.com:19302" }];
     }
 
-    const pc = new RTCPeerConnection({ 
-      iceServers: currentConfig.iceServers 
+    const pc = new RTCPeerConnection({
+      iceServers: currentConfig.iceServers,
     });
 
     // Set peerId for SDP logging
@@ -430,11 +430,14 @@ export class WebRTCManager {
    */
   async handleOffer(message) {
     const { source: peerId, data: offer } = message;
-    
+
     // Check if WebRTC is ready
     if (!this.isReady) {
       if (window.Logger) {
-        window.Logger.log(`WebRTC not ready, delaying offer handling for ${peerId}`, "connections");
+        window.Logger.log(
+          `WebRTC not ready, delaying offer handling for ${peerId}`,
+          "connections",
+        );
       }
       // Retry after a short delay
       setTimeout(() => this.handleOffer(message), 500);
@@ -468,7 +471,7 @@ export class WebRTCManager {
 
       this.handlePeerDisconnection(peerId);
       // Add a longer delay to ensure cleanup is complete, especially for remote connections
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      // await new Promise((resolve) => setTimeout(resolve, 500));
     }
 
     try {
@@ -509,12 +512,17 @@ export class WebRTCManager {
           `[WEBRTC-DIAG] Peer ${peerId}: In handleOffer, pc.signalingState BEFORE setRemoteDescription: ${pc.signalingState}`,
         );
       // Data channels will be created by the remote peer (synth) and handled by the 'datachannel' event listener.
-      
+
       // Verify the datachannel listener is set before setting remote description
       if (!pc.ondatachannel) {
-        console.error(`[WEBRTC-ERROR] No datachannel listener set for ${peerId}! This will cause datachannel events to be missed.`);
+        console.error(
+          `[WEBRTC-ERROR] No datachannel listener set for ${peerId}! This will cause datachannel events to be missed.`,
+        );
         if (window.Logger) {
-          window.Logger.log(`[WEBRTC-ERROR] No datachannel listener set for ${peerId}`, "error");
+          window.Logger.log(
+            `[WEBRTC-ERROR] No datachannel listener set for ${peerId}`,
+            "error",
+          );
         }
       }
 
