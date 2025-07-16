@@ -80,6 +80,35 @@ export class PartManager {
     
     Logger.log(`Set ${partInstances.length} parts`, 'parts');
   }
+
+  /**
+   * Set parts directly without events or sync tracking (for bank loading)
+   * @param {Part[]|Object[]} parts - Array of Part objects or plain objects
+   */
+  setPartsDirectly(parts) {
+    // Validate and convert parts
+    const validParts = parts.filter(p => p && p.frequency);
+    const partInstances = validParts.map(p => {
+      if (p instanceof Part) {
+        return p;
+      } else {
+        return Part.fromObject(p);
+      }
+    });
+    
+    // Store in app state
+    const plainParts = partInstances.map(p => p.toObject());
+    this.appState.setNested('performance.currentProgram.parts', plainParts);
+    
+    // Update legacy frequency array
+    const frequencies = partInstances.map(p => p.frequency);
+    this.appState.setNested('performance.currentProgram.chord.frequencies', frequencies);
+    
+    // Redistribute parts to synths (no events)
+    this.redistributePartsNew();
+    
+    Logger.log(`Set ${partInstances.length} parts directly (bank load)`, 'parts');
+  }
   
   /**
    * Add a part to the chord

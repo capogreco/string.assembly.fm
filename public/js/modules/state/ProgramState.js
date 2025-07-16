@@ -421,99 +421,56 @@ export class ProgramState {
       return false;
     }
     
-    // Set as current program
+    Logger.log(`Loading program from bank ${bankId}`, 'lifecycle');
+    
+    // 1. Set as current program
     this.currentProgram = program.clone();
     
-    // Loading program from bank
-    
-    // Apply to UI (transition parameters will be skipped)
+    // 2. Update UI directly (no events)
     this.applyToUI();
     
-    // Emit events for both new and old systems during migration
+    // 3. Update PartManager directly (no events)
+    const partManager = appState.get('partManager');
+    if (partManager) {
+      if (this.currentProgram.parts && this.currentProgram.parts.length > 0) {
+        // New paradigm: use parts directly
+        partManager.setPartsDirectly(this.currentProgram.parts);
+        Logger.log(`Loaded ${this.currentProgram.parts.length} parts from bank ${bankId}`, 'lifecycle');
+      } else if (this.currentProgram.chord.frequencies && this.currentProgram.chord.frequencies.length > 0) {
+        // Old paradigm: convert chord + expressions to parts
+        const frequencies = this.currentProgram.chord.frequencies;
+        const expressions = this.currentProgram.chord.expressions || {};
+        
+        // Create parts from frequencies and expressions
+        const parts = frequencies.map(freq => {
+          const noteName = this.frequencyToNoteName(freq);
+          const expression = expressions[noteName] || { type: 'none' };
+          return { frequency: freq, expression: expression };
+        });
+        
+        partManager.setPartsDirectly(parts);
+        Logger.log(`Migrated ${frequencies.length} frequencies + ${Object.keys(expressions).length} expressions to parts`, 'lifecycle');
+      } else {
+        // Empty bank
+        partManager.setPartsDirectly([]);
+        Logger.log(`Bank ${bankId} is empty`, 'lifecycle');
+      }
+    }
+    
+    // 4. Update PianoKeyboard directly (no events)
+    const pianoKeyboard = appState.get('pianoKeyboard');
+    if (pianoKeyboard) {
+      pianoKeyboard.setChordDirectly(this.currentProgram.chord.frequencies || []);
+      pianoKeyboard.setExpressionsDirectly(this.currentProgram.chord.expressions || {});
+    }
+    
+    // Emit single completion event
     eventBus.emit('programState:bankLoaded', {
       bankId,
       program: this.currentProgram
     });
     
-    // Update PartManager's internal state (but don't send to synths)
-    const partManager = appState.get('partManager');
-    if (partManager) {
-      // Always clear existing parts first
-      partManager.setParts([]);
-      
-      // Check if program has parts (new paradigm)
-      if (this.currentProgram.parts && this.currentProgram.parts.length > 0) {
-        // Load parts directly (new paradigm)
-        Logger.log(`Loading ${this.currentProgram.parts.length} parts from bank ${bankId}`, 'lifecycle');
-        partManager.setParts(this.currentProgram.parts);
-        
-        // Emit event to update the display
-        eventBus.emit('parts:updated', { source: 'bankLoad' });
-      } else if (this.currentProgram.chord.frequencies && this.currentProgram.chord.frequencies.length > 0) {
-        // Fallback to old format: chord.frequencies + chord.expressions
-        const bankExpressions = this.currentProgram.chord.expressions || {};
-        
-        // Update chord - this will create new part assignments
-        partManager.setChord([...this.currentProgram.chord.frequencies]);
-        
-        // Apply expressions to the newly created parts
-        if (Object.keys(bankExpressions).length > 0) {
-          // This is an old-format bank with chord.expressions
-          Object.entries(bankExpressions).forEach(([noteName, expression]) => {
-            partManager.setNoteExpression(noteName, expression);
-          });
-          Logger.log(`Migrated ${Object.keys(bankExpressions).length} expressions from old bank format`, 'lifecycle');
-        }
-        
-        Logger.log(`Updated PartManager state from old format: ${this.currentProgram.chord.frequencies.length} notes`, 'lifecycle');
-      } else {
-        Logger.log(`Bank ${bankId} has no parts or frequencies`, 'lifecycle');
-      }
-    }
-    
-    // Update PianoKeyboard's chord state directly first
-    const pianoKeyboard = appState.get('pianoKeyboard');
-    if (pianoKeyboard) {
-      // Clear and set the chord
-      pianoKeyboard.currentChord.clear();
-      this.currentProgram.chord.frequencies.forEach(freq => {
-        pianoKeyboard.currentChord.add(freq);
-      });
-    }
-    
-    // Emit chord:changed event for piano keyboard with flag to indicate bank load
-    eventBus.emit('chord:changed', {
-      frequencies: this.currentProgram.chord.frequencies,
-      noteNames: this.currentProgram.chord.frequencies.map(f => this.frequencyToNoteName(f)),
-      fromBankLoad: true  // Flag to prevent automatic redistribution
-    });
-    
-    // Restore expressions to PianoKeyboard
-    if (pianoKeyboard && pianoKeyboard.expressionHandler && partManager) {
-      // Build expressions from part assignments
-      const expressions = {};
-      for (const [synthId, assignment] of partManager.synthAssignments) {
-        const noteName = partManager.frequencyToNoteName(assignment.frequency);
-        if (assignment.expression && assignment.expression.type !== "none") {
-          expressions[noteName] = assignment.expression;
-        }
-      }
-      
-      if (Object.keys(expressions).length > 0) {
-        Logger.log(`Restoring expressions to PianoKeyboard: ${JSON.stringify(expressions)}`, 'lifecycle');
-        pianoKeyboard.expressionHandler.restoreExpressions(expressions);
-      } else {
-        // Clear any existing expressions when loading a bank with no expressions
-        Logger.log(`Clearing expressions from PianoKeyboard (bank has none)`, 'lifecycle');
-        pianoKeyboard.expressionHandler.restoreExpressions({});
-      }
-      
-      // Update visual display and chord display after all expression work is complete
-      pianoKeyboard.expressionHandler.updateKeyVisuals();
-      pianoKeyboard.expressionHandler.updateChordDisplay();
-    }
-    
-    Logger.log(`Loaded program from bank ${bankId}`, 'lifecycle');
+    Logger.log(`Successfully loaded program from bank ${bankId}`, 'lifecycle');
     return true;
   }
   

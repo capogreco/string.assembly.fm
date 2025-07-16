@@ -790,6 +790,58 @@ export class PianoKeyboard {
   }
 
   /**
+   * Set chord directly without events (for bank loading)
+   * @param {number[]} frequencies - Array of frequencies
+   */
+  setChordDirectly(frequencies) {
+    // Clear current chord
+    this.currentChord.clear();
+    
+    // Add new frequencies
+    if (frequencies && Array.isArray(frequencies)) {
+      frequencies.forEach(freq => {
+        this.currentChord.add(freq);
+      });
+    }
+    
+    // Update visual display directly
+    if (this.expressionHandler) {
+      this.expressionHandler.updateKeyVisuals();
+    }
+    
+    if (window.Logger) {
+      window.Logger.log(`PianoKeyboard chord set directly: ${frequencies.length} notes`, "lifecycle");
+    }
+  }
+
+  /**
+   * Set expressions directly without events (for bank loading)
+   * @param {Object} expressions - Object mapping note names to expressions
+   */
+  setExpressionsDirectly(expressions) {
+    if (this.expressionHandler) {
+      // Clear existing expressions without events
+      this.expressionHandler.expressions.clear();
+      this.expressionHandler.relatedNotes.clear();
+      
+      // Set new expressions directly
+      if (expressions && typeof expressions === 'object') {
+        Object.entries(expressions).forEach(([noteName, expression]) => {
+          this.expressionHandler.expressions.set(noteName, expression);
+        });
+      }
+      
+      // Update visuals and chord display
+      this.expressionHandler.updateKeyVisuals();
+      this.expressionHandler.updateChordDisplay();
+    }
+    
+    if (window.Logger) {
+      window.Logger.log(`PianoKeyboard expressions set directly: ${Object.keys(expressions || {}).length} expressions`, "lifecycle");
+    }
+  }
+
+  /**
    * Cleanup and destroy
    */
   destroy() {
