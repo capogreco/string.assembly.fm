@@ -382,16 +382,6 @@ export class PianoKeyboard {
         this.expressionHandler.updateKeyVisuals();
       }
       
-      // Emit piano:chordChanged to notify other components (like chord display)
-      // but only if this is from bank loading to avoid conflicts with normal operation
-      if (data.fromBankLoad) {
-        this.eventBus.emit("piano:chordChanged", {
-          chord: data.frequencies || [],
-          noteNames: (data.frequencies || []).map(f => this.frequencyToNoteName(f)),
-          timestamp: Date.now(),
-          source: "bankLoad"
-        });
-      }
     });
   }
 

@@ -479,6 +479,12 @@ export class ProgramState {
       this.currentProgram.chord.frequencies.forEach(freq => {
         pianoKeyboard.currentChord.add(freq);
       });
+      
+      // Update visual display and chord display directly
+      if (pianoKeyboard.expressionHandler) {
+        pianoKeyboard.expressionHandler.updateKeyVisuals();
+        pianoKeyboard.expressionHandler.updateChordDisplay();
+      }
     }
     
     // Emit chord:changed event for piano keyboard with flag to indicate bank load
