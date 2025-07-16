@@ -23,9 +23,9 @@ export class PianoKeyboard {
     this.appState = appState;
     this.isInitialized = false;
     
-    // Piano configuration
-    this.startNote = 48; // C3
-    this.endNote = 84;   // C6
+    // Piano configuration - will be set based on instrument
+    this.startNote = 48; // Default C3
+    this.endNote = 84;   // Default C6
     this.octaves = 3;
     
     // DOM elements
@@ -62,6 +62,9 @@ export class PianoKeyboard {
     this.bodyTypeSelect = document.getElementById("bodyType");
     if (this.bodyTypeSelect) {
       this.initializeBodyType();
+    } else {
+      // Use default range if no body type selector
+      this.updatePianoRange("0"); // Default to violin
     }
 
     // Create piano keyboard with indicator zones
@@ -103,12 +106,36 @@ export class PianoKeyboard {
     const pianoContainer = document.createElement("div");
     pianoContainer.style.position = "relative";
     pianoContainer.style.width = "100%";
-    pianoContainer.style.height = "200px";
+    
+    // Calculate key dimensions first to determine appropriate height
+    const whiteKeyCount = this.countWhiteKeys(this.startNote, this.endNote);
+    const containerWidth = this.container.clientWidth || 800;
+    
+    // Calculate white key width
+    let whiteKeyWidth = containerWidth / whiteKeyCount;
+    
+    // Maintain reasonable aspect ratio (keys should be about 6:1 height:width)
+    const idealAspectRatio = 6;
+    let height = Math.min(200, whiteKeyWidth * idealAspectRatio);
+    height = Math.max(120, height); // But not too small
+    
+    // If keys would be too wide, constrain width and center the piano
+    const maxKeyWidth = 35;
+    if (whiteKeyWidth > maxKeyWidth) {
+      whiteKeyWidth = maxKeyWidth;
+      const pianoWidth = whiteKeyWidth * whiteKeyCount;
+      const leftMargin = (containerWidth - pianoWidth) / 2;
+      pianoContainer.style.paddingLeft = `${leftMargin}px`;
+      pianoContainer.style.paddingRight = `${leftMargin}px`;
+    }
+    
+    const width = whiteKeyWidth * whiteKeyCount;
+    
+    // Update grid container height
+    gridContainer.style.gridTemplateRows = `40px ${height}px 40px`;
+    pianoContainer.style.height = `${height}px`;
     
     // Create SVG for piano keys
-    const width = this.container.clientWidth || 800;
-    const height = 200;
-    
     this.svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
     this.svg.setAttribute("width", width);
     this.svg.setAttribute("height", height);
@@ -124,10 +151,6 @@ export class PianoKeyboard {
     this.bottomIndicators.style.width = "100%";
     this.bottomIndicators.style.height = "40px";
     gridContainer.appendChild(this.bottomIndicators);
-
-    // Calculate key dimensions
-    const whiteKeyCount = this.countWhiteKeys(this.startNote, this.endNote);
-    const whiteKeyWidth = width / whiteKeyCount;
     const blackKeyWidth = whiteKeyWidth * 0.6;
     const blackKeyHeight = height * 0.65;
 
@@ -475,6 +498,25 @@ export class PianoKeyboard {
           // Add expression indicator
           this.addExpressionIndicator(keyElement, part);
           
+          // If this is a trill, also highlight the target note
+          if (part.expression?.type === 'trill' && part.expression.targetNote) {
+            const targetFreq = this.noteNameToFrequency(part.expression.targetNote);
+            let targetElement = this.keys.get(targetFreq);
+            if (!targetElement) {
+              // Find by approximation
+              for (const [freq, elem] of this.keys) {
+                if (Math.abs(freq - targetFreq) < 0.1) {
+                  targetElement = elem;
+                  break;
+                }
+              }
+            }
+            if (targetElement) {
+              // Use a paler shade of blue for the target
+              targetElement.setAttribute("fill", "#87CEEB"); // Sky blue
+            }
+          }
+          
           Logger.log(`Set key ${part.frequency}Hz to color ${color} (${part.expression?.type})`, "piano");
         } else {
           Logger.log(`Could not find key element for frequency ${part.frequency}Hz`, "warn");
@@ -482,31 +524,8 @@ export class PianoKeyboard {
       });
     }
 
-    // Update range styling
-    this.updateKeyRangeStyles();
   }
 
-  /**
-   * Update key range styles based on body type
-   */
-  updateKeyRangeStyles() {
-    const bodyType = this.bodyTypeSelect?.value || "mando-guitar";
-    const instrument = this.getInstrumentRange(bodyType);
-
-    this.keys.forEach((keyElement, frequency) => {
-      const midi = this.frequencyToMidi(frequency);
-      
-      if (midi < instrument.low || midi > instrument.high) {
-        // Out of range - gray out
-        keyElement.classList.add("out-of-range");
-        keyElement.style.opacity = "0.3";
-      } else {
-        // In range
-        keyElement.classList.remove("out-of-range");
-        keyElement.style.opacity = "1";
-      }
-    });
-  }
 
   /**
    * Initialize body type from DOM
@@ -514,33 +533,71 @@ export class PianoKeyboard {
   initializeBodyType() {
     const currentBodyType = this.bodyTypeSelect.value;
     this.appState.set("bodyType", currentBodyType);
+    
+    // Set initial piano range
+    this.updatePianoRange(currentBodyType);
 
     // Listen for changes
     this.bodyTypeSelect.addEventListener("change", (e) => {
       const newBodyType = e.target.value;
       this.appState.set("bodyType", newBodyType);
-      this.updateKeyRangeStyles();
+      
+      // Update piano range and recreate keyboard
+      this.updatePianoRange(newBodyType);
+      this.createPianoKeyboard();
+      
+      // Re-render current parts
+      const partManager = this.appState.get("partManager");
+      if (partManager) {
+        const parts = partManager.getParts();
+        this.renderParts(parts);
+      }
     });
+  }
+  
+  /**
+   * Update piano range based on instrument
+   */
+  updatePianoRange(bodyType) {
+    const range = this.getInstrumentRange(bodyType);
+    
+    // Add a bit of padding to show context
+    this.startNote = Math.max(0, range.low - 2);
+    this.endNote = Math.min(127, range.high + 2);
+    
+    // Round to octave boundaries for visual clarity
+    // Find the C below the start note
+    while (this.startNote % 12 !== 0 && this.startNote > 0) {
+      this.startNote--;
+    }
+    // Find the B above the end note
+    while (this.endNote % 12 !== 11 && this.endNote < 127) {
+      this.endNote++;
+    }
+    
+    // Special handling for violin to start from G
+    if (bodyType === "0") { // Violin
+      // Start from G3 (MIDI 55) instead of C3
+      this.startNote = 55; // G3
+      // To get roughly 5 octaves like the others, go up to around B7
+      this.endNote = 107;  // B7
+    }
+    
+    Logger.log(`Piano range updated for ${range.name}: MIDI ${this.startNote}-${this.endNote}`, "piano");
   }
 
   /**
    * Get instrument range
    */
   getInstrumentRange(bodyType) {
-    // These should be MIDI note numbers
-    // Violin: G3 (55) to A7 (103)
-    // Viola: C3 (48) to G6 (91) 
-    // Cello: C2 (36) to C6 (76)
-    // Bass: E1 (28) to G4 (67)
+    // MIDI note numbers based on http://hyperphysics.phy-astr.gsu.edu/hbase/Music/orchins.html
+    // Note: Using practical playing ranges, not theoretical extremes
     const ranges = {
-      "0": { name: "Violin", low: 55, high: 103 },      // G3 to A7
-      "1": { name: "Viola", low: 48, high: 91 },        // C3 to G6
-      "2": { name: "Cello", low: 36, high: 76 },        // C2 to C6
-      "3": { name: "Bass", low: 28, high: 67 },         // E1 to G4
-      "4": { name: "Mando-Guitar", low: 55, high: 81 }, // G3 to A5
-      "5": { name: "Octave Mando", low: 43, high: 81 }  // G2 to A5
+      "0": { name: "Violin", low: 55, high: 91 },      // G3 to G6 (36 notes)
+      "1": { name: "Viola", low: 48, high: 84 },       // C3 to C6 (36 notes)
+      "2": { name: "Cello", low: 36, high: 72 }        // C2 to C5 (36 notes)
     };
-    return ranges[bodyType] || ranges["4"];
+    return ranges[bodyType] || ranges["0"];
   }
 
   /**
@@ -590,75 +647,74 @@ export class PianoKeyboard {
         // Add indicator above the key
         const vibratoDiv = document.createElement('div');
         vibratoDiv.style.position = 'absolute';
-        vibratoDiv.style.left = `${keyMidX - 15}px`;
+        vibratoDiv.style.left = `${x + 2}px`; // Align with key left edge plus small padding
         vibratoDiv.style.top = '10px';
-        vibratoDiv.style.width = '30px';
-        vibratoDiv.style.height = '20px';
+        vibratoDiv.style.width = `${width - 4}px`; // Fit within key width with padding
+        vibratoDiv.style.height = '25px';
         vibratoDiv.style.pointerEvents = 'none';
+        vibratoDiv.style.textAlign = 'center';
         
-        // Create wavy line using CSS
-        vibratoDiv.style.borderBottom = `3px solid ${EXPRESSION_COLORS.vibrato}`;
-        vibratoDiv.style.borderRadius = '50%';
-        vibratoDiv.style.transform = 'rotate(-5deg)';
+        // Create sine wave SVG with depth indicator
+        const depth = Math.round((part.expression.depth || 0.01) * 100);
+        const amplitude = 2 + (depth / 30); // Scale amplitude based on depth
+        const waveWidth = Math.max(width - 4, 20); // Ensure minimum width
         
-        // Add animation
-        vibratoDiv.style.animation = 'vibrato-wave 0.5s ease-in-out infinite alternate';
+        vibratoDiv.innerHTML = `
+          <svg width="${waveWidth}" height="12" style="display: block; margin: 0 auto;">
+            <path d="M 0 6 Q ${waveWidth * 0.25} ${6 - amplitude} ${waveWidth * 0.5} 6 T ${waveWidth} 6" 
+                  stroke="${EXPRESSION_COLORS.vibrato}" 
+                  stroke-width="2" 
+                  fill="none"/>
+          </svg>
+          <div style="
+            font-size: 8px;
+            color: ${EXPRESSION_COLORS.vibrato};
+            font-weight: bold;
+            margin-top: 1px;
+          ">${depth}%</div>
+        `;
         
         this.topIndicators.appendChild(vibratoDiv);
-        
-        // Add CSS animation if not already present
-        if (!document.getElementById('piano-animations')) {
-          const style = document.createElement('style');
-          style.id = 'piano-animations';
-          style.textContent = `
-            @keyframes vibrato-wave {
-              from { transform: rotate(-5deg) translateY(0); }
-              to { transform: rotate(5deg) translateY(-3px); }
-            }
-          `;
-          document.head.appendChild(style);
-        }
         break;
         
       case 'tremolo':
         // Add indicators below the key
         const tremoloDiv = document.createElement('div');
         tremoloDiv.style.position = 'absolute';
-        tremoloDiv.style.left = `${keyMidX - 15}px`;
-        tremoloDiv.style.top = '10px';
-        tremoloDiv.style.width = '30px';
-        tremoloDiv.style.height = '20px';
+        tremoloDiv.style.left = `${x + 2}px`; // Align with key left edge plus small padding
+        tremoloDiv.style.top = '5px';
+        tremoloDiv.style.width = `${width - 4}px`; // Fit within key width with padding
+        tremoloDiv.style.height = '30px';
         tremoloDiv.style.display = 'flex';
-        tremoloDiv.style.justifyContent = 'space-around';
+        tremoloDiv.style.flexDirection = 'column';
         tremoloDiv.style.alignItems = 'center';
         tremoloDiv.style.pointerEvents = 'none';
         
-        // Create three vertical lines
-        for (let i = 0; i < 3; i++) {
-          const line = document.createElement('div');
-          line.style.width = '2px';
-          line.style.height = '15px';
-          line.style.backgroundColor = EXPRESSION_COLORS.tremolo;
-          line.style.animation = `tremolo-pulse ${0.3 + i * 0.1}s ease-in-out infinite`;
-          tremoloDiv.appendChild(line);
-        }
+        const articulation = Math.round((part.expression.articulation || 0.8) * 100);
+        const dashLength = 2 + (articulation / 60); // Scale dash length based on articulation
+        const gapLength = 1.5 + ((100 - articulation) / 60); // Smaller gaps for higher articulation
+        const lineWidth = Math.max(width - 4, 20); // Ensure minimum width
         
+        // Create perforated line SVG
+        const lineContainer = document.createElement('div');
+        lineContainer.innerHTML = `
+          <svg width="${lineWidth}" height="12" style="display: block; margin: 0 auto;">
+            <line x1="0" y1="6" x2="${lineWidth}" y2="6" 
+                  stroke="${EXPRESSION_COLORS.tremolo}" 
+                  stroke-width="2"
+                  stroke-dasharray="${dashLength} ${gapLength}"
+                  opacity="${0.7 + (articulation / 300)}"/>
+          </svg>
+          <div style="
+            font-size: 8px;
+            color: ${EXPRESSION_COLORS.tremolo};
+            font-weight: bold;
+            margin-top: 1px;
+          ">${articulation}%</div>
+        `;
+        
+        tremoloDiv.appendChild(lineContainer);
         this.bottomIndicators.appendChild(tremoloDiv);
-        
-        // Add CSS animation if not already present
-        if (!document.querySelector('#piano-animations')?.textContent.includes('tremolo-pulse')) {
-          const style = document.getElementById('piano-animations') || document.createElement('style');
-          style.id = 'piano-animations';
-          style.textContent += `
-            @keyframes tremolo-pulse {
-              0%, 100% { opacity: 0.3; transform: scaleY(0.7); }
-              50% { opacity: 1; transform: scaleY(1); }
-            }
-          `;
-          if (!document.getElementById('piano-animations')) {
-            document.head.appendChild(style);
-          }
-        }
         break;
         
       case 'trill':

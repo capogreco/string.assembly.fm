@@ -401,9 +401,8 @@ export class AppState {
             expressions: {}
           },
           harmonicSelections: this.#initializeHarmonicSelections(),
-          parts: {
-            assignments: new Map()
-          }
+          parts: [], // Array of Part objects (new paradigm)
+          partsAssignments: new Map() // Map<synthId, { frequency, expression, partId }>
         },
         activeProgram: null,
         transitions: {
