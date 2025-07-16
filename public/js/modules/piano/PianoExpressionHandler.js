@@ -1080,16 +1080,46 @@ export class PianoExpressionHandler {
       (element.classList.contains("white-key") ? "white" : "#333");
 
     if (this.chordNotes.has(note)) {
-      // Note is in chord - use expression color
-      const expression = this.expressions.get(note) || { type: "none" };
+      // Note is in chord - get expression from Parts data for consistency
+      const frequency = this.pianoKeyboard.noteNameToFrequency(note);
+      const partManager = this.pianoKeyboard.appState.get("partManager");
+      let expression = { type: "none" };
+      
+      // Get expression from current Parts
+      if (partManager) {
+        const currentParts = partManager.getParts();
+        const part = currentParts.find(p => Math.abs(p.frequency - frequency) < 0.1);
+        if (part && part.expression) {
+          expression = part.expression;
+        }
+      }
+      
+      // Fallback to local expressions if Parts lookup fails
+      if (expression.type === "none") {
+        expression = this.expressions.get(note) || { type: "none" };
+      }
+      
       const relation = this.relatedNotes.get(note);
       let color;
       if (relation) {
         // Use lighter shade for related notes
         const mainNote = relation.relatedTo;
-        const mainExpression = this.expressions.get(mainNote) || {
-          type: "none",
-        };
+        const mainFrequency = this.pianoKeyboard.noteNameToFrequency(mainNote);
+        let mainExpression = { type: "none" };
+        
+        if (partManager) {
+          const currentParts = partManager.getParts();
+          const mainPart = currentParts.find(p => Math.abs(p.frequency - mainFrequency) < 0.1);
+          if (mainPart && mainPart.expression) {
+            mainExpression = mainPart.expression;
+          }
+        }
+        
+        // Fallback to local expressions
+        if (mainExpression.type === "none") {
+          mainExpression = this.expressions.get(mainNote) || { type: "none" };
+        }
+        
         color = this.EXPRESSION_COLORS_LIGHT[mainExpression.type];
       } else {
         // Use full color for main notes
