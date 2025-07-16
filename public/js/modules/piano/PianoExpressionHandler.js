@@ -1170,56 +1170,64 @@ export class PianoExpressionHandler {
     if (!chordDisplay) return;
 
     if (this.chordNotes.size === 0) {
-      chordDisplay.textContent = "None";
+      chordDisplay.innerHTML = '<span style="color: #64748b;">None</span>';
       return;
     }
 
-    // In parts paradigm, get expressions from part assignments
+    // Expression colors to match Active Program display
+    const EXPRESSION_COLORS = {
+      none: "#60a5fa",    // Light blue
+      vibrato: "#f87171", // Light red
+      tremolo: "#4ade80", // Light green
+      trill: "#fbbf24",   // Amber
+    };
+
+    // Get current parts to match exact notation
     const partManager = this.pianoKeyboard.appState.get("partManager");
-    const expressionsFromParts = {};
+    const currentParts = partManager ? partManager.getParts() : [];
     
-    if (partManager && partManager.synthAssignments) {
-      for (const [synthId, assignment] of partManager.synthAssignments) {
-        const noteName = this.pianoKeyboard.frequencyToNoteName(assignment.frequency);
-        if (assignment.expression && assignment.expression.type !== "none") {
-          expressionsFromParts[noteName] = assignment.expression;
-        }
-      }
-    }
+    // Create frequency-to-part mapping
+    const partsByFreq = new Map();
+    currentParts.forEach(part => {
+      partsByFreq.set(part.frequency, part);
+    });
 
-    const chordParts = [];
-    for (const note of this.chordNotes) {
-      // First check parts, then fall back to local expressions
-      const expression = expressionsFromParts[note] || this.expressions.get(note);
-      const relation = this.relatedNotes.get(note);
-
-      if (relation && relation.type === "trill-target") {
-        // This is a trill target, don't show it separately
-        continue;
-      }
-
-      if (expression) {
-        switch (expression.type) {
+    const noteStrings = [];
+    
+    // Sort chord notes for consistent display
+    const sortedNotes = Array.from(this.chordNotes).sort((a, b) => a - b);
+    
+    for (const frequency of sortedNotes) {
+      const noteName = this.pianoKeyboard.frequencyToNoteName(frequency);
+      const part = partsByFreq.get(frequency);
+      
+      if (part && part.expression && part.expression.type !== "none") {
+        const expr = part.expression;
+        switch (expr.type) {
           case "vibrato":
-            const vibratoDepth = Math.round(expression.depth * 100);
-            chordParts.push(`${note}v${vibratoDepth}`);
+            const vibratoDepth = Math.round((expr.depth || 0.01) * 100);
+            noteStrings.push(`<span style="color: ${EXPRESSION_COLORS.vibrato};">${noteName}v${vibratoDepth}</span>`);
             break;
           case "tremolo":
-            const tremoloDepth = Math.round(expression.depth * 100);
-            chordParts.push(`${note}t${tremoloDepth}`);
+            const tremoloArticulation = Math.round((expr.articulation || 0.8) * 100);
+            noteStrings.push(`<span style="color: ${EXPRESSION_COLORS.tremolo};">${noteName}t${tremoloArticulation}</span>`);
             break;
           case "trill":
-            chordParts.push(`${note}(→${expression.targetNote})`);
+            const targetNote = expr.targetNote || this.pianoKeyboard.frequencyToNoteName(
+              frequency * Math.pow(2, (expr.interval || 2) / 12)
+            );
+            noteStrings.push(`<span style="color: ${EXPRESSION_COLORS.trill};">${noteName}(→${targetNote})</span>`);
             break;
           default:
-            chordParts.push(note);
+            noteStrings.push(`<span style="color: ${EXPRESSION_COLORS.none};">${noteName}</span>`);
         }
       } else {
-        chordParts.push(note);
+        // No expression - plain note
+        noteStrings.push(`<span style="color: ${EXPRESSION_COLORS.none};">${noteName}</span>`);
       }
     }
 
-    chordDisplay.textContent = chordParts.join(" ");
+    chordDisplay.innerHTML = noteStrings.join(" ");
   }
 
   /**
