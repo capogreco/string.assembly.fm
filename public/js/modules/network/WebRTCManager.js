@@ -471,21 +471,36 @@ export class WebRTCManager {
       window.Logger.log(`Received offer from ${peerId}`, "connections");
     }
 
-    // Check if we have an existing connection that might be stale
+    // Check if we have an existing connection
     if (this.peers.has(peerId)) {
       const existingPeerData = this.peers.get(peerId);
       const existingPc = existingPeerData.connection;
 
-      // If we're receiving a new offer, it likely means the peer restarted
-      // Close the old connection to ensure we create a fresh one
-      if (this.enableDiagnosticLogs)
-        console.log(
-          `[WEBRTC-DIAG] Peer ${peerId}: Received new offer while existing connection in state: ${existingPc.connectionState}. Closing old connection.`,
-        );
-
-      this.handlePeerDisconnection(peerId);
-      // Add a longer delay to ensure cleanup is complete, especially for remote connections
-      // await new Promise((resolve) => setTimeout(resolve, 500));
+      // Only tear down if the connection is actually failed or closed
+      // Don't tear down connections that are connecting/connected
+      if (existingPc.connectionState === 'failed' || 
+          existingPc.connectionState === 'closed' ||
+          existingPc.iceConnectionState === 'failed' ||
+          existingPc.iceConnectionState === 'closed') {
+        if (this.enableDiagnosticLogs)
+          console.log(
+            `[WEBRTC-DIAG] Peer ${peerId}: Tearing down failed/closed connection (${existingPc.connectionState}/${existingPc.iceConnectionState}) for new offer.`,
+          );
+        this.handlePeerDisconnection(peerId);
+      } else {
+        // Connection is still viable, ignore the new offer
+        if (this.enableDiagnosticLogs)
+          console.log(
+            `[WEBRTC-DIAG] Peer ${peerId}: Ignoring duplicate offer, existing connection is ${existingPc.connectionState}/${existingPc.iceConnectionState}`,
+          );
+        if (window.Logger) {
+          window.Logger.log(
+            `Ignoring duplicate offer from ${peerId}, connection is ${existingPc.connectionState}`,
+            "connections",
+          );
+        }
+        return;
+      }
     }
 
     try {
