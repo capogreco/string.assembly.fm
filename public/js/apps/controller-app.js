@@ -378,6 +378,9 @@ async function initializeUI() {
 
   // Initialize UI manager
   uiManager.initialize();
+  
+  // Store in app state for global access
+  appState.set("uiManager", uiManager);
 
   // Initialize parameter controls
   parameterControls.initialize();

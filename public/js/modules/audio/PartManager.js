@@ -124,6 +124,14 @@ export class PartManager {
     if (pianoKeyboard) {
       pianoKeyboard.renderParts(this.getParts());
     }
+    
+    // Update chord display
+    const uiManager = this.appState.get('uiManager');
+    if (uiManager && uiManager.updateChordDisplay) {
+      const parts = this.getParts();
+      const frequencies = parts.map(p => p.frequency);
+      uiManager.updateChordDisplay(frequencies);
+    }
   }
   
   /**

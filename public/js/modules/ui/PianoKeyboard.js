@@ -102,28 +102,41 @@ export class PianoKeyboard {
     const blackKeyWidth = whiteKeyWidth * 0.6;
     const blackKeyHeight = height * 0.65;
 
-    // Create keys
+    // Create white keys first
     let whiteKeyIndex = 0;
+    const keyData = [];
+    
     for (let midi = this.startNote; midi <= this.endNote; midi++) {
       const noteName = this.midiToNoteName(midi);
       const isBlack = noteName.includes("#");
       const frequency = this.midiToFrequency(midi);
 
-      if (isBlack) {
-        // Black key
-        const x = (whiteKeyIndex - 0.5) * whiteKeyWidth - blackKeyWidth / 2;
-        const rect = this.createKey(x, 0, blackKeyWidth, blackKeyHeight, "#333", noteName, frequency, true);
-        this.svg.appendChild(rect);
-        this.keys.set(frequency, rect);
-      } else {
+      if (!isBlack) {
         // White key
         const x = whiteKeyIndex * whiteKeyWidth;
         const rect = this.createKey(x, 0, whiteKeyWidth - 1, height, "white", noteName, frequency, false);
         this.svg.appendChild(rect);
         this.keys.set(frequency, rect);
+        keyData.push({ midi, whiteKeyIndex });
         whiteKeyIndex++;
       }
     }
+
+    // Create black keys on top
+    keyData.forEach((data, index) => {
+      const nextMidi = data.midi + 1;
+      if (nextMidi <= this.endNote) {
+        const noteName = this.midiToNoteName(nextMidi);
+        if (noteName.includes("#")) {
+          const frequency = this.midiToFrequency(nextMidi);
+          // Position between this white key and the next
+          const x = (data.whiteKeyIndex + 1) * whiteKeyWidth - blackKeyWidth / 2;
+          const rect = this.createKey(x, 0, blackKeyWidth, blackKeyHeight, "#333", noteName, frequency, true);
+          this.svg.appendChild(rect);
+          this.keys.set(frequency, rect);
+        }
+      }
+    });
 
     // Append SVG to container
     this.container.appendChild(this.svg);
@@ -397,13 +410,16 @@ export class PianoKeyboard {
    * Render parts (display current state)
    */
   renderParts(parts) {
-    console.log(`[PIANO] renderParts called with ${parts?.length || 0} parts`);
     Logger.log(`PianoKeyboard rendering ${parts?.length || 0} parts`, "lifecycle");
 
-    // First, reset all keys to their original colors
+    // First, reset all keys to their original colors and remove indicators
     this.keys.forEach((keyElement) => {
       const originalFill = keyElement.getAttribute("data-original-fill");
       keyElement.setAttribute("fill", originalFill);
+      
+      // Remove any existing expression indicators
+      const indicators = this.svg.querySelectorAll(`[data-key-freq="${keyElement.getAttribute('data-frequency')}"]`);
+      indicators.forEach(ind => ind.remove());
     });
 
     // Color keys based on parts
@@ -422,14 +438,13 @@ export class PianoKeyboard {
 
         if (keyElement) {
           const color = EXPRESSION_COLORS[part.expression?.type || "none"];
-          console.log(`[PIANO] Setting key ${part.frequency}Hz to ${color} for expression ${part.expression?.type}`);
           keyElement.setAttribute("fill", color);
-          // Double-check it was set
-          const newFill = keyElement.getAttribute("fill");
-          console.log(`[PIANO] Key fill is now: ${newFill}`);
+          
+          // Add expression indicator
+          this.addExpressionIndicator(keyElement, part);
+          
           Logger.log(`Set key ${part.frequency}Hz to color ${color} (${part.expression?.type})`, "piano");
         } else {
-          console.log(`[PIANO] ERROR: Could not find key element for frequency ${part.frequency}Hz`);
           Logger.log(`Could not find key element for frequency ${part.frequency}Hz`, "warn");
         }
       });
@@ -437,7 +452,6 @@ export class PianoKeyboard {
 
     // Update range styling
     this.updateKeyRangeStyles();
-    console.log("[PIANO] renderParts completed");
   }
 
   /**
@@ -481,15 +495,20 @@ export class PianoKeyboard {
    * Get instrument range
    */
   getInstrumentRange(bodyType) {
+    // These should be MIDI note numbers
+    // Violin: G3 (55) to A7 (103)
+    // Viola: C3 (48) to G6 (91) 
+    // Cello: C2 (36) to C6 (76)
+    // Bass: E1 (28) to G4 (67)
     const ranges = {
-      violin: { name: "Violin", low: 55, high: 103 },
-      viola: { name: "Viola", low: 48, high: 91 },
-      cello: { name: "Cello", low: 36, high: 76 },
-      bass: { name: "Bass", low: 28, high: 67 },
-      "mando-guitar": { name: "Mando-Guitar", low: 55, high: 81 },
-      octave: { name: "Octave Mando", low: 43, high: 81 }
+      "0": { name: "Violin", low: 55, high: 103 },      // G3 to A7
+      "1": { name: "Viola", low: 48, high: 91 },        // C3 to G6
+      "2": { name: "Cello", low: 36, high: 76 },        // C2 to C6
+      "3": { name: "Bass", low: 28, high: 67 },         // E1 to G4
+      "4": { name: "Mando-Guitar", low: 55, high: 81 }, // G3 to A5
+      "5": { name: "Octave Mando", low: 43, high: 81 }  // G2 to A5
     };
-    return ranges[bodyType] || ranges["mando-guitar"];
+    return ranges[bodyType] || ranges["4"];
   }
 
   /**
@@ -522,6 +541,121 @@ export class PianoKeyboard {
   frequencyToNoteName(frequency) {
     const midi = this.frequencyToMidi(frequency);
     return this.midiToNoteName(midi);
+  }
+
+  /**
+   * Add visual expression indicator to a key
+   */
+  addExpressionIndicator(keyElement, part) {
+    if (!part.expression || part.expression.type === 'none') return;
+    
+    const x = parseFloat(keyElement.getAttribute('x'));
+    const y = parseFloat(keyElement.getAttribute('y'));
+    const width = parseFloat(keyElement.getAttribute('width'));
+    const height = parseFloat(keyElement.getAttribute('height'));
+    const isBlack = keyElement.classList.contains('black-key');
+    
+    switch (part.expression.type) {
+      case 'vibrato':
+        // Add wavy line above key
+        const vibratoPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        const waveY = isBlack ? -10 : -15;
+        const waveWidth = width * 0.8;
+        const waveX = x + (width - waveWidth) / 2;
+        vibratoPath.setAttribute("d", 
+          `M${waveX},${y + waveY} q${waveWidth/4},-5 ${waveWidth/2},0 t${waveWidth/2},0`
+        );
+        vibratoPath.setAttribute("stroke", EXPRESSION_COLORS.vibrato);
+        vibratoPath.setAttribute("stroke-width", "2");
+        vibratoPath.setAttribute("fill", "none");
+        vibratoPath.setAttribute("data-key-freq", keyElement.getAttribute('data-frequency'));
+        vibratoPath.style.pointerEvents = "none";
+        this.svg.appendChild(vibratoPath);
+        break;
+        
+      case 'tremolo':
+        // Add oscillating lines below key
+        const tremoloGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
+        tremoloGroup.setAttribute("data-key-freq", keyElement.getAttribute('data-frequency'));
+        tremoloGroup.style.pointerEvents = "none";
+        
+        for (let i = 0; i < 3; i++) {
+          const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+          const lineX = x + width * (0.25 + i * 0.25);
+          const lineY1 = y + height + 5;
+          const lineY2 = y + height + 10;
+          line.setAttribute("x1", lineX);
+          line.setAttribute("y1", lineY1);
+          line.setAttribute("x2", lineX);
+          line.setAttribute("y2", lineY2);
+          line.setAttribute("stroke", EXPRESSION_COLORS.tremolo);
+          line.setAttribute("stroke-width", "2");
+          tremoloGroup.appendChild(line);
+        }
+        this.svg.appendChild(tremoloGroup);
+        break;
+        
+      case 'trill':
+        // Add arrow pointing to target note
+        if (part.expression.targetNote) {
+          const targetFreq = this.noteNameToFrequency(part.expression.targetNote);
+          let targetElement = this.keys.get(targetFreq);
+          if (!targetElement) {
+            // Find by approximation
+            for (const [freq, elem] of this.keys) {
+              if (Math.abs(freq - targetFreq) < 0.1) {
+                targetElement = elem;
+                break;
+              }
+            }
+          }
+          
+          if (targetElement) {
+            const targetX = parseFloat(targetElement.getAttribute('x'));
+            const targetWidth = parseFloat(targetElement.getAttribute('width'));
+            
+            const arrow = document.createElementNS("http://www.w3.org/2000/svg", "path");
+            const startX = x + width / 2;
+            const startY = isBlack ? y - 5 : y - 10;
+            const endX = targetX + targetWidth / 2;
+            const endY = startY;
+            
+            // Create curved arrow
+            const midX = (startX + endX) / 2;
+            const midY = startY - 15;
+            arrow.setAttribute("d", 
+              `M${startX},${startY} Q${midX},${midY} ${endX},${endY} l-5,-3 m5,3 l-5,3`
+            );
+            arrow.setAttribute("stroke", EXPRESSION_COLORS.trill);
+            arrow.setAttribute("stroke-width", "2");
+            arrow.setAttribute("fill", "none");
+            arrow.setAttribute("data-key-freq", keyElement.getAttribute('data-frequency'));
+            arrow.style.pointerEvents = "none";
+            this.svg.appendChild(arrow);
+          }
+        }
+        break;
+    }
+  }
+
+  /**
+   * Convert note name to frequency
+   */
+  noteNameToFrequency(noteName) {
+    // Parse note name like "C4", "C#4", etc.
+    const match = noteName.match(/^([A-G])(#?)(\d+)$/);
+    if (!match) return 0;
+    
+    const [, note, sharp, octaveStr] = match;
+    const octave = parseInt(octaveStr);
+    
+    // Convert to MIDI note number
+    const noteMap = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+    let midi = (octave + 1) * 12 + noteMap[note];
+    if (sharp) midi += 1;
+    
+    // Convert to frequency
+    return this.midiToFrequency(midi);
   }
 
   /**
