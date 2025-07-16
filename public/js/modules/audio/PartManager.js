@@ -499,7 +499,7 @@ export class PartManager {
     
     if (allSynthIds.length === 0) {
       Logger.log("No synths connected", "warn");
-      return;
+      return { successCount: 0, totalSynths: 0 };
     }
     
     Logger.log(`Sending current part: ${this.currentChord.length} notes, ${this.synthAssignments.size} assignments`, "parts");

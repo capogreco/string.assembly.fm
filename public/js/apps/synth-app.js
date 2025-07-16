@@ -1123,16 +1123,49 @@ class SynthApp {
   async requestWakeLock() {
     if ("wakeLock" in navigator) {
       try {
-        const wakeLock = await navigator.wakeLock.request("screen");
+        // Release existing wake lock if any
+        if (this.wakeLock) {
+          this.wakeLock.release();
+        }
+        
+        this.wakeLock = await navigator.wakeLock.request("screen");
         Logger.log("Wake lock acquired", "lifecycle");
-
+        
         // Show wake lock status
         const wakeLockStatus = document.getElementById("wake-lock-status");
         if (wakeLockStatus) {
           wakeLockStatus.style.display = "block";
+          wakeLockStatus.textContent = "Wake Lock Active";
+          wakeLockStatus.style.color = "";
         }
+        
+        // Handle wake lock release (browser may release it)
+        this.wakeLock.addEventListener('release', () => {
+          Logger.log("Wake lock was released", "lifecycle");
+          const wakeLockStatus = document.getElementById("wake-lock-status");
+          if (wakeLockStatus) {
+            wakeLockStatus.textContent = "Wake Lock Released";
+            wakeLockStatus.style.color = "#ef4444";
+          }
+        });
+        
       } catch (err) {
         Logger.log(`Wake lock failed: ${err.message}`, "error");
+        // Update status to show wake lock failed
+        const wakeLockStatus = document.getElementById("wake-lock-status");
+        if (wakeLockStatus) {
+          wakeLockStatus.textContent = "Wake Lock Failed";
+          wakeLockStatus.style.display = "block";
+          wakeLockStatus.style.color = "#ef4444";
+        }
+      }
+    } else {
+      Logger.log("Wake Lock API not supported", "warn");
+      const wakeLockStatus = document.getElementById("wake-lock-status");
+      if (wakeLockStatus) {
+        wakeLockStatus.textContent = "Wake Lock Not Supported";
+        wakeLockStatus.style.display = "block";
+        wakeLockStatus.style.color = "#ef4444";
       }
     }
   }
@@ -1478,6 +1511,24 @@ if (document.readyState === "loading") {
 } else {
   synthApp.init();
 }
+
+// Handle page visibility changes (important for mobile sleep/wake)
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden && synthApp.ws && synthApp.ws.readyState === WebSocket.OPEN) {
+    // Page became visible (wake from sleep) - refresh connection state
+    Logger.log("Page became visible, refreshing connection state", "lifecycle");
+    
+    // Re-request wake lock (mobile browsers often release it on sleep)
+    synthApp.requestWakeLock();
+    
+    // Re-request controller list to update display
+    synthApp.requestControllers();
+    
+    // Check if we still have active connections
+    const activeControllers = Array.from(synthApp.controllers.values()).filter(c => c.connected).length;
+    Logger.log(`Active controllers after wake: ${activeControllers}`, "connections");
+  }
+});
 
 // Export for debugging
 window.synthApp = synthApp;
