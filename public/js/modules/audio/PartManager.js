@@ -549,11 +549,6 @@ export class PartManager {
     const connectedSynths = this.appState.getNested('connections.synths');
     const allSynthIds = Array.from(connectedSynths.keys());
     
-    if (allSynthIds.length === 0) {
-      Logger.log("No synths connected", "warn");
-      return { successCount: 0, totalSynths: 0 };
-    }
-    
     Logger.log(`Sending current part: ${this.currentChord.length} notes, ${this.synthAssignments.size} assignments`, "parts");
 
     // Get current power state (powerCheckbox already declared above)
@@ -622,15 +617,36 @@ export class PartManager {
     
 
 
-    if (successCount === 0) {
-      throw new Error("Failed to send to any synths");
-    }
-
+    // Always save as last sent program and mark as active, even with no synths
     this.lastSentProgram = {
       baseProgram,
       transitionConfig,
       timestamp: Date.now(),
     };
+    
+    // Set as active program in app state
+    this.appState.setNested('performance.activeProgram', {
+      ...baseProgram,
+      chord: {
+        frequencies: [...this.currentChord],
+        expressions: expressions
+      },
+      parts: Object.fromEntries(this.synthAssignments),
+      timestamp: Date.now()
+    });
+    
+    // Clear parameter changes since we've now sent the program
+    this.appState.clearParameterChanges();
+    
+    if (allSynthIds.length === 0) {
+      Logger.log("No synths connected - program saved as active", "warn");
+      return { successCount: 0, totalSynths: 0 };
+    }
+
+    if (successCount === 0) {
+      throw new Error("Failed to send to any synths");
+    }
+
     Logger.log(
       `Part sent successfully to ${successCount}/${allSynthIds.length} synths`,
       "parts",

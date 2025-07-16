@@ -1743,25 +1743,28 @@ window.sendCurrentProgram = async () => {
 
     // Send to synths
     const result = await partManager.sendCurrentPart();
-    Logger.log(
-      `Program sent successfully to ${result.successCount}/${result.totalSynths} synths`,
-      "messages",
-    );
-
-    // Store as active program only if send was successful
-    if (result.successCount > 0) {
-      programState.setActiveProgram();
-
-      // Mark parameters as sent
-      if (parameterControls.markAllParametersSent) {
-        parameterControls.markAllParametersSent();
-      }
-
-      // Update status badge to show synced
-      updateSyncStatus();
-
-      // Update active program display to show expressions
-      updateActiveProgramDisplay();
+    
+    // Always mark as active program and clear change indicators (even with no synths)
+    programState.setActiveProgram();
+    
+    // Mark parameters as sent
+    if (parameterControls.markAllParametersSent) {
+      parameterControls.markAllParametersSent();
+    }
+    
+    // Update status badge to show synced
+    updateSyncStatus();
+    
+    // Update active program display to show expressions
+    updateActiveProgramDisplay();
+    
+    if (result.totalSynths > 0) {
+      Logger.log(
+        `Program sent successfully to ${result.successCount}/${result.totalSynths} synths`,
+        "messages",
+      );
+    } else {
+      Logger.log("Program saved as active (no synths connected)", "messages");
     }
 
     return result;
